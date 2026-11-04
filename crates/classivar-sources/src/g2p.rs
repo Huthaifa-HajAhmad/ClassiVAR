@@ -39,19 +39,18 @@ struct Summary {
     records_summary: Vec<G2pRecord>,
 }
 
+/// The most G2P may send for one gene. A gene summary is a few kilobytes.
+const MAX_BYTES: u64 = 2 * 1024 * 1024;
+
 /// Look a gene up in G2P. Blocks until the answer arrives; call from a background thread.
 pub fn lookup_gene(symbol: &str) -> Result<Fetched<G2pGene>, SourceError> {
     let symbol = crate::check_symbol(symbol)?;
     let url = format!("{URL}/{symbol}/summary/");
-    let records = match crate::http_agent().get(&url).header("Accept", "application/json").call() {
-        Ok(mut response) => {
-            let body = response.body_mut().read_to_string().map_err(|e| SourceError::Network(e.to_string()))?;
-            parse_summary(&body)?
-        }
-        // G2P answers 404 for a gene it does not hold. The live test proves a known gene still works,
-        // so a changed address would be caught there.
-        Err(ureq::Error::StatusCode(404)) => Vec::new(),
-        Err(error) => return Err(SourceError::Network(error.to_string())),
+    let reply = crate::get(&url, &[], "application/json", MAX_BYTES)?;
+    let records = match reply.status {
+        200..=299 => parse_summary(&reply.body)?,
+        404 => parse_not_found(&reply.body)?,
+        other => return Err(SourceError::Status(other)),
     };
     Ok(Fetched::now(SOURCE, G2pGene { symbol, records }))
 }
@@ -59,6 +58,20 @@ pub fn lookup_gene(symbol: &str) -> Result<Fetched<G2pGene>, SourceError> {
 fn parse_summary(body: &str) -> Result<Vec<G2pRecord>, SourceError> {
     let summary: Summary = serde_json::from_str(body).map_err(|e| SourceError::Unexpected(e.to_string()))?;
     Ok(summary.records_summary)
+}
+
+/// A 404 means "no record" only when G2P says so in its documented way: a JSON
+/// body `{"error": "No matching Gene found ..."}`. Any other 404 (for example an
+/// HTML page after the address moved) is an error, not an empty answer.
+fn parse_not_found(body: &str) -> Result<Vec<G2pRecord>, SourceError> {
+    #[derive(Deserialize)]
+    struct NotFound {
+        error: String,
+    }
+    match serde_json::from_str::<NotFound>(body) {
+        Ok(answer) if answer.error.to_ascii_lowercase().contains("no matching gene") => Ok(Vec::new()),
+        _ => Err(SourceError::Unexpected("a 404 answer that is not G2P's 'no matching gene' message".to_string())),
+    }
 }
 
 #[cfg(test)]
@@ -78,6 +91,16 @@ mod tests {
         assert_eq!(records[1].confidence, "definitive");
         assert_eq!(records[1].genotype, "monoallelic_autosomal");
         assert_eq!(records[1].panels, vec!["Cancer"]);
+    }
+
+    #[test]
+    fn a_404_is_an_empty_answer_only_for_the_documented_message() {
+        let unknown = r#"{"error":"No matching Gene found for: NOTAGENE1"}"#;
+        assert_eq!(parse_not_found(unknown).unwrap(), Vec::new());
+        // A moved address answers 404 with a web page, and other JSON errors are not "no record".
+        assert!(matches!(parse_not_found("<html>Not Found</html>"), Err(SourceError::Unexpected(_))));
+        assert!(matches!(parse_not_found(r#"{"error":"Endpoint removed"}"#), Err(SourceError::Unexpected(_))));
+        assert!(matches!(parse_not_found(""), Err(SourceError::Unexpected(_))));
     }
 
     #[test]
