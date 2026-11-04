@@ -20,7 +20,7 @@ use classivar_sources::{
     panelapp::{self, Confidence, Instance, PanelAppGene},
 };
 use gpui_kit::component::{
-    ActiveTheme, Selectable, Sizable, Theme, ThemeMode,
+    ActiveTheme, Disableable, Selectable, Sizable, Theme, ThemeMode,
     button::{Button, ButtonVariants},
     input::{Input, InputEvent, InputState},
 };
@@ -37,6 +37,13 @@ const SCALE_UNIT: f32 = 20.0;
 
 /// The largest a case file may be before it is refused without reading it.
 const MAX_CASE_BYTES: u64 = 4 * 1024 * 1024;
+/// The most earlier records one case can hold. The history table gets unreadable
+/// long before this; the cap also keeps a damaged file from filling the screen.
+const MAX_RECORDS: usize = 30;
+/// The longest lab name the box accepts (in characters).
+const MAX_LAB_NAME: usize = 60;
+/// What a record is called when its name box is empty.
+const UNNAMED_RECORD: &str = "Unnamed record";
 
 // The fills are chosen so that the ink on them (white or near-black) reaches the
 // WCAG AA contrast of 4.5:1. A test below checks every pair.
@@ -192,17 +199,32 @@ fn describe_clingen(found: &Fetched<ClinGenGene>) -> (String, Vec<String>) {
 struct Choice {
     strength: Strength,
     situation: Option<String>,
+    /// Why the curator chose this strength (typed by them, or filled in by a helper).
+    reason: Option<String>,
 }
 
 impl Choice {
     fn new(strength: Strength) -> Self {
-        Self { strength, situation: None }
+        Self { strength, situation: None, reason: None }
     }
 
     fn guided(strength: Strength, situation: String) -> Self {
-        Self { strength, situation: Some(situation) }
+        Self { strength, situation: Some(situation), reason: None }
+    }
+
+    fn with_reason(strength: Strength, reason: String) -> Self {
+        Self { strength, situation: None, reason: Some(reason) }
     }
 }
+
+/// A strength the curator is raising above its default, and has not yet explained.
+struct Raise {
+    code: String,
+    to: Strength,
+}
+
+/// The longest reason the box accepts (in characters). The case file allows more.
+const MAX_REASON_TYPED: usize = 300;
 
 type Evidence = BTreeMap<String, Choice>;
 
@@ -213,6 +235,7 @@ fn to_applied(evidence: &Evidence) -> Vec<Applied> {
             code: code.clone(),
             strength: choice.strength,
             situation: choice.situation.clone(),
+            reason: choice.reason.clone(),
         })
         .collect()
 }
@@ -246,7 +269,9 @@ fn normalize_today(rules: &RuleSet, list: &[Applied]) -> (Vec<(String, Choice)>,
                 .filter(|s| criterion.guide.iter().any(|g| g.id == *s && g.strength == Some(strength)));
             saved.map(str::to_string).or_else(|| criterion.situation_for(strength).map(str::to_string))
         };
-        out.push((applied.code.clone(), Choice { strength, situation }));
+        // A reason explains one strength, so it is dropped when the strength was lowered.
+        let reason = applied.reason.clone().filter(|_| strength == applied.strength);
+        out.push((applied.code.clone(), Choice { strength, situation, reason }));
     }
     (out, changed)
 }
@@ -319,6 +344,15 @@ struct Record {
     /// The VUS sub-tier the record named, if any (only meaningful when `class` is a VUS).
     tier: Option<String>,
     evidence: Evidence,
+}
+
+/// How the functional-evidence helper reads an assay.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AssayRoute {
+    /// Only the number of validation controls is known.
+    Controls,
+    /// A statistical analysis gave an OddsPath value.
+    OddsPath,
 }
 
 /// A step that throws work away. It waits for a click on "Yes" first.
@@ -430,6 +464,28 @@ pub struct Workbench {
     learning: bool,
     variant_input: Entity<InputState>,
     gene_input: Entity<InputState>,
+    /// The name box for the earlier record being edited (the lab or source).
+    record_name_input: Entity<InputState>,
+    /// The score box of the predictor helper (PP3 and BP4).
+    predictor_input: Entity<InputState>,
+    /// Whether the predictor helper is open.
+    predictor_open: bool,
+    /// Which tool of `rules.predictors` the helper reads.
+    predictor_tool: usize,
+    /// Scroll state of the criteria list and of the result pane, so the keyboard can scroll them.
+    criteria_scroll: ScrollHandle,
+    result_scroll: ScrollHandle,
+    /// A strength being raised by hand, waiting for its reason.
+    raising: Option<Raise>,
+    /// The box where the reason for a raised strength is typed.
+    reason_input: Entity<InputState>,
+    /// The functional-evidence helper (PS3 and BS3): open or closed.
+    functional_open: bool,
+    functional_route: AssayRoute,
+    /// For the controls route: did the assay show damage (PS3) or none (BS3)?
+    functional_damaging: bool,
+    controls_input: Entity<InputState>,
+    oddspath_input: Entity<InputState>,
     gene: GeneChecks,
     /// Why the gene box was not checked (empty or not a symbol), shown under the row.
     gene_error: Option<String>,
@@ -475,6 +531,59 @@ impl Workbench {
                 cx.notify();
             }
         });
+        let record_name_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Lab or source, e.g. Lab A (ClinVar)"));
+        // Typing in the name box renames the record that is open. A programmatic
+        // change gives the same text, so it is harmless.
+        let on_record_name =
+            cx.subscribe_in(&record_name_input, window, |this, input, event: &InputEvent, _window, cx| {
+                if !matches!(event, InputEvent::Change) {
+                    return;
+                }
+                let Editing::Record(i) = this.editing else { return };
+                let typed = input.read(cx).value();
+                let name: String = typed.trim().chars().take(MAX_LAB_NAME).collect();
+                if let Some(record) = this.records.get_mut(i) {
+                    record.label = if name.is_empty() { UNNAMED_RECORD.to_string() } else { name };
+                    cx.notify();
+                }
+            });
+        let predictor_input = cx.new(|cx| InputState::new(window, cx).placeholder("Score, e.g. 0.85"));
+        let on_predictor_input =
+            cx.subscribe_in(&predictor_input, window, |_this, _, event: &InputEvent, _window, cx| {
+                if matches!(event, InputEvent::Change) {
+                    cx.notify();
+                }
+            });
+        // Escape is watched for the whole window: no element has to hold keyboard
+        // focus (after a click on a plain button none may), and a focused text box
+        // must not hide it.
+        let on_escape = cx.observe_keystrokes(|this, event, window, cx| match event.keystroke.key.as_str() {
+            "escape" => this.escape(window, cx),
+            key @ ("pageup" | "pagedown" | "home" | "end") => this.scroll_with_key(key, window, cx),
+            _ => {}
+        });
+        let reason_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Why is this stronger than the default?"));
+        let on_reason_input = cx.subscribe_in(&reason_input, window, |_this, _, event: &InputEvent, _window, cx| {
+            if matches!(event, InputEvent::Change) {
+                cx.notify();
+            }
+        });
+        let controls_input = cx.new(|cx| InputState::new(window, cx).placeholder("Controls, e.g. 11"));
+        let oddspath_input = cx.new(|cx| InputState::new(window, cx).placeholder("OddsPath, e.g. 5.2"));
+        let on_controls_input =
+            cx.subscribe_in(&controls_input, window, |_this, _, event: &InputEvent, _window, cx| {
+                if matches!(event, InputEvent::Change) {
+                    cx.notify();
+                }
+            });
+        let on_oddspath_input =
+            cx.subscribe_in(&oddspath_input, window, |_this, _, event: &InputEvent, _window, cx| {
+                if matches!(event, InputEvent::Change) {
+                    cx.notify();
+                }
+            });
         Self {
             rules,
             mode: Mode::NewVariant,
@@ -484,6 +593,19 @@ impl Workbench {
             learning: true,
             variant_input,
             gene_input,
+            record_name_input,
+            predictor_input,
+            predictor_open: false,
+            predictor_tool: 0,
+            criteria_scroll: ScrollHandle::new(),
+            result_scroll: ScrollHandle::new(),
+            raising: None,
+            reason_input,
+            functional_open: false,
+            functional_route: AssayRoute::Controls,
+            functional_damaging: true,
+            controls_input,
+            oddspath_input,
             gene: GeneChecks::idle(),
             gene_error: None,
             case_gene: String::new(),
@@ -498,7 +620,16 @@ impl Workbench {
             lookup_id: 0,
             _lookup_tasks: Vec::new(),
             _file_task: None,
-            _subscriptions: vec![on_gene_input, on_variant_input],
+            _subscriptions: vec![
+                on_gene_input,
+                on_variant_input,
+                on_record_name,
+                on_predictor_input,
+                on_controls_input,
+                on_oddspath_input,
+                on_reason_input,
+                on_escape,
+            ],
         }
     }
 
@@ -522,10 +653,57 @@ impl Workbench {
     fn ask(&mut self, confirm: Confirm) {
         if self.confirm.is_none() {
             self.confirm = Some(confirm);
+        }
+    }
+
+    /// Scroll the pane under the mouse pointer (the criteria list when the
+    /// pointer is over neither pane) with Page Up, Page Down, Home and End.
+    /// Home and End belong to a text box while one has focus.
+    fn scroll_with_key(&mut self, key: &str, window: &mut Window, cx: &mut Context<Self>) {
+        // The confirmation window covers the screen: keys must not scroll what is behind it.
+        if self.confirm.is_some() {
+            return;
+        }
+        if matches!(key, "home" | "end") {
+            let inputs = [
+                &self.variant_input,
+                &self.gene_input,
+                &self.record_name_input,
+                &self.predictor_input,
+                &self.controls_input,
+                &self.oddspath_input,
+                &self.reason_input,
+            ];
+            if inputs.iter().any(|input| input.read(cx).focus_handle(cx).is_focused(window)) {
+                return;
+            }
+        }
+        let handle = if self.result_scroll.bounds().contains(&window.mouse_position()) {
+            &self.result_scroll
         } else {
-            // The banner is not modal, so a second request is possible. Say why
-            // nothing happened instead of dropping it silently.
-            self.file_status = Some("Finish the question above first, then try again.".to_string());
+            &self.criteria_scroll
+        };
+        let furthest = handle.max_offset().y.abs();
+        let page = handle.bounds().size.height * 0.9;
+        let now = handle.offset().y;
+        let target = match key {
+            "pagedown" => now - page,
+            "pageup" => now + page,
+            "home" => px(0.),
+            _ => -furthest,
+        };
+        let target = target.max(-furthest).min(px(0.));
+        handle.set_offset(point(handle.offset().x, target));
+        cx.notify();
+    }
+
+    /// What Escape does: answer "Cancel" to a question, otherwise close the open
+    /// strength guide.
+    fn escape(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.confirm.is_some() {
+            self.cancel_confirm(window, cx);
+        } else if self.guide_open.take().is_some() || self.raising.take().is_some() {
+            cx.notify();
         }
     }
 
@@ -638,6 +816,10 @@ impl Workbench {
     /// today's evidence never disappears from this button: the first click opens
     /// the guide, a second closes it, and removal has its own button.
     fn toggle(&mut self, criterion: &Criterion) {
+        // Clicking the code ends any open reason prompt for it, so the prompt cannot outlive the criterion.
+        if self.raising.as_ref().is_some_and(|raise| raise.code == criterion.code) {
+            self.raising = None;
+        }
         if self.guide_open.as_deref() == Some(criterion.code.as_str()) {
             self.guide_open = None;
             return;
@@ -668,6 +850,9 @@ impl Workbench {
 
     /// Take a criterion off the evidence being edited, including a guided one.
     fn remove_criterion(&mut self, code: &str) {
+        if self.raising.as_ref().is_some_and(|raise| raise.code == code) {
+            self.raising = None;
+        }
         self.evidence_mut(self.editing).remove(code);
         if self.guide_open.as_deref() == Some(code) {
             self.guide_open = None;
@@ -687,7 +872,7 @@ impl Workbench {
         };
     }
 
-    fn next_strength(&mut self, criterion: &Criterion) {
+    fn next_strength(&mut self, criterion: &Criterion, window: &mut Window, cx: &mut Context<Self>) {
         let Some(current) = self.current().get(&criterion.code).map(|choice| choice.strength) else { return };
         if self.editing == Editing::Today && !criterion.guide.is_empty() {
             self.guide_open = Some(criterion.code.clone());
@@ -699,9 +884,64 @@ impl Workbench {
             Editing::Record(_) => criterion.recorded_strengths(),
         };
         let at = options.iter().position(|s| *s == current).unwrap_or(0);
+        let next = options[(at + 1) % options.len()];
+        // Raising today's strength above the default needs a written reason first.
+        if self.editing == Editing::Today && self.rules.magnitude(next) > self.rules.magnitude(criterion.strength) {
+            let earlier = self.today.get(&criterion.code).and_then(|c| c.reason.clone()).unwrap_or_default();
+            self.reason_input.update(cx, |input, cx| input.set_value(earlier, window, cx));
+            self.raising = Some(Raise { code: criterion.code.clone(), to: next });
+            return;
+        }
+        // A manual change no longer matches a guide answer or an earlier reason, so those are dropped.
         let scope = self.editing;
-        // A manual change no longer matches a guide answer, so that answer is dropped.
-        self.evidence_mut(scope).insert(criterion.code.clone(), Choice::new(options[(at + 1) % options.len()]));
+        self.evidence_mut(scope).insert(criterion.code.clone(), Choice::new(next));
+    }
+
+    /// Save the raised strength with the reason that was typed. Does nothing
+    /// while the box is empty: the button is disabled then too.
+    fn confirm_raise(&mut self, cx: &mut Context<Self>) {
+        let typed = self.reason_input.read(cx).value();
+        let reason: String = typed.trim().chars().take(MAX_REASON_TYPED).collect();
+        if reason.is_empty() {
+            return;
+        }
+        if let Some(raise) = self.raising.take() {
+            self.today.insert(raise.code, Choice::with_reason(raise.to, reason));
+        }
+    }
+
+    /// The score typed in the predictor helper: `None` when the box is empty,
+    /// `Some(Err(()))` when it is not a finite number.
+    fn typed_score(&self, cx: &App) -> Option<Result<f64, ()>> {
+        let typed = self.predictor_input.read(cx).value();
+        let typed = typed.trim();
+        (!typed.is_empty()).then(|| typed.parse::<f64>().ok().filter(|score| score.is_finite()).ok_or(()))
+    }
+
+    /// What the functional helper's box holds: nothing, a bad entry, or a number.
+    fn typed_number(&self, input: &Entity<InputState>, cx: &App) -> Option<Result<f64, ()>> {
+        let typed = input.read(cx).value();
+        let typed = typed.trim();
+        (!typed.is_empty()).then(|| typed.parse::<f64>().ok().filter(|n| n.is_finite()).ok_or(()))
+    }
+
+    /// Put the strength a score or an assay result gives onto today's evidence.
+    /// The reason records where the number came from, so it is saved with the case.
+    fn apply_reading(&mut self, reading: &classivar_core::EvidenceReading, reason: String) {
+        self.today.insert(reading.code.to_string(), Choice::with_reason(reading.strength, reason));
+    }
+
+    /// Forget the score and close the helper. It belongs to the variant on screen.
+    fn reset_helpers(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.raising = None;
+        self.predictor_open = false;
+        self.predictor_tool = 0;
+        self.predictor_input.update(cx, |input, cx| input.set_value("", window, cx));
+        self.functional_open = false;
+        self.functional_route = AssayRoute::Controls;
+        self.functional_damaging = true;
+        self.controls_input.update(cx, |input, cx| input.set_value("", window, cx));
+        self.oddspath_input.update(cx, |input, cx| input.set_value("", window, cx));
     }
 
     fn set_mode(&mut self, mode: Mode) {
@@ -720,7 +960,19 @@ impl Workbench {
         cx.notify();
     }
 
-    fn add_record(&mut self) {
+    /// Open an earlier record for editing and show its name in the name box.
+    fn show_record(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(record) = self.records.get(index) else { return };
+        let name = record.label.clone();
+        self.editing = Editing::Record(index);
+        self.record_name_input.update(cx, |input, cx| input.set_value(name, window, cx));
+    }
+
+    fn add_record(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.records.len() >= MAX_RECORDS {
+            self.file_status = Some(format!("A case holds at most {MAX_RECORDS} earlier records."));
+            return;
+        }
         let label = format!("Record {}", self.next_record);
         self.next_record += 1;
         self.records.push(Record {
@@ -730,22 +982,20 @@ impl Workbench {
             tier: None,
             evidence: Evidence::new(),
         });
-        self.editing = Editing::Record(self.records.len() - 1);
+        self.show_record(self.records.len() - 1, window, cx);
     }
 
-    fn remove_record(&mut self, index: usize) {
+    fn remove_record(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
         if index >= self.records.len() {
             return;
         }
         self.records.remove(index);
         // Stay next to the record that took its place, rather than jumping away.
-        self.editing = if self.records.is_empty() {
-            Editing::Today
-        } else if index < self.records.len() {
-            Editing::Record(index)
+        if self.records.is_empty() {
+            self.editing = Editing::Today;
         } else {
-            Editing::Record(self.records.len() - 1)
-        };
+            self.show_record(index.min(self.records.len() - 1), window, cx);
+        }
         self.confirm = None;
     }
 
@@ -796,6 +1046,7 @@ impl Workbench {
         self.gene_input.update(cx, |input, cx| input.set_value("", window, cx));
         self.guide_open = None;
         self.confirm = None;
+        self.reset_helpers(window, cx);
     }
 
     /// Copy the latest record's evidence into today's evidence, to adjust from there.
@@ -835,7 +1086,8 @@ impl Workbench {
                     }
                 }
             };
-            today.insert(code, Choice { strength, situation });
+            let reason = choice.reason.clone().filter(|_| strength == choice.strength);
+            today.insert(code, Choice { strength, situation, reason });
         }
         self.today = today;
         let mut notes = Vec::new();
@@ -868,6 +1120,7 @@ impl Workbench {
         self.open_details.clear();
         self.next_record = 1;
         self.variant_input.update(cx, |input, cx| input.set_value("", window, cx));
+        self.reset_helpers(window, cx);
     }
 
     // ---------- saving and opening a case ----------
@@ -956,7 +1209,14 @@ impl Workbench {
                         ));
                     }
                     let text = std::fs::read_to_string(&path).map_err(|error| error.to_string())?;
-                    CaseFile::from_json(&text, rules).map_err(|error| error.to_string())
+                    let case = CaseFile::from_json(&text, rules).map_err(|error| error.to_string())?;
+                    if case.records.len() > MAX_RECORDS {
+                        return Err(format!(
+                            "it holds {} earlier records and this program opens at most {MAX_RECORDS}",
+                            case.records.len()
+                        ));
+                    }
+                    Ok(case)
                 })
                 .await;
             this.update_in(cx, |this, window, cx| match loaded {
@@ -980,7 +1240,12 @@ impl Workbench {
     fn apply_case(&mut self, case: CaseFile, window: &mut Window, cx: &mut Context<Self>) {
         let evidence = |list: &[Applied]| -> Evidence {
             list.iter()
-                .map(|a| (a.code.clone(), Choice { strength: a.strength, situation: a.situation.clone() }))
+                .map(|a| {
+                    (
+                        a.code.clone(),
+                        Choice { strength: a.strength, situation: a.situation.clone(), reason: a.reason.clone() },
+                    )
+                })
                 .collect()
         };
         let (today, adjusted) = normalize_today(self.rules, &case.today);
@@ -1012,6 +1277,7 @@ impl Workbench {
         self._lookup_tasks.clear();
         self.variant_input.update(cx, |input, cx| input.set_value(case.variant.clone(), window, cx));
         self.gene_input.update(cx, |input, cx| input.set_value(case.gene.clone(), window, cx));
+        self.reset_helpers(window, cx);
 
         let mut notes = vec!["Opened.".to_string()];
         if case.saved_with_other_rules(self.rules) {
@@ -1063,7 +1329,7 @@ impl Workbench {
             Confirm::StartFromLatest => self.start_from_latest(),
             Confirm::LoadExample => self.load_example(window, cx),
             Confirm::OpenCase(case) => self.apply_case(*case, window, cx),
-            Confirm::RemoveRecord(index, _) => self.remove_record(index),
+            Confirm::RemoveRecord(index, _) => self.remove_record(index, window, cx),
             Confirm::NewGene(symbol) => {
                 self.clear_case(window, cx);
                 self.run_gene_check(symbol, window, cx);
@@ -1082,11 +1348,13 @@ impl Workbench {
         cx.notify();
     }
 
-    // ---------- confirm banner ----------
+    // ---------- confirmation window ----------
 
-    fn confirm_banner(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+    /// The question as a window over the screen. The dim layer takes every click,
+    /// so nothing behind it can be used until the curator answers.
+    fn confirm_modal(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let confirm = self.confirm.as_ref()?;
-        let (background, foreground) = (warning_fill(), warning_ink());
+        let (background, foreground, border) = (cx.theme().background, cx.theme().foreground, cx.theme().border);
         let question = match confirm {
             Confirm::Clear(scope) => {
                 format!("Clear every criterion from {}? This cannot be undone.", self.scope_label(*scope))
@@ -1110,27 +1378,45 @@ impl Workbench {
                 format!("Remove {label} and every criterion it reported? This cannot be undone.")
             }
         };
+        let buttons = div()
+            .flex()
+            .justify_end()
+            .gap_2()
+            .child(Button::new("confirm-no").label("Cancel").small().outline().on_click(cx.listener(
+                |this, _, window, cx| {
+                    this.cancel_confirm(window, cx);
+                },
+            )))
+            .child(Button::new("confirm-yes").label("Yes, continue").small().on_click(cx.listener(
+                |this, _, window, cx| {
+                    this.apply_confirm(window, cx);
+                },
+            )));
+        let card = div()
+            .w(px(460.))
+            .max_w_full()
+            .p_4()
+            .rounded_lg()
+            .border_1()
+            .border_color(border)
+            .bg(background)
+            .text_color(foreground)
+            .flex()
+            .flex_col()
+            .gap_3()
+            .child(div().text_sm().child(question))
+            .child(buttons);
         Some(
             div()
+                .absolute()
+                .inset_0()
+                .occlude()
                 .flex()
-                .flex_wrap()
                 .items_center()
-                .gap_3()
-                .px_4()
-                .py_2()
-                .bg(background)
-                .text_color(foreground)
-                .child(div().flex_1().min_w_0().text_sm().child(question))
-                .child(Button::new("confirm-yes").label("Yes, continue").small().on_click(cx.listener(
-                    |this, _, window, cx| {
-                        this.apply_confirm(window, cx);
-                    },
-                )))
-                .child(Button::new("confirm-no").label("Cancel").small().outline().on_click(cx.listener(
-                    |this, _, window, cx| {
-                        this.cancel_confirm(window, cx);
-                    },
-                )))
+                .justify_center()
+                .p_4()
+                .bg(hsla(0., 0., 0., 0.45))
+                .child(card)
                 .into_any_element(),
         )
     }

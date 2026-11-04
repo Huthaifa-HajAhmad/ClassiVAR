@@ -12,6 +12,8 @@
 
 use super::*;
 
+mod helpers;
+
 /// A section heading in the results pane.
 fn heading(text: impl Into<SharedString>) -> Div {
     div().text_sm().font_weight(FontWeight::SEMIBOLD).pb_2().child(text.into())
@@ -358,16 +360,16 @@ impl Workbench {
                     .small()
                     .selected(self.editing == Editing::Record(i))
                     .toggled(self.editing == Editing::Record(i))
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.editing = Editing::Record(i);
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.show_record(i, window, cx);
                         cx.notify();
                     })),
             );
         }
         chips = chips
             .child(Button::new("record-add").label("Add record").small().outline().on_click(cx.listener(
-                |this, _, _, cx| {
-                    this.add_record();
+                |this, _, window, cx| {
+                    this.add_record(window, cx);
                     cx.notify();
                 },
             )))
@@ -443,6 +445,12 @@ impl Workbench {
         let remove_label = record.label.clone();
         let label = |text: &'static str| div().text_xs().text_color(muted).child(text);
 
+        let name_row = div()
+            .flex()
+            .items_center()
+            .gap_2()
+            .child(label("Lab or source"))
+            .child(div().w(px(260.)).child(Input::new(&self.record_name_input)));
         let mut row = div().flex().flex_wrap().items_center().gap_2().child(label("This record reported"));
         for class in CLASSES {
             row = row.child(
@@ -494,7 +502,8 @@ impl Workbench {
                 );
             }
         }
-        row.child(div().pl_2().child(label("Year")))
+        let row = row
+            .child(div().pl_2().child(label("Year")))
             .child(
                 Button::new(SharedString::from(format!("year-down-{i}")))
                     .label("−")
@@ -529,8 +538,8 @@ impl Workbench {
                         this.ask(Confirm::RemoveRecord(i, remove_label.clone()));
                         cx.notify();
                     })),
-            )
-            .into_any_element()
+            );
+        div().flex().flex_col().gap_2().child(name_row).child(row).into_any_element()
     }
 
     // ---------- criteria list (left) ----------
@@ -577,8 +586,23 @@ impl Workbench {
                 },
             )));
 
-        let mut list =
-            div().id("criteria").flex_1().min_h_0().overflow_y_scroll().px_3().py_2().flex().flex_col().gap_4();
+        let mut list = div()
+            .id("criteria")
+            .track_scroll(&self.criteria_scroll)
+            .flex_1()
+            .min_h_0()
+            .overflow_y_scroll()
+            .px_3()
+            .py_2()
+            .flex()
+            .flex_col()
+            .gap_4();
+        if self.editing == Editing::Today && !self.rules.predictors.is_empty() {
+            list = list.child(self.predictor_helper(cx));
+        }
+        if self.editing == Editing::Today && self.rules.functional.is_some() {
+            list = list.child(self.functional_helper(cx));
+        }
         for (direction, title, points) in [
             (Direction::Pathogenic, "For disease (pathogenic)", format!("+{}", result.pathogenic_points)),
             (Direction::Benign, "Against disease (benign)", format!("−{}", result.benign_points.abs())),
@@ -636,6 +660,9 @@ impl Workbench {
         let (toggle_target, cycle_target, detail_code) = (c.clone(), c.clone(), c.code.clone());
         let remove_code = c.code.clone();
         let guide_open = self.editing == Editing::Today && self.guide_open.as_deref() == Some(c.code.as_str());
+        let raise_open =
+            self.editing == Editing::Today && self.raising.as_ref().is_some_and(|raise| raise.code == c.code);
+        let reason = choice.and_then(|choice| choice.reason.clone());
         let summary_indent = px(66.);
 
         div()
@@ -687,8 +714,8 @@ impl Workbench {
                                 } else {
                                     "Click to answer the strength guide again".to_string()
                                 })
-                                .on_click(cx.listener(move |this, _, _, cx| {
-                                    this.next_strength(&cycle_target);
+                                .on_click(cx.listener(move |this, _, window, cx| {
+                                    this.next_strength(&cycle_target, window, cx);
                                     cx.notify();
                                 })),
                         )
@@ -750,6 +777,10 @@ impl Workbench {
                 }
                 col.child(text)
             })
+            .when_some(reason, |col, reason| {
+                col.child(div().pl(summary_indent).text_xs().text_color(muted).child(format!("Reason: {reason}")))
+            })
+            .when(raise_open, |col| col.child(self.raise_prompt(c, cx)))
             .when(guide_open, |col| col.child(self.strength_guide(c, cx)))
             .into_any_element()
     }
@@ -955,7 +986,7 @@ impl Workbench {
                     hero = hero.child(self.vus_note(result.total_points, cx));
                 }
                 hero = hero.child(div().text_xs().text_color(muted).child(
-                    "Default strengths follow 2015, except PVS1 (guide), PM2 (Supporting, ClinGen 2020) and PP5/BP6 (listed, not counted). Gene-specific rules and later ClinGen refinements (PP3/BP4 thresholds, PS3/BS3, splicing, PP1/BS4) can change them and are not built in yet.",
+                    "Default strengths follow 2015, except PVS1 (guide), PM2 (Supporting, ClinGen 2020) and PP5/BP6 (listed, not counted). Gene-specific rules and later ClinGen refinements (PS3/BS3, splicing, PP1/BS4) can change them and are not built in yet. PP3/BP4 strengths for four tools come from the predictor score helper.",
                 ));
             }
             None if !result.conflicts.is_empty() => {
@@ -1226,8 +1257,15 @@ impl Workbench {
                 },
                 note.as_deref().map(|n| format!(" {n}")).unwrap_or_default()
             ),
-            Warning::StrengthChanged { code, from, to } => {
-                format!("{code} strength changed from {} to {}.", from.label(), to.label())
+            Warning::StrengthChanged { code, from, to, reason } => {
+                let why = match reason {
+                    Some(reason) => format!(" Reason: {reason}"),
+                    None if self.rules.magnitude(*to) > self.rules.magnitude(*from) => {
+                        " No reason is recorded; click the strength to raise it again with one.".to_string()
+                    }
+                    None => String::new(),
+                };
+                format!("{code} strength changed from {} to {}.{why}", from.label(), to.label())
             }
             Warning::DoubleCounted { a, b, reason } => {
                 format!("{a} and {b} may count the same observation. {reason}")
@@ -1532,8 +1570,18 @@ impl Workbench {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let border = cx.theme().border;
-        let mut pane =
-            div().id("result").flex_1().min_w_0().h_full().overflow_y_scroll().px_6().py_5().flex().flex_col().gap_6();
+        let mut pane = div()
+            .id("result")
+            .track_scroll(&self.result_scroll)
+            .flex_1()
+            .min_w_0()
+            .h_full()
+            .overflow_y_scroll()
+            .px_6()
+            .py_5()
+            .flex()
+            .flex_col()
+            .gap_6();
 
         // The result comes first on both paths; the verdict and history are commentary on it.
         pane = pane.child(self.hero(result, variant, cx));
@@ -1640,13 +1688,13 @@ impl Render for Workbench {
 
         div()
             .size_full()
+            .relative()
             .flex()
             .flex_col()
             .bg(background)
             .text_color(foreground)
             .child(self.top_bar(cx))
             .children(self.file_status_banner(cx))
-            .children(self.confirm_banner(cx))
             .child(self.case_panel(cx))
             .child(div().flex().flex_1().min_h_0().child(self.criteria_panel(&result, cx)).child(self.results_panel(
                 &result,
@@ -1655,6 +1703,7 @@ impl Render for Workbench {
                 variant.as_deref(),
                 cx,
             )))
+            .children(self.confirm_modal(cx))
             .into_any_element()
     }
 }

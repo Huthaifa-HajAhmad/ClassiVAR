@@ -133,14 +133,24 @@ try {
         Focus-App
         Invoke-Element (Find-Button-Like $name)
     }
-    function Gene-Box {
+    # A text box is found by its placeholder, which is also its accessible name.
+    function Find-Box([string]$placeholder) {
         $cond = New-Object System.Windows.Automation.PropertyCondition(
-            [System.Windows.Automation.AutomationElement]::NameProperty, "Gene symbol, e.g. BRCA1")
+            [System.Windows.Automation.AutomationElement]::NameProperty, $placeholder)
         return (Root).FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)
     }
-    function Set-GeneText([string]$text) {
+    function Gene-Box { return Find-Box "Gene symbol, e.g. BRCA1" }
+    function Set-GeneText([string]$text) { Set-BoxText "Gene symbol, e.g. BRCA1" $text }
+    function Press-Key([string]$keys) {
         Focus-App
-        $box = Gene-Box
+        [System.Windows.Forms.SendKeys]::SendWait($keys)
+        Start-Sleep -Milliseconds 450
+    }
+    function Press-Escape { Press-Key "{ESC}" }
+    function Set-BoxText([string]$placeholder, [string]$text) {
+        Focus-App
+        $box = Find-Box $placeholder
+        if ($null -eq $box) { throw "text box not found: $placeholder" }
         $box.SetFocus()
         Start-Sleep -Milliseconds 200
         Focus-App
@@ -174,7 +184,12 @@ try {
     }
 
     Focus-App
+    # The first frame can be captured before the window has painted, so look again for a few seconds.
     $light = Capture "01-light"
+    for ($i = 0; $i -lt 15 -and $light.Background.R -lt 200; $i++) {
+        Start-Sleep -Milliseconds 400
+        $light = Capture "01-light"
+    }
     if ($light.Background.R -lt 200) { throw "the app did not start in the light theme" }
 
     Click-Button-Like "Theme:*Switch to dark*"
@@ -202,11 +217,93 @@ try {
     $guide = Capture "04-pvs1-guide"
     Find-Button-Like "PVS1 does not apply:*" | Out-Null
     Find-Button-Like "PVS1 Very strong:*" | Out-Null
+    # Escape closes the guide without answering it.
+    Press-Escape
+    if (@(Names | Where-Object { $_ -like "PVS1 Very strong:*" }).Count -ne 0) {
+        throw "Escape did not close the PVS1 guide"
+    }
+    if (@(Names | Where-Object { $_ -like "PVS1:*applied*" -and $_ -notlike "*not applied*" }).Count -ne 0) {
+        throw "Escape applied PVS1 instead of just closing the guide"
+    }
+    Click-Button-Like "PVS1:*not applied*"
+    Find-Button-Like "PVS1 Very strong:*" | Out-Null
     # The first option is visible without scrolling; later ones may be below the fold.
     Click-Button-Like "PVS1 Very strong:*"
     Find-Button-Like "PVS1:*applied*" | Out-Null
     Find-Button-Like "PVS1 strength: Very strong*" | Out-Null
     $after = Capture "05-pvs1-supporting"
+
+    # The predictor helper turns a REVEL score into PP3 at the published strength.
+    Click-Button "Open the predictor score helper"
+    Set-BoxText "Score, e.g. 0.85" "0.95"
+    Click-Button-Like "Apply PP3 Strong*"
+    Find-Button-Like "PP3:*applied*" | Out-Null
+    Find-Button-Like "PP3 strength: Strong*" | Out-Null
+    # A score between the limits gives no button, and a benign score above
+    # this program's limit is lowered to Moderate.
+    Set-BoxText "Score, e.g. 0.85" "0.5"
+    if (@(Names | Where-Object { $_ -like "Apply PP3*" -or $_ -like "Apply BP4*" }).Count -ne 0) {
+        throw "a score between the limits still offered to apply a criterion"
+    }
+    Set-BoxText "Score, e.g. 0.85" "0.01"
+    Find-Button-Like "Apply BP4 Moderate*" | Out-Null
+    $predictor = Capture "05b-predictor"
+    Click-Button "Close the predictor score helper"
+
+    # The functional helper: controls route, then the OddsPath route.
+    Click-Button "Open the functional evidence helper"
+    Set-BoxText "Controls, e.g. 11" "12"
+    Click-Button-Like "Apply PS3 Moderate*"
+    Find-Button-Like "PS3:*applied*" | Out-Null
+    Click-Button "OddsPath value"
+    Set-BoxText "OddsPath, e.g. 5.2" "400"
+    Find-Button-Like "Apply PS3 Very strong*" | Out-Null
+    Set-BoxText "OddsPath, e.g. 5.2" "1"
+    if (@(Names | Where-Object { $_ -like "Apply PS3*" -or $_ -like "Apply BS3*" }).Count -ne 0) {
+        throw "an OddsPath in the indeterminate range still offered to apply a criterion"
+    }
+    $functional = Capture "05c-functional"
+    Click-Button "Close the functional evidence helper"
+
+    # Raising a strength above its default asks for a reason first.
+    Click-Button-Like "PM1:*not applied*"
+    Click-Button-Like "PM1 strength: Moderate*"
+    $raise = Capture "05d-raise-reason"
+    Set-BoxText "Why is this stronger than the default?" "Hot spot in a well-studied domain"
+    Click-Button-Like "Save the reason and raise PM1*"
+    Find-Button-Like "PM1 strength: Strong*" | Out-Null
+    # Strong -> Supporting -> Moderate (the default) need no reason; the next
+    # click raises again and asks. Escape then leaves the strength unchanged.
+    Click-Button-Like "PM1 strength:*"
+    Click-Button-Like "PM1 strength:*"
+    Find-Button-Like "PM1 strength: Moderate*" | Out-Null
+    Click-Button-Like "PM1 strength:*"
+    Find-Button-Like "Save the reason and raise PM1*" | Out-Null
+    Press-Escape
+    Find-Button-Like "PM1 strength: Moderate*" | Out-Null
+    if (@(Names | Where-Object { $_ -like "Save the reason and raise*" }).Count -ne 0) {
+        throw "Escape did not close the reason prompt"
+    }
+    # Clicking the criterion code removes it, and its open reason prompt goes with it.
+    Click-Button-Like "PM1 strength:*"
+    Find-Button-Like "Save the reason and raise PM1*" | Out-Null
+    Click-Button-Like "PM1:*applied*"
+    Find-Button-Like "PM1:*not applied*" | Out-Null
+    if (@(Names | Where-Object { $_ -like "Save the reason and raise*" }).Count -ne 0) {
+        throw "removing PM1 left its reason prompt open"
+    }
+
+    # Page Down and Page Up scroll the list under the mouse pointer.
+    $ps1 = Find-Button-Like "PS1:*"
+    $r = $ps1.Current.BoundingRectangle
+    $before = $r.Y
+    [ClassiVarSmokeWin]::SetCursorPos([int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2)) | Out-Null
+    Press-Key "{PGDN}"
+    $down = (Find-Button-Like "PS1:*").Current.BoundingRectangle.Y
+    if ($down -ge $before) { throw "Page Down did not scroll the criteria list" }
+    Press-Key "{PGUP}"
+    $up = (Find-Button-Like "PS1:*").Current.BoundingRectangle.Y
+    if ([math]::Abs($up - $before) -gt 2) { throw "Page Up did not scroll the criteria list back" }
 
     # Clearing the gene box and pressing Enter must not offer to wipe the case.
     Set-GeneText ""
@@ -230,11 +327,35 @@ try {
     Find-Button-Like "Lab A*" | Out-Null
     # Removing a record must ask first, not delete on one click.
     Click-Button-Like "Lab A*"
+    # The name box renames the record as you type.
+    Set-BoxText "Lab or source, e.g. Lab A (ClinVar)" "Quest Dx"
+    Find-Button-Like "Quest Dx*" | Out-Null
+    # Put the criteria list at the top, so the Page Down check below has room to move it.
+    $c = (Find-Button-Like "PS1:*").Current.BoundingRectangle
+    [ClassiVarSmokeWin]::SetCursorPos([int]($c.X + $c.Width / 2), [int]($c.Y + $c.Height / 2)) | Out-Null
+    Press-Key "{PGUP}"
+    Press-Key "{PGUP}"
+    Press-Key "{PGUP}"
+    $ps1Top = (Find-Button-Like "PS1:*").Current.BoundingRectangle.Y
     Click-Button "Remove record"
     Start-Sleep -Milliseconds 300
     if (@(Names | Where-Object { $_ -eq "Yes, continue" }).Count -ne 1) {
         throw "Remove record did not ask for confirmation"
     }
+    $modal = Capture "07a-confirm-window"
+    # Page Down must not scroll the list behind the confirmation window.
+    $c = (Find-Button-Like "PS1:*").Current.BoundingRectangle
+    [ClassiVarSmokeWin]::SetCursorPos([int]($c.X + $c.Width / 2), [int]($c.Y + $c.Height / 2)) | Out-Null
+    Press-Key "{PGDN}"
+    $ps1Behind = (Find-Button-Like "PS1:*").Current.BoundingRectangle.Y
+    if ($ps1Behind -ne $ps1Top) { throw "Page Down scrolled the list behind the confirmation window" }
+    # Escape answers Cancel, and the record is still there.
+    Press-Escape
+    if (@(Names | Where-Object { $_ -eq "Yes, continue" }).Count -ne 0) {
+        throw "Escape did not close the confirmation"
+    }
+    Find-Button-Like "Quest Dx*" | Out-Null
+    Click-Button "Remove record"
     Click-Button "Cancel"
     $reported = Capture "07-reported"
 
