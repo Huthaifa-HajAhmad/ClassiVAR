@@ -1,0 +1,24 @@
+# Calls the real ClinGen, G2P and PanelApp services once a week. A changed
+# address or format shows up here as a failure, as intended.
+#
+# Two limits to know: GitHub disables scheduled workflows after 60 days without
+# repository activity, and a failed scheduled run notifies nobody. Trigger it by
+# hand with workflow_dispatch after a quiet period or before a release.
+name: live-sources
+
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show
+      - run: cargo test -p classivar-sources --locked -- --ignored

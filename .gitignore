@@ -1,2 +1,9 @@
 /target
 *.log
+# OS clutter
+.DS_Store
+Thumbs.db
+# Case files hold variant, gene and lab history. They are personal working data
+# and must not be committed by accident.
+*.classivar.json
+*.case.json

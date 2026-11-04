@@ -1,0 +1,47 @@
+# Checks that must pass before a change is merged. Written on 2026-11-04 and
+# NOT yet run: the first run on GitHub will show what needs adjusting.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    # No macOS build of the app has ever been made. Until the first one is green,
+    # a macOS failure is shown but does not block a merge (audit finding D4).
+    continue-on-error: ${{ matrix.os == 'macos-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+      # Shows the toolchain pinned in rust-toolchain.toml; the first cargo command installs it if missing.
+      - run: rustup show
+      - run: cargo fmt --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+      - run: cargo build --workspace --locked
+
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo install cargo-audit --locked
+      - run: cargo audit
