@@ -5,4 +5,7 @@ members = ["crates/classivar-core", "crates/classivar-sources", "crates/classiva
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
+# The oldest Rust that builds this project is not measured; the pinned toolchain
+# (rust-toolchain.toml) is the one that is tested.
+rust-version = "1.98"
 publish = false

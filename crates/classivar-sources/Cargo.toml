@@ -3,6 +3,7 @@ name = "classivar-sources"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 csv = "1.4.0"
