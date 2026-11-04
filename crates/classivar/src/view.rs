@@ -5,12 +5,14 @@
 //!
 //! The curator decides every criterion; the screen only adds up and explains.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use classivar_core::{
-    Applied, Assessment, Category, Class, Criterion, Direction, Reason, Reevaluation, RuleSet, Strength, Submission,
-    Verdict, Warning,
+    Applied, Assessment, CaseFile, Category, Class, Consistency, Criterion, Direction, GeneDecision, Reason,
+    Reevaluation, RuleSet, SavedRecord, Strength, Submission, Verdict, Warning, rules::ReviewStatus,
 };
+use std::path::PathBuf;
+
 use classivar_sources::{
     Fetched, SourceError,
     clingen::{self, ClinGenGene},
@@ -18,26 +20,32 @@ use classivar_sources::{
     panelapp::{self, Confidence, Instance, PanelAppGene},
 };
 use gpui_kit::component::{
-    ActiveTheme, Selectable, Sizable,
-    button::Button,
+    ActiveTheme, Selectable, Sizable, Theme, ThemeMode,
+    button::{Button, ButtonVariants},
     input::{Input, InputEvent, InputState},
 };
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
+mod panels;
+
 /// Width of one point in the evidence lanes.
 const POINT_WIDTH: f32 = 36.0;
-/// Width of one point on the points scale, which runs from -8 to +12.
-const SCALE_UNIT: f32 = 30.0;
-const SCALE_MIN: i32 = -8;
-const SCALE_MAX: i32 = 12;
+/// Width of one point on the points scale. Chosen so the whole scale fits the
+/// result pane at the 960 px minimum window width.
+const SCALE_UNIT: f32 = 20.0;
 
+/// The largest a case file may be before it is refused without reading it.
+const MAX_CASE_BYTES: u64 = 4 * 1024 * 1024;
+
+// The fills are chosen so that the ink on them (white or near-black) reaches the
+// WCAG AA contrast of 4.5:1. A test below checks every pair.
 fn pathogenic_colour() -> Rgba {
-    rgb(0xe34948)
+    rgb(0xc62828)
 }
 
 fn benign_colour() -> Rgba {
-    rgb(0x2a78d6)
+    rgb(0x1f5fb5)
 }
 
 fn direction_colour(direction: Direction) -> Rgba {
@@ -47,7 +55,16 @@ fn direction_colour(direction: Direction) -> Rgba {
     }
 }
 
-fn class_fill(class: Class) -> Rgba {
+fn class_fill(class: Class, dark: bool) -> Rgba {
+    if dark {
+        return match class {
+            Class::Pathogenic => pathogenic_colour(),
+            Class::LikelyPathogenic => rgb(0x5f1b1b),
+            Class::Vus => rgb(0x33332f),
+            Class::LikelyBenign => rgb(0x173a5e),
+            Class::Benign => benign_colour(),
+        };
+    }
     match class {
         Class::Pathogenic => pathogenic_colour(),
         Class::LikelyPathogenic => rgb(0xf6c9c8),
@@ -57,23 +74,54 @@ fn class_fill(class: Class) -> Rgba {
     }
 }
 
-fn class_ink(class: Class) -> Rgba {
+fn class_ink(class: Class, dark: bool) -> Rgba {
+    if dark {
+        return match class {
+            Class::Pathogenic | Class::Benign => rgb(0xffffff),
+            Class::LikelyPathogenic => rgb(0xffd9d5),
+            Class::Vus => rgb(0xe8e7e1),
+            Class::LikelyBenign => rgb(0xd6e8ff),
+        };
+    }
     if matches!(class, Class::Pathogenic | Class::Benign) { rgb(0xffffff) } else { rgb(0x0b0b0b) }
 }
+
+const CLASSES: [Class; 5] =
+    [Class::Benign, Class::LikelyBenign, Class::Vus, Class::LikelyPathogenic, Class::Pathogenic];
 
 fn plural(n: i32) -> &'static str {
     if n == 1 { "" } else { "s" }
 }
 
-/// How many detail lines a source card shows before saying "and N more".
-const CARD_LINES: usize = 3;
-
-fn and_more(mut lines: Vec<String>, total: usize) -> Vec<String> {
-    if total > CARD_LINES {
-        lines.push(format!("…and {} more.", total - CARD_LINES));
-    }
-    lines
+/// The points scale: its range and the zones, taken from the rule set so the
+/// scale and the class badge cannot disagree.
+#[derive(Debug, PartialEq, Eq)]
+struct Scale {
+    min: i32,
+    max: i32,
+    /// (class, first point, first point of the next zone)
+    zones: Vec<(Class, i32, i32)>,
 }
+
+fn scale_for(rules: &RuleSet) -> Scale {
+    let t = &rules.class_min_points;
+    // Two points of room beyond the first and last class limit, for the Benign and Pathogenic zones.
+    let (min, max) = (t.likely_benign - 2, t.pathogenic + 2);
+    Scale {
+        min,
+        max,
+        zones: vec![
+            (Class::Benign, min, t.likely_benign),
+            (Class::LikelyBenign, t.likely_benign, t.vus),
+            (Class::Vus, t.vus, t.likely_pathogenic),
+            (Class::LikelyPathogenic, t.likely_pathogenic, t.pathogenic),
+            (Class::Pathogenic, t.pathogenic, max),
+        ],
+    }
+}
+
+/// How many detail lines a source card shows before "Show all".
+const CARD_LINES: usize = 3;
 
 fn describe_panelapp(found: &Fetched<PanelAppGene>) -> (String, Vec<String>) {
     let gene = &found.value;
@@ -95,12 +143,11 @@ fn describe_panelapp(found: &Fetched<PanelAppGene>) -> (String, Vec<String>) {
     let lines = gene
         .entries
         .iter()
-        .take(CARD_LINES)
         .map(|e| {
             format!("• {} (v{}): {} · {}", e.panel_name, e.panel_version, e.confidence.label(), e.mode_of_inheritance)
         })
         .collect();
-    (headline, and_more(lines, gene.entries.len()))
+    (headline, lines)
 }
 
 fn describe_g2p(found: &Fetched<G2pGene>) -> (String, Vec<String>) {
@@ -112,12 +159,11 @@ fn describe_g2p(found: &Fetched<G2pGene>) -> (String, Vec<String>) {
     let lines = gene
         .records
         .iter()
-        .take(CARD_LINES)
         .map(|r| {
             format!("• {}: {} · {} · {}", r.disease, r.confidence, r.genotype.replace('_', " "), r.molecular_mechanism)
         })
         .collect();
-    (headline, and_more(lines, gene.records.len()))
+    (headline, lines)
 }
 
 fn describe_clingen(found: &Fetched<ClinGenGene>) -> (String, Vec<String>) {
@@ -129,7 +175,6 @@ fn describe_clingen(found: &Fetched<ClinGenGene>) -> (String, Vec<String>) {
     let lines = gene
         .curations
         .iter()
-        .take(CARD_LINES)
         .map(|c| {
             format!(
                 "• {} ({}): {} · {} · {}",
@@ -137,13 +182,120 @@ fn describe_clingen(found: &Fetched<ClinGenGene>) -> (String, Vec<String>) {
             )
         })
         .collect();
-    (headline, and_more(lines, gene.curations.len()))
+    (headline, lines)
 }
 
-type Evidence = BTreeMap<String, Strength>;
+/// One criterion as the curator applied it: the strength, and the guide answer
+/// that set it when a guide was used. The answer is saved with the case so the
+/// reason for a strength is not lost.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Choice {
+    strength: Strength,
+    situation: Option<String>,
+}
+
+impl Choice {
+    fn new(strength: Strength) -> Self {
+        Self { strength, situation: None }
+    }
+
+    fn guided(strength: Strength, situation: String) -> Self {
+        Self { strength, situation: Some(situation) }
+    }
+}
+
+type Evidence = BTreeMap<String, Choice>;
 
 fn to_applied(evidence: &Evidence) -> Vec<Applied> {
-    evidence.iter().map(|(code, strength)| Applied { code: code.clone(), strength: *strength }).collect()
+    evidence
+        .iter()
+        .map(|(code, choice)| Applied {
+            code: code.clone(),
+            strength: choice.strength,
+            situation: choice.situation.clone(),
+        })
+        .collect()
+}
+
+/// Bring saved evidence onto today's rules: lower a strength above today's cap,
+/// drop a criterion that no longer exists, and fill in a guide answer that
+/// matches the strength. Returns the choices and a plain-language list of what
+/// changed, so the screen can say it rather than repair anything silently.
+fn normalize_today(rules: &RuleSet, list: &[Applied]) -> (Vec<(String, Choice)>, Vec<String>) {
+    let mut changed = Vec::new();
+    let mut out = Vec::new();
+    for applied in list {
+        let Some(criterion) = rules.criterion(&applied.code) else {
+            changed.push(format!("{} (criterion no longer exists, dropped)", applied.code));
+            continue;
+        };
+        let allowed = criterion.allowed_strengths();
+        let strength = if allowed.contains(&applied.strength) {
+            applied.strength
+        } else {
+            let highest = *allowed.last().unwrap_or(&criterion.strength);
+            changed.push(format!("{} to {}", applied.code, highest.label()));
+            highest
+        };
+        let situation = if criterion.guide.is_empty() {
+            None
+        } else {
+            let saved = applied
+                .situation
+                .as_deref()
+                .filter(|s| criterion.guide.iter().any(|g| g.id == *s && g.strength == Some(strength)));
+            saved.map(str::to_string).or_else(|| criterion.situation_for(strength).map(str::to_string))
+        };
+        out.push((applied.code.clone(), Choice { strength, situation }));
+    }
+    (out, changed)
+}
+
+/// The colours of every warning and notice. The kit's own warning pair is hard
+/// to read (about 1.8:1 in the light theme), so the app uses its own pair, which
+/// reads the same in both themes. A test checks the contrast.
+fn warning_fill() -> Rgba {
+    rgb(0xffe9a8)
+}
+
+fn warning_ink() -> Rgba {
+    rgb(0x2b2100)
+}
+
+/// A short banner text on the warning colours.
+fn notice(text: impl Into<SharedString>, background: impl Into<Hsla>, foreground: impl Into<Hsla>) -> Div {
+    div().px_2().py_1().rounded_sm().bg(background.into()).text_color(foreground.into()).text_sm().child(text.into())
+}
+
+/// What the curator should read before trusting a class: the review status and rule version.
+fn rules_tag(rules: &RuleSet) -> String {
+    let meta = &rules.meta;
+    match meta.status {
+        ReviewStatus::Unverified => format!("UNVERIFIED rules v{}", meta.version),
+        ReviewStatus::Reviewed => format!(
+            "rules v{}, reviewed by {} on {}",
+            meta.version,
+            meta.reviewed_by.as_deref().unwrap_or("?"),
+            meta.reviewed_on.as_deref().unwrap_or("?")
+        ),
+    }
+}
+
+/// A class with its review status and rule version, so a screenshot of the
+/// class alone still shows how far it can be trusted.
+fn class_badge(class: Class, rules: &RuleSet, prefix: &str, border: Hsla, dark: bool) -> Div {
+    div()
+        .flex()
+        .flex_col()
+        .px_3()
+        .py_1()
+        .rounded_md()
+        .border_1()
+        .border_color(border)
+        .bg(class_fill(class, dark))
+        .text_color(class_ink(class, dark))
+        .child(div().font_weight(FontWeight::BOLD).child(format!("{prefix}{}", class.label())))
+        .child(div().text_xs().child(rules_tag(rules)))
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -162,8 +314,25 @@ enum Editing {
 struct Record {
     label: String,
     year: u16,
-    class: Class,
+    /// None until the curator says what the record reported.
+    class: Option<Class>,
+    /// The VUS sub-tier the record named, if any (only meaningful when `class` is a VUS).
+    tier: Option<String>,
     evidence: Evidence,
+}
+
+/// A step that throws work away. It waits for a click on "Yes" first.
+#[derive(Clone, PartialEq, Eq)]
+enum Confirm {
+    Clear(Editing),
+    StartFromLatest,
+    LoadExample,
+    /// Check another gene, which starts a new case.
+    NewGene(String),
+    /// Remove an earlier record and its evidence.
+    RemoveRecord(usize, String),
+    /// Open a case file over the work on screen.
+    OpenCase(Box<CaseFile>),
 }
 
 /// Where one lookup stands.
@@ -177,8 +346,6 @@ enum Lookup<T> {
 
 /// What the four gene sources said about the gene the curator asked about.
 struct GeneChecks {
-    #[allow(dead_code)] // kept for the saved-case file that comes later
-    symbol: String,
     england: Lookup<PanelAppGene>,
     australia: Lookup<PanelAppGene>,
     g2p: Lookup<G2pGene>,
@@ -187,23 +354,68 @@ struct GeneChecks {
 
 impl GeneChecks {
     fn idle() -> Self {
-        Self {
-            symbol: String::new(),
-            england: Lookup::Idle,
-            australia: Lookup::Idle,
-            g2p: Lookup::Idle,
-            clingen: Lookup::Idle,
-        }
+        Self { england: Lookup::Idle, australia: Lookup::Idle, g2p: Lookup::Idle, clingen: Lookup::Idle }
     }
 }
 
-/// The curator's own answer to: does this gene cause this disease?
-/// The program only suggests; this is the curator's decision.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum GeneLink {
-    Unconfirmed,
-    Established,
-    NotEstablished,
+/// A file name for the save dialog, made from the variant name. Anything that is
+/// not a letter, digit, dash or dot becomes an underscore, so the name is safe on every system.
+fn suggested_file_name(variant: &str) -> String {
+    let stem: String = variant
+        .trim()
+        .chars()
+        .take(40)
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '.' { c } else { '_' })
+        .collect();
+    let stem = if stem.is_empty() { "case".to_string() } else { stem };
+    // Windows refuses CON.classivar.json even with an extension, so a reserved
+    // device name gets a prefix rather than a raw OS error at save time.
+    let reserved = |name: &str| {
+        let base = name.split('.').next().unwrap_or(name).to_ascii_uppercase();
+        matches!(base.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+            || (base.len() == 4
+                && (base.starts_with("COM") || base.starts_with("LPT"))
+                && base.as_bytes()[3].is_ascii_digit()
+                && base.as_bytes()[3] != b'0')
+    };
+    let stem = if reserved(&stem) { format!("_{stem}") } else { stem };
+    format!("{stem}.classivar.json")
+}
+
+/// Where the save dialog starts: the user's Documents folder. Saving into the
+/// program's working directory (often the repository) is how case files end up
+/// committed by accident.
+fn default_save_folder() -> PathBuf {
+    let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")).map(PathBuf::from);
+    if let Some(home) = home {
+        let documents = home.join("Documents");
+        return if documents.is_dir() { documents } else { home };
+    }
+    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+}
+
+/// The fictional variant from the design sketch: (label, year, class, criteria).
+type ExampleRecord = (&'static str, u16, Class, &'static [(&'static str, Strength)]);
+
+const EXAMPLE_RECORDS: [ExampleRecord; 2] = [
+    ("Lab A (example)", 2019, Class::Vus, &[("PM2", Strength::Moderate), ("PP3", Strength::Supporting)]),
+    (
+        "Lab B (example)",
+        2022,
+        Class::Vus,
+        &[("PM2", Strength::Moderate), ("PP3", Strength::Supporting), ("PP4", Strength::Supporting)],
+    ),
+];
+
+const EXAMPLE_TODAY: &[(&str, Strength)] = &[
+    ("PM2", Strength::Supporting),
+    ("PP3", Strength::Supporting),
+    ("PP4", Strength::Supporting),
+    ("PM5", Strength::Moderate),
+];
+
+fn evidence_of(list: &[(&str, Strength)]) -> Evidence {
+    list.iter().map(|(code, strength)| (code.to_string(), Choice::new(*strength))).collect()
 }
 
 pub struct Workbench {
@@ -216,51 +428,142 @@ pub struct Workbench {
     editing: Editing,
     /// When on, every criterion shows its plain-language rule and source.
     learning: bool,
+    variant_input: Entity<InputState>,
     gene_input: Entity<InputState>,
     gene: GeneChecks,
+    /// Why the gene box was not checked (empty or not a symbol), shown under the row.
+    gene_error: Option<String>,
+    /// The gene this case is about: the last one checked.
+    case_gene: String,
     /// Whether the four source cards are shown. They are tall, so the curator can hide them.
     gene_cards_open: bool,
-    gene_link: GeneLink,
+    /// Cards that show all their lines instead of the first few.
+    expanded_cards: HashSet<&'static str>,
+    /// Criteria whose full note and source are open.
+    open_details: HashSet<String>,
+    /// The criterion whose strength guide is waiting for an answer.
+    guide_open: Option<String>,
+    gene_link: GeneDecision,
+    confirm: Option<Confirm>,
+    /// The result of the last save or open, shown until the curator dismisses it.
+    file_status: Option<String>,
+    /// The next number for a new record, so removing one cannot create two "Record 2"s.
+    next_record: u32,
     /// Counts lookups, so a slow old answer cannot replace a newer one.
     lookup_id: u64,
     _lookup_tasks: Vec<Task<()>>,
+    _file_task: Option<Task<()>>,
     _subscriptions: Vec<Subscription>,
 }
 
 impl Workbench {
-    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(rules: &'static RuleSet, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let variant_input = cx.new(|cx| InputState::new(window, cx).placeholder("Variant, e.g. NM_007294.4:c.5266dup"));
         let gene_input = cx.new(|cx| InputState::new(window, cx).placeholder("Gene symbol, e.g. BRCA1"));
-        let on_enter = cx.subscribe_in(&gene_input, window, |this, _, event: &InputEvent, _, cx| {
-            if matches!(event, InputEvent::PressEnter { .. }) {
-                this.check_gene(cx);
+        let on_gene_input = cx.subscribe_in(&gene_input, window, |this, _, event: &InputEvent, window, cx| {
+            match event {
+                InputEvent::PressEnter { .. } => this.check_gene(window, cx),
+                // The gene box also drives the fill-in suggestions under it.
+                InputEvent::Change => cx.notify(),
+                InputEvent::Focus | InputEvent::Blur => {}
+            }
+        });
+        // The result title and the notes read the variant box, so typing there
+        // must repaint the workbench, not only the input.
+        let on_variant_input = cx.subscribe_in(&variant_input, window, |_this, _, event: &InputEvent, _window, cx| {
+            if matches!(event, InputEvent::Change) {
+                cx.notify();
             }
         });
         Self {
-            rules: RuleSet::builtin(),
+            rules,
             mode: Mode::NewVariant,
             today: Evidence::new(),
             records: Vec::new(),
             editing: Editing::Today,
             learning: true,
+            variant_input,
             gene_input,
             gene: GeneChecks::idle(),
-            gene_cards_open: true,
-            gene_link: GeneLink::Unconfirmed,
+            gene_error: None,
+            case_gene: String::new(),
+            gene_cards_open: false,
+            expanded_cards: HashSet::new(),
+            open_details: HashSet::new(),
+            guide_open: None,
+            gene_link: GeneDecision::NotDecided,
+            confirm: None,
+            file_status: None,
+            next_record: 1,
             lookup_id: 0,
             _lookup_tasks: Vec::new(),
-            _subscriptions: vec![on_enter],
+            _file_task: None,
+            _subscriptions: vec![on_gene_input, on_variant_input],
         }
     }
 
-    /// Ask all four gene sources about the gene in the text box. Each network call
-    /// runs in the background and fills in its own card when it arrives, so one slow
-    /// or failing source does not hold up the others.
-    fn check_gene(&mut self, cx: &mut Context<Self>) {
+    /// The variant name the curator typed, if any.
+    fn variant_name(&self, cx: &App) -> Option<String> {
+        let typed = self.variant_input.read(cx).value();
+        let typed = typed.trim();
+        (!typed.is_empty()).then(|| typed.to_string())
+    }
+
+    fn has_case_data(&self, cx: &App) -> bool {
+        !self.today.is_empty()
+            || !self.records.is_empty()
+            || self.variant_name(cx).is_some()
+            || !self.gene_input.read(cx).value().trim().is_empty()
+    }
+
+    /// Ask a question, unless one is already waiting for an answer. A second
+    /// question must never replace the first: the user may have read it already
+    /// and could confirm something else by mistake.
+    fn ask(&mut self, confirm: Confirm) {
+        if self.confirm.is_none() {
+            self.confirm = Some(confirm);
+        } else {
+            // The banner is not modal, so a second request is possible. Say why
+            // nothing happened instead of dropping it silently.
+            self.file_status = Some("Finish the question above first, then try again.".to_string());
+        }
+    }
+
+    /// Ask all four gene sources about the gene in the text box. A different gene
+    /// from the one this case is about starts a new case, so the curator is asked first.
+    fn check_gene(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let typed = self.gene_input.read(cx).value().to_string();
+        let symbol = typed.trim().to_ascii_uppercase();
+        if !crate::genes::is_gene_symbol(&symbol) {
+            self.gene_error = Some(
+                "Type a gene symbol before checking: letters, digits or hyphens, up to 20 characters.".to_string(),
+            );
+            cx.notify();
+            return;
+        }
+        self.gene_error = None;
+        if !self.case_gene.is_empty() && symbol != self.case_gene && self.has_case_data(cx) {
+            self.ask(Confirm::NewGene(symbol));
+            cx.notify();
+            return;
+        }
+        self.run_gene_check(typed, window, cx);
+    }
+
+    /// Start the four lookups. Each network call runs in the background and fills
+    /// in its own card when it arrives, so one slow or failing source does not
+    /// hold up the others.
+    fn run_gene_check(&mut self, typed: String, _window: &mut Window, cx: &mut Context<Self>) {
+        self.gene_error = None;
+        let symbol = typed.trim().to_ascii_uppercase();
+        if symbol != self.case_gene {
+            // The decision about the old gene says nothing about this one.
+            self.gene_link = GeneDecision::NotDecided;
+            self.case_gene = symbol;
+        }
         self.lookup_id += 1;
         let id = self.lookup_id;
         self.gene = GeneChecks {
-            symbol: typed.trim().to_ascii_uppercase(),
             england: Lookup::Loading,
             australia: Lookup::Loading,
             g2p: Lookup::Loading,
@@ -302,39 +605,103 @@ impl Workbench {
         })
     }
 
-    fn current(&self) -> &Evidence {
-        match self.editing {
+    fn evidence(&self, scope: Editing) -> &Evidence {
+        match scope {
             Editing::Today => &self.today,
             Editing::Record(i) => &self.records[i].evidence,
         }
     }
 
-    fn current_mut(&mut self) -> &mut Evidence {
-        match self.editing {
+    fn evidence_mut(&mut self, scope: Editing) -> &mut Evidence {
+        match scope {
             Editing::Today => &mut self.today,
             Editing::Record(i) => &mut self.records[i].evidence,
         }
     }
 
-    fn editing_label(&self) -> String {
-        match self.editing {
+    fn current(&self) -> &Evidence {
+        self.evidence(self.editing)
+    }
+
+    fn scope_label(&self, scope: Editing) -> String {
+        match scope {
             Editing::Today => "Today (you)".to_string(),
             Editing::Record(i) => format!("{} · {}", self.records[i].label, self.records[i].year),
         }
     }
 
+    fn editing_label(&self) -> String {
+        self.scope_label(self.editing)
+    }
+
+    /// Apply, open the guide for, or remove a criterion. A guided criterion on
+    /// today's evidence never disappears from this button: the first click opens
+    /// the guide, a second closes it, and removal has its own button.
     fn toggle(&mut self, criterion: &Criterion) {
-        let evidence = self.current_mut();
-        if evidence.remove(&criterion.code).is_none() {
-            evidence.insert(criterion.code.clone(), criterion.strength);
+        if self.guide_open.as_deref() == Some(criterion.code.as_str()) {
+            self.guide_open = None;
+            return;
+        }
+        let scope = self.editing;
+        let applied = self.evidence_mut(scope).remove(&criterion.code);
+        if applied.is_some() {
+            if scope == Editing::Today && !criterion.guide.is_empty() {
+                if let Some(choice) = applied {
+                    self.evidence_mut(scope).insert(criterion.code.clone(), choice);
+                }
+                self.guide_open = Some(criterion.code.clone());
+            }
+            return;
+        }
+        if scope == Editing::Today && !criterion.guide.is_empty() {
+            self.guide_open = Some(criterion.code.clone());
+            return;
+        }
+        // A record should start from the strength the 2015 paper used, not from
+        // a later recommendation it predates.
+        let strength = match scope {
+            Editing::Today => criterion.strength,
+            Editing::Record(_) => criterion.original_strength.unwrap_or(criterion.strength),
+        };
+        self.evidence_mut(scope).insert(criterion.code.clone(), Choice::new(strength));
+    }
+
+    /// Take a criterion off the evidence being edited, including a guided one.
+    fn remove_criterion(&mut self, code: &str) {
+        self.evidence_mut(self.editing).remove(code);
+        if self.guide_open.as_deref() == Some(code) {
+            self.guide_open = None;
         }
     }
 
+    /// The curator's answer to a strength guide. `None` means the criterion does not apply.
+    fn answer_guide(&mut self, code: &str, strength: Option<Strength>, situation: String) {
+        self.guide_open = None;
+        match strength {
+            Some(strength) => {
+                self.today.insert(code.to_string(), Choice::guided(strength, situation));
+            }
+            None => {
+                self.today.remove(code);
+            }
+        };
+    }
+
     fn next_strength(&mut self, criterion: &Criterion) {
-        let Some(current) = self.current().get(&criterion.code).copied() else { return };
-        let options = criterion.allowed_strengths();
+        let Some(current) = self.current().get(&criterion.code).map(|choice| choice.strength) else { return };
+        if self.editing == Editing::Today && !criterion.guide.is_empty() {
+            self.guide_open = Some(criterion.code.clone());
+            return;
+        }
+        // Today's limits apply to today's evidence; a record may use what the lab used.
+        let options = match self.editing {
+            Editing::Today => criterion.allowed_strengths(),
+            Editing::Record(_) => criterion.recorded_strengths(),
+        };
         let at = options.iter().position(|s| *s == current).unwrap_or(0);
-        self.current_mut().insert(criterion.code.clone(), options[(at + 1) % options.len()]);
+        let scope = self.editing;
+        // A manual change no longer matches a guide answer, so that answer is dropped.
+        self.evidence_mut(scope).insert(criterion.code.clone(), Choice::new(options[(at + 1) % options.len()]));
     }
 
     fn set_mode(&mut self, mode: Mode) {
@@ -344,986 +711,540 @@ impl Workbench {
         }
     }
 
+    /// Switch between the light and dark theme, and remember the choice for the
+    /// next time the program starts.
+    fn toggle_theme(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let next = if cx.theme().is_dark() { ThemeMode::Light } else { ThemeMode::Dark };
+        Theme::change(next, Some(window), cx);
+        crate::settings::save_theme(next);
+        cx.notify();
+    }
+
     fn add_record(&mut self) {
-        let label = format!("Record {}", self.records.len() + 1);
-        self.records.push(Record { label, year: 2024, class: Class::Vus, evidence: Evidence::new() });
+        let label = format!("Record {}", self.next_record);
+        self.next_record += 1;
+        self.records.push(Record {
+            label,
+            year: classivar_sources::current_year(),
+            class: None,
+            tier: None,
+            evidence: Evidence::new(),
+        });
         self.editing = Editing::Record(self.records.len() - 1);
     }
 
     fn remove_record(&mut self, index: usize) {
+        if index >= self.records.len() {
+            return;
+        }
         self.records.remove(index);
-        self.editing = Editing::Today;
+        // Stay next to the record that took its place, rather than jumping away.
+        self.editing = if self.records.is_empty() {
+            Editing::Today
+        } else if index < self.records.len() {
+            Editing::Record(index)
+        } else {
+            Editing::Record(self.records.len() - 1)
+        };
+        self.confirm = None;
+    }
+
+    /// The next "Record N" number, continuing after the highest one in `records`.
+    fn next_record_number(records: &[Record]) -> u32 {
+        records
+            .iter()
+            .filter_map(|record| record.label.strip_prefix("Record ").and_then(|number| number.parse::<u32>().ok()))
+            .max()
+            .unwrap_or(0)
+            + 1
     }
 
     /// The fictional variant from the design sketch, so the history view can be tried at once.
-    fn load_example(&mut self) {
-        let evidence = |list: &[(&str, Strength)]| -> Evidence {
-            list.iter().map(|(code, strength)| (code.to_string(), *strength)).collect()
-        };
-        self.records = vec![
-            Record {
-                label: "Lab A (example)".into(),
-                year: 2019,
-                class: Class::Vus,
-                evidence: evidence(&[("PM2", Strength::Moderate), ("PP3", Strength::Supporting)]),
-            },
-            Record {
-                label: "Lab B (example)".into(),
-                year: 2022,
-                class: Class::Vus,
-                evidence: evidence(&[
-                    ("PM2", Strength::Moderate),
-                    ("PP3", Strength::Supporting),
-                    ("PP4", Strength::Supporting),
-                ]),
-            },
-        ];
-        self.today = evidence(&[
-            ("PM2", Strength::Supporting),
-            ("PP3", Strength::Supporting),
-            ("PP4", Strength::Supporting),
-            ("PM5", Strength::Moderate),
-        ]);
+    /// Does nothing if the rules no longer accept its criteria (a test also guards this).
+    fn load_example(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let accepted =
+            EXAMPLE_RECORDS.iter().all(|(_, _, _, list)| self.rules.assess(&to_applied(&evidence_of(list))).is_ok())
+                && self.rules.assess(&to_applied(&evidence_of(EXAMPLE_TODAY))).is_ok();
+        if !accepted {
+            self.file_status = Some(
+                "The example does not fit the current rule file, so it was not loaded. Load the default rules to try it."
+                    .to_string(),
+            );
+            return;
+        }
+        self.records = EXAMPLE_RECORDS
+            .iter()
+            .map(|(label, year, class, list)| Record {
+                label: label.to_string(),
+                year: *year,
+                class: Some(*class),
+                tier: None,
+                evidence: evidence_of(list),
+            })
+            .collect();
+        self.today = evidence_of(EXAMPLE_TODAY);
         self.editing = Editing::Today;
+        // The example is fictional: it must not inherit the gene or variant that
+        // happened to be on screen, or the class would be attributed to them.
+        self.case_gene.clear();
+        self.gene_link = GeneDecision::NotDecided;
+        self.gene_error = None;
+        self.gene = GeneChecks::idle();
+        self.lookup_id += 1;
+        self._lookup_tasks.clear();
+        self.variant_input.update(cx, |input, cx| input.set_value("", window, cx));
+        self.gene_input.update(cx, |input, cx| input.set_value("", window, cx));
+        self.guide_open = None;
+        self.confirm = None;
     }
 
     /// Copy the latest record's evidence into today's evidence, to adjust from there.
     fn start_from_latest(&mut self) {
         let latest = self.records.iter().enumerate().max_by_key(|(i, r)| (r.year, *i)).map(|(_, r)| r.evidence.clone());
-        if let Some(evidence) = latest {
-            self.today = evidence;
-        }
-    }
-
-    // ---------- gene check ----------
-
-    fn gene_strip(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let (border, muted) = (cx.theme().border, cx.theme().muted_foreground);
-
-        let mut link = div()
-            .flex()
-            .items_center()
-            .gap_2()
-            .child(div().text_xs().text_color(muted).child("Does this gene cause the disease? (your decision)"));
-        for (choice, label) in [
-            (GeneLink::Established, "Yes, established"),
-            (GeneLink::NotEstablished, "No, or doubtful"),
-            (GeneLink::Unconfirmed, "Not decided"),
-        ] {
-            link = link.child(
-                Button::new(SharedString::from(format!("gene-link-{label}")))
-                    .label(label)
-                    .small()
-                    .selected(self.gene_link == choice)
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.gene_link = choice;
-                        cx.notify();
-                    })),
-            );
-        }
-
-        let g = &self.gene;
-        let body: AnyElement = if matches!(g.clingen, Lookup::Idle) {
-            div()
-                .text_xs()
-                .text_color(muted)
-                .child("Type a gene symbol and press Enter or Check. ACMG/AMP criteria assume the gene is known to cause the disease.")
-                .into_any_element()
-        } else if !self.gene_cards_open {
-            div().into_any_element()
-        } else {
-            div()
-                .flex()
-                .flex_col()
-                .gap_2()
-                .child(
-                    div()
-                        .flex()
-                        .flex_wrap()
-                        .gap_2()
-                        .child(self.source_card("ClinGen gene-disease validity", &g.clingen, describe_clingen, cx))
-                        .child(self.source_card("Gene2Phenotype (G2P)", &g.g2p, describe_g2p, cx))
-                        .child(self.source_card("PanelApp England", &g.england, describe_panelapp, cx))
-                        .child(self.source_card("PanelApp Australia", &g.australia, describe_panelapp, cx)),
-                )
-                .child(div().text_xs().text_color(muted).child(
-                    "Sources can disagree, and they are expert opinion about the gene, not about your variant. You decide whether this gene causes the disease.",
-                ))
-                .into_any_element()
-        };
-
-        div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .px_4()
-            .py_3()
-            .border_b_1()
-            .border_color(border)
-            .child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .items_center()
-                    .gap_3()
-                    .child(div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(muted).child("GENE"))
-                    .child(div().w(px(220.)).child(Input::new(&self.gene_input)))
-                    .child(Button::new("gene-check").label("Check gene").small().outline().on_click(cx.listener(
-                        |this, _, _, cx| {
-                            this.check_gene(cx);
-                        },
-                    )))
-                    .when(!matches!(g.clingen, Lookup::Idle), |row| {
-                        row.child(
-                            Button::new("gene-cards-toggle")
-                                .label(if self.gene_cards_open { "Hide results" } else { "Show results" })
-                                .small()
-                                .outline()
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    this.gene_cards_open = !this.gene_cards_open;
-                                    cx.notify();
-                                })),
-                        )
-                    })
-                    .child(link),
-            )
-            .child(body)
-    }
-
-    /// One source's answer. A failure is shown as a failure, never as "nothing found".
-    fn source_card<T>(
-        &self,
-        title: &'static str,
-        lookup: &Lookup<T>,
-        describe: fn(&Fetched<T>) -> (String, Vec<String>),
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
-        let (border, muted, warning) = (cx.theme().border, cx.theme().muted_foreground, cx.theme().warning);
-        let content: AnyElement = match lookup {
-            Lookup::Idle => div().into_any_element(),
-            Lookup::Loading => div().text_sm().text_color(muted).child("Checking…").into_any_element(),
-            Lookup::Failed(message) => div()
-                .text_sm()
-                .text_color(warning)
-                .child(format!("Could not check: {message}. This is not \"nothing found\"."))
-                .into_any_element(),
-            Lookup::Done(found) => {
-                let (headline, lines) = describe(found);
-                let mut col = div()
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .child(div().text_xs().text_color(muted).child(format!("fetched {}", found.fetched_on)))
-                    .child(div().text_sm().child(headline));
-                for line in lines {
-                    col = col.child(div().text_xs().text_color(muted).child(line));
-                }
-                col.into_any_element()
-            }
-        };
-        div()
-            .w(px(590.))
-            .p_2()
-            .rounded_md()
-            .border_1()
-            .border_color(border)
-            .flex()
-            .flex_col()
-            .gap_1()
-            .child(div().text_xs().font_weight(FontWeight::SEMIBOLD).child(title))
-            .child(content)
-    }
-
-    // ---------- criteria list (left) ----------
-
-    fn criterion_row(&self, c: &Criterion, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let (border, muted) = (theme.border, theme.muted_foreground);
-        let strength = self.current().get(&c.code).copied();
-        let colour = direction_colour(c.direction);
-
-        let toggle_target = c.clone();
-        let cycle_target = c.clone();
-        let source = self.rules.source(&c.source).map(|s| s.citation.clone());
-
-        div()
-            .flex()
-            .flex_col()
-            .gap_1()
-            .py_2()
-            .border_b_1()
-            .border_color(border)
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(div().w(px(5.)).h(px(22.)).rounded_sm().bg(colour).flex_none())
-                    .child(
-                        Button::new(SharedString::from(format!("apply-{}", c.code)))
-                            .label(c.code.clone())
-                            .small()
-                            .selected(strength.is_some())
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.toggle(&toggle_target);
-                                cx.notify();
-                            })),
-                    )
-                    .child(div().flex_1().min_w_0().text_sm().child(c.title.clone()))
-                    .when(c.discouraged, |row| row.child(div().text_xs().text_color(muted).child("discouraged")))
-                    .when_some(strength, |row, strength| {
-                        row.child(
-                            Button::new(SharedString::from(format!("strength-{}", c.code)))
-                                .label(strength.label())
-                                .small()
-                                .outline()
-                                .tooltip("Click to change the strength")
-                                .on_click(cx.listener(move |this, _, _, cx| {
-                                    this.next_strength(&cycle_target);
-                                    cx.notify();
-                                })),
-                        )
-                    }),
-            )
-            .when(self.learning, |col| {
-                col.child(
-                    div()
-                        .pl(px(13.))
-                        .flex()
-                        .flex_col()
-                        .gap_1()
-                        .text_xs()
-                        .text_color(muted)
-                        .child(c.summary.clone())
-                        .when_some(c.note.clone(), |d, note| d.child(format!("Note: {note}")))
-                        .when_some(source, |d, citation| d.child(format!("Source: {citation}"))),
-                )
-            })
-    }
-
-    fn criteria_column(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let muted = cx.theme().muted_foreground;
-        let mut column = div().flex().flex_col().gap_4();
-        for (direction, heading) in [
-            (Direction::Pathogenic, "Evidence for disease (pathogenic)"),
-            (Direction::Benign, "Evidence against disease (benign)"),
-        ] {
-            let mut group = div()
-                .flex()
-                .flex_col()
-                .child(div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(muted).pb_1().child(heading));
-            for category in Category::ALL {
-                let in_category: Vec<&Criterion> =
-                    self.rules.criteria.iter().filter(|c| c.direction == direction && c.category == category).collect();
-                for c in in_category {
-                    group = group.child(self.criterion_row(c, cx));
-                }
-            }
-            column = column.child(group);
-        }
-        column
-    }
-
-    // ---------- records strip (reported variant) ----------
-
-    fn records_strip(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let (border, muted) = (cx.theme().border, cx.theme().muted_foreground);
-        let mut chips = div().flex().flex_wrap().items_center().gap_2();
-        for (i, r) in self.records.iter().enumerate() {
-            chips = chips.child(
-                Button::new(SharedString::from(format!("record-{i}")))
-                    .label(format!("{} · {}", r.label, r.year))
-                    .small()
-                    .selected(self.editing == Editing::Record(i))
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.editing = Editing::Record(i);
-                        cx.notify();
-                    })),
-            );
-        }
-        chips = chips
-            .child(
-                Button::new("record-today")
-                    .label("Today (you)")
-                    .small()
-                    .selected(self.editing == Editing::Today)
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.editing = Editing::Today;
-                        cx.notify();
-                    })),
-            )
-            .child(Button::new("record-add").label("+ Add record").small().outline().on_click(cx.listener(
-                |this, _, _, cx| {
-                    this.add_record();
-                    cx.notify();
-                },
-            )));
-        if self.records.is_empty() {
-            chips =
-                chips.child(Button::new("record-example").label("Load fictional example").small().outline().on_click(
-                    cx.listener(|this, _, _, cx| {
-                        this.load_example();
-                        cx.notify();
-                    }),
-                ));
-        }
-
-        let detail = match self.editing {
-            Editing::Record(i) => {
-                let record = &self.records[i];
-                let mut row = div()
-                    .flex()
-                    .flex_wrap()
-                    .items_center()
-                    .gap_2()
-                    .child(div().text_xs().text_color(muted).child("Class this record reported:"));
-                for class in
-                    [Class::Benign, Class::LikelyBenign, Class::Vus, Class::LikelyPathogenic, Class::Pathogenic]
-                {
-                    row = row.child(
-                        Button::new(SharedString::from(format!("class-{i}-{}", class.short())))
-                            .label(class.short())
-                            .small()
-                            .selected(record.class == class)
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.records[i].class = class;
-                                cx.notify();
-                            })),
-                    );
-                }
-                row.child(div().text_xs().text_color(muted).pl_2().child("Year:"))
-                    .child(Button::new("year-down").label("−").small().outline().on_click(cx.listener(
-                        move |this, _, _, cx| {
-                            let year = &mut this.records[i].year;
-                            *year = year.saturating_sub(1).max(2000);
-                            cx.notify();
-                        },
-                    )))
-                    .child(div().text_sm().child(record.year.to_string()))
-                    .child(Button::new("year-up").label("+").small().outline().on_click(cx.listener(
-                        move |this, _, _, cx| {
-                            let year = &mut this.records[i].year;
-                            *year = (*year + 1).min(2100);
-                            cx.notify();
-                        },
-                    )))
-                    .child(Button::new("record-remove").label("Remove record").small().outline().on_click(cx.listener(
-                        move |this, _, _, cx| {
-                            this.remove_record(i);
-                            cx.notify();
-                        },
-                    )))
-                    .into_any_element()
-            }
-            Editing::Today => div()
-                .flex()
-                .items_center()
-                .gap_2()
-                .when(!self.records.is_empty(), |row| {
-                    row.child(
-                        Button::new("copy-latest")
-                            .label("Start from the latest record's evidence")
-                            .small()
-                            .outline()
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.start_from_latest();
-                                cx.notify();
-                            })),
-                    )
-                })
-                .child(
-                    div()
-                        .text_xs()
-                        .text_color(muted)
-                        .child("Editing your own evidence for today. Change, add or remove criteria to re-evaluate."),
-                )
-                .into_any_element(),
-        };
-
-        div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .px_4()
-            .py_3()
-            .border_b_1()
-            .border_color(border)
-            .child(
-                div()
-                    .text_xs()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(muted)
-                    .child("RECORDS: what earlier labs reported and used. Choose one to edit its evidence."),
-            )
-            .child(chips)
-            .child(detail)
-    }
-
-    // ---------- results (right) ----------
-
-    fn evidence_chip(
-        &self,
-        code: &str,
-        strength: Option<Strength>,
-        changed: bool,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
-        let (muted, foreground) = (cx.theme().muted_foreground, cx.theme().foreground);
-        let cell = div().flex().items_center().gap_1().p_1().rounded_sm();
-        let Some(strength) = strength else {
-            return cell.text_color(muted).child("–");
-        };
-        let direction = self.rules.criterion(code).map_or(Direction::Pathogenic, |c| c.direction);
-        let points = self.rules.magnitude(strength);
-        let sign = if direction == Direction::Pathogenic { "+" } else { "−" };
-        cell.when(changed, |d| d.border_2().border_color(foreground))
-            .child(
-                div()
-                    .px_1()
-                    .rounded_sm()
-                    .bg(direction_colour(direction))
-                    .text_color(rgb(0xffffff))
-                    .text_xs()
-                    .font_weight(FontWeight::BOLD)
-                    .child(format!("{sign}{points}")),
-            )
-            .child(div().text_xs().child(strength.label()))
-    }
-
-    fn verdict_card(&self, re: &Reevaluation, cx: &mut Context<Self>) -> impl IntoElement {
-        let (border, muted) = (cx.theme().border, cx.theme().muted_foreground);
-        let latest = re.latest_index.map(|i| &re.records[i]);
-        let mut card = div().flex().flex_col().gap_2().p_3().rounded_md().border_1().border_color(border);
-
-        let (Some(verdict), Some(latest)) = (re.verdict, latest) else {
-            let hint = if self.records.is_empty() {
-                "Add the records (what earlier labs reported and used), then apply today's evidence to get a verdict."
+        let Some(evidence) = latest else { return };
+        let mut lowered = Vec::new();
+        let mut guided = Vec::new();
+        let mut dropped = Vec::new();
+        let mut today = Evidence::new();
+        for (code, choice) in evidence {
+            let Some(criterion) = self.rules.criterion(&code) else {
+                dropped.push(format!("{code} (criterion no longer exists)"));
+                continue;
+            };
+            let allowed = criterion.allowed_strengths();
+            let strength = if allowed.contains(&choice.strength) {
+                choice.strength
             } else {
-                "Apply today's evidence, or start from the latest record's evidence, to get a verdict."
+                let highest = *allowed.last().unwrap_or(&criterion.strength);
+                lowered.push(format!("{code} to {}", highest.label()));
+                highest
             };
-            return card.child(div().text_sm().text_color(muted).child(hint));
-        };
-
-        let (symbol, title) = match verdict {
-            Verdict::Holds => ("=", "The classification holds"),
-            Verdict::UpgradeCandidate => ("↑", "Upgrade candidate"),
-            Verdict::DowngradeCandidate => ("↓", "Downgrade candidate"),
-        };
-        let today = re.today.points_class;
-        card = card
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_3()
-                    .child(div().text_xl().font_weight(FontWeight::BOLD).child(format!("{symbol}  {title}")))
-                    .child(
-                        div()
-                            .px_2()
-                            .py_1()
-                            .rounded_md()
-                            .bg(class_fill(today))
-                            .text_color(class_ink(today))
-                            .text_sm()
-                            .font_weight(FontWeight::BOLD)
-                            .child(format!("Today: {}", today.label())),
-                    ),
-            )
-            .child(div().text_sm().child(format!(
-                "The latest record ({}, {}) reported {}. Today's evidence gives {} points: {}.",
-                latest.label,
-                latest.year,
-                latest.reported_class.label(),
-                re.today.total_points,
-                today.label()
-            )))
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(muted)
-                    .child("This is a candidate for you to review, not a decision. Check each change below."),
-            );
-        card
-    }
-
-    fn reasons_list(&self, re: &Reevaluation, cx: &mut Context<Self>) -> impl IntoElement {
-        let muted = cx.theme().muted_foreground;
-        let mut list = div().flex().flex_col().gap_1().text_sm();
-        if re.reasons.is_empty() {
-            return list.child(div().text_color(muted).child("No differences from the latest record."));
-        }
-        for reason in &re.reasons {
-            let text = match reason {
-                Reason::Added { code, strength } => {
-                    format!("{code} added at {}: new evidence since the latest record.", strength.label())
-                }
-                Reason::Removed { code } => format!("{code} is no longer applied."),
-                Reason::StrengthChanged { code, from, to } => {
-                    format!("{code} changed from {} to {}.", from.label(), to.label())
-                }
-                Reason::RuleChanged { code, from, to, source } => {
-                    let citation = self.rules.source(source).map_or(source.as_str(), |s| s.citation.as_str());
-                    format!(
-                        "{code}: the record used {} (the strength in the 2015 paper). The current rule is {}. Source: {citation}",
-                        from.label(),
-                        to.label()
-                    )
+            let situation = if criterion.guide.is_empty() {
+                None
+            } else {
+                guided.push(code.clone());
+                let saved = choice
+                    .situation
+                    .as_deref()
+                    .filter(|s| criterion.guide.iter().any(|g| g.id == *s && g.strength == Some(strength)));
+                match saved.map(str::to_string).or_else(|| criterion.situation_for(strength).map(str::to_string)) {
+                    Some(situation) => Some(situation),
+                    None => {
+                        dropped.push(format!("{code} (no guide answer for {})", strength.label()));
+                        continue;
+                    }
                 }
             };
-            list = list.child(div().flex().gap_2().child("•").child(div().flex_1().min_w_0().child(text)));
+            today.insert(code, Choice { strength, situation });
         }
-        list
+        self.today = today;
+        let mut notes = Vec::new();
+        if !lowered.is_empty() {
+            notes.push(format!("Lowered to today's limit: {}.", lowered.join(", ")));
+        }
+        if !dropped.is_empty() {
+            notes.push(format!("Not carried over: {}.", dropped.join(", ")));
+        }
+        if !guided.is_empty() {
+            notes.push(format!(
+                "Check the strength of {}: click its strength button to answer the guide again.",
+                guided.join(", ")
+            ));
+        }
+        if !notes.is_empty() {
+            self.file_status = Some(notes.join(" "));
+        }
     }
 
-    fn history_table(&self, re: &Reevaluation, cx: &mut Context<Self>) -> impl IntoElement {
-        let (border, muted) = (cx.theme().border, cx.theme().muted_foreground);
-        let cell = |content: AnyElement| div().flex_1().min_w(px(120.)).px_1().child(content);
-        let first = |content: AnyElement| div().w(px(56.)).flex_none().child(content);
-        let latest_cells = re.latest_index;
+    /// Forget the whole case: evidence, records, the gene decision and the variant name.
+    fn clear_case(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.today.clear();
+        self.records.clear();
+        self.editing = Editing::Today;
+        self.gene_link = GeneDecision::NotDecided;
+        self.gene_error = None;
+        self.guide_open = None;
+        self.confirm = None;
+        self.open_details.clear();
+        self.next_record = 1;
+        self.variant_input.update(cx, |input, cx| input.set_value("", window, cx));
+    }
 
-        let mut header = div().flex().items_start().py_1().child(first(div().into_any_element()));
-        for r in &re.records {
-            header = header.child(cell(
-                div()
-                    .flex()
-                    .flex_col()
-                    .child(div().text_xs().font_weight(FontWeight::SEMIBOLD).child(format!("{} · {}", r.label, r.year)))
-                    .child(div().text_xs().text_color(muted).child(format!("reported {}", r.reported_class.short())))
-                    .into_any_element(),
+    // ---------- saving and opening a case ----------
+
+    /// Everything the curator entered, ready to be written to a file. Results are
+    /// not saved: they are worked out again when the case is opened.
+    fn case_file(&self, cx: &App) -> CaseFile {
+        let saved_record = |r: &Record| SavedRecord {
+            label: r.label.clone(),
+            year: r.year,
+            class: r.class,
+            reported_tier: r.tier.clone(),
+            criteria: to_applied(&r.evidence),
+        };
+        CaseFile {
+            format: classivar_core::CASE_FORMAT,
+            app_version: env!("CARGO_PKG_VERSION").to_string(),
+            saved_on: classivar_sources::utc_today(),
+            rule_set: self.rules.reference(),
+            variant: self.variant_name(cx).unwrap_or_default(),
+            // The gene the case was checked against, not whatever is being typed.
+            gene: self.case_gene.clone(),
+            gene_decision: self.gene_link,
+            today: to_applied(&self.today),
+            records: self.records.iter().map(saved_record).collect(),
+        }
+    }
+
+    /// Ask where to save, then write the case file there.
+    fn save_case(&mut self, cx: &mut Context<Self>) {
+        let case = self.case_file(cx);
+        let folder = default_save_folder();
+        let chosen = cx.prompt_for_new_path(&folder, Some(&suggested_file_name(&case.variant)));
+        self._file_task = Some(cx.spawn(async move |this, cx| {
+            let message = match chosen.await {
+                Ok(Ok(Some(path))) => Some(match std::fs::write(&path, case.to_json()) {
+                    Ok(()) => format!("Saved to {}.", path.display()),
+                    Err(error) => format!("Could not save to {}: {error}", path.display()),
+                }),
+                // The curator closed the dialog on purpose; nothing to report.
+                Ok(Ok(None)) => None,
+                Ok(Err(error)) => Some(format!("Could not open the save dialog: {error}")),
+                Err(_) => Some("The save dialog closed without an answer.".to_string()),
+            };
+            this.update(cx, |this, cx| {
+                if message.is_some() {
+                    this.file_status = message;
+                }
+                cx.notify();
+            })
+            .ok();
+        }));
+    }
+
+    /// Ask which file to open, read and check it, then show it (after a question if work is on screen).
+    fn open_case(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let rules = self.rules;
+        let chosen = cx.prompt_for_paths(PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: false,
+            prompt: Some("Open a ClassiVAR case".into()),
+        });
+        self._file_task = Some(cx.spawn_in(window, async move |this, cx| {
+            let path = match chosen.await {
+                Ok(Ok(Some(paths))) => paths.into_iter().next(),
+                Ok(Ok(None)) => None,
+                Ok(Err(error)) => {
+                    let message = format!("Could not open the file dialog: {error}");
+                    this.update(cx, |this, cx| this.set_file_status(message, cx)).ok();
+                    return;
+                }
+                Err(_) => None,
+            };
+            let Some(path) = path else { return };
+            let shown_path = path.display().to_string();
+            // Reading and re-scoring a case can be slow, so it runs off the UI
+            // thread. The size check stops a huge file from being read at all.
+            let loaded = cx
+                .background_spawn(async move {
+                    let size = std::fs::metadata(&path).map(|meta| meta.len()).map_err(|error| error.to_string())?;
+                    if size > MAX_CASE_BYTES {
+                        return Err(format!(
+                            "the file is larger than {} MB and cannot be a case file",
+                            MAX_CASE_BYTES / (1024 * 1024)
+                        ));
+                    }
+                    let text = std::fs::read_to_string(&path).map_err(|error| error.to_string())?;
+                    CaseFile::from_json(&text, rules).map_err(|error| error.to_string())
+                })
+                .await;
+            this.update_in(cx, |this, window, cx| match loaded {
+                Err(error) => this.set_file_status(format!("Could not open {shown_path}: {error}"), cx),
+                Ok(case) if this.has_case_data(cx) => {
+                    this.ask(Confirm::OpenCase(Box::new(case)));
+                    cx.notify();
+                }
+                Ok(case) => this.apply_case(case, window, cx),
+            })
+            .ok();
+        }));
+    }
+
+    fn set_file_status(&mut self, message: String, cx: &mut Context<Self>) {
+        self.file_status = Some(message);
+        cx.notify();
+    }
+
+    /// Replace what is on screen with a case that was already checked by `CaseFile::from_json`.
+    fn apply_case(&mut self, case: CaseFile, window: &mut Window, cx: &mut Context<Self>) {
+        let evidence = |list: &[Applied]| -> Evidence {
+            list.iter()
+                .map(|a| (a.code.clone(), Choice { strength: a.strength, situation: a.situation.clone() }))
+                .collect()
+        };
+        let (today, adjusted) = normalize_today(self.rules, &case.today);
+        self.today = today.into_iter().collect();
+        self.records = case
+            .records
+            .iter()
+            .map(|r| Record {
+                label: r.label.clone(),
+                year: r.year,
+                class: r.class,
+                tier: r.reported_tier.clone(),
+                evidence: evidence(&r.criteria),
+            })
+            .collect();
+        self.editing = Editing::Today;
+        self.mode = if self.records.is_empty() { Mode::NewVariant } else { Mode::ReportedVariant };
+        self.gene_link = case.gene_decision;
+        self.case_gene = case.gene.clone();
+        self.gene_error = None;
+        // A question or an open guide belongs to the case that was on screen.
+        self.confirm = None;
+        self.guide_open = None;
+        self.open_details.clear();
+        self.next_record = Self::next_record_number(&self.records);
+        // Gene answers from the network are not saved; the curator checks the gene again.
+        self.gene = GeneChecks::idle();
+        self.lookup_id += 1;
+        self._lookup_tasks.clear();
+        self.variant_input.update(cx, |input, cx| input.set_value(case.variant.clone(), window, cx));
+        self.gene_input.update(cx, |input, cx| input.set_value(case.gene.clone(), window, cx));
+
+        let mut notes = vec!["Opened.".to_string()];
+        if case.saved_with_other_rules(self.rules) {
+            let now = self.rules.reference();
+            notes.push(format!(
+                "It was saved with rules {} v{} and the program now uses v{}, so classes may differ from what you saw.",
+                case.rule_set.id, case.rule_set.version, now.version
             ));
         }
-        header = header
-            .child(cell(div().text_xs().font_weight(FontWeight::SEMIBOLD).child("Today (you)").into_any_element()));
-
-        let mut table = div().flex().flex_col().child(header);
-        for row in &re.rows {
-            let mut line = div().flex().items_center().py_1().border_t_1().border_color(border).child(first(
-                div().text_sm().font_weight(FontWeight::SEMIBOLD).child(row.code.clone()).into_any_element(),
-            ));
-            let today_index = row.cells.len() - 1;
-            for (i, strength) in row.cells.iter().enumerate() {
-                // Outline today's cell when it differs from the latest record.
-                let changed = i == today_index && latest_cells.is_some_and(|l| row.cells[l] != *strength);
-                line = line.child(cell(self.evidence_chip(&row.code, *strength, changed, cx).into_any_element()));
-            }
-            table = table.child(line);
+        if !adjusted.is_empty() {
+            notes.push(format!("Adjusted to today's limits: {}.", adjusted.join(", ")));
         }
+        notes.push("Check the gene again to refresh the gene sources.".to_string());
+        self.set_file_status(notes.join(" "), cx);
+    }
 
-        let mut total = div()
-            .flex()
-            .items_start()
-            .py_1()
-            .border_t_1()
-            .border_color(border)
-            .child(first(div().text_xs().font_weight(FontWeight::SEMIBOLD).child("Total").into_any_element()));
-        for r in &re.records {
-            let a = &r.assessment;
-            let mut col = div().flex().flex_col().child(div().text_sm().child(format!(
-                "{} pts → {}",
-                a.total_points,
-                a.points_class.short()
-            )));
-            if !r.reported_matches_rescore() {
-                col = col.child(div().text_xs().text_color(muted).child(format!(
-                    "! it reported {}; its evidence scores differently today",
-                    r.reported_class.short()
-                )));
-            }
-            total = total.child(cell(col.into_any_element()));
-        }
-        total = total.child(cell(
+    fn file_status_banner(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let message = self.file_status.as_ref()?;
+        Some(
             div()
-                .text_sm()
-                .font_weight(FontWeight::BOLD)
-                .child(format!("{} pts → {}", re.today.total_points, re.today.points_class.short()))
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap_3()
+                .px_4()
+                .py_1()
+                .child(notice(message.clone(), warning_fill(), warning_ink()))
+                .child(Button::new("file-status-dismiss").label("Dismiss").small().outline().on_click(cx.listener(
+                    |this, _, _, cx| {
+                        this.file_status = None;
+                        cx.notify();
+                    },
+                )))
                 .into_any_element(),
-        ));
-        table.child(total)
-    }
-
-    fn points_scale(&self, total: i32, active: Class, cx: &mut Context<Self>) -> impl IntoElement {
-        let (foreground, muted) = (cx.theme().foreground, cx.theme().muted_foreground);
-        // (label, first point, first point of the next zone, class)
-        let zones = [
-            ("B", SCALE_MIN, -6, Class::Benign),
-            ("Likely benign", -6, 0, Class::LikelyBenign),
-            ("VUS", 0, 6, Class::Vus),
-            ("Likely pathogenic", 6, 10, Class::LikelyPathogenic),
-            ("P", 10, SCALE_MAX, Class::Pathogenic),
-        ];
-        let x_of = |points: i32| (points - SCALE_MIN) as f32 * SCALE_UNIT;
-        let marker_x = x_of(total.clamp(SCALE_MIN, SCALE_MAX - 1)) + SCALE_UNIT / 2.0 - 7.0;
-
-        let mut bar = div().flex().absolute().top(px(18.)).left(px(0.));
-        for (label, from, to, class) in zones {
-            let is_active = class == active;
-            let fill = class_fill(class);
-            bar = bar.child(
-                div()
-                    .w(px((to - from) as f32 * SCALE_UNIT))
-                    .h(px(32.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .overflow_hidden()
-                    .bg(fill)
-                    .text_color(class_ink(class))
-                    .text_xs()
-                    .font_weight(if is_active { FontWeight::BOLD } else { FontWeight::NORMAL })
-                    .border_2()
-                    .border_color(if is_active { foreground } else { fill.into() })
-                    .child(label),
-            );
-        }
-
-        let mut ticks = div().absolute().top(px(54.)).left(px(0.)).w(px(600.));
-        for edge in [-6, 0, 6, 10] {
-            ticks = ticks.child(
-                div()
-                    .absolute()
-                    .left(px(x_of(edge) - 10.))
-                    .w(px(20.))
-                    .flex()
-                    .justify_center()
-                    .text_xs()
-                    .text_color(muted)
-                    .child(edge.to_string()),
-            );
-        }
-
-        div()
-            .relative()
-            .w(px((SCALE_MAX - SCALE_MIN) as f32 * SCALE_UNIT))
-            .h(px(74.))
-            .child(div().absolute().top(px(0.)).left(px(marker_x)).text_color(foreground).child("▼"))
-            .child(bar)
-            .child(ticks)
-    }
-
-    fn evidence_lanes(&self, result: &Assessment, cx: &mut Context<Self>) -> impl IntoElement {
-        let (border, muted) = (cx.theme().border, cx.theme().muted_foreground);
-        let mut lanes = div().flex().flex_col();
-        for category in Category::ALL {
-            let items: Vec<_> = result
-                .items
-                .iter()
-                .filter(|i| self.rules.criterion(&i.code).is_some_and(|c| c.category == category))
-                .collect();
-            let mut track = div().flex().flex_wrap().items_center().gap_1().min_h(px(30.)).flex_1();
-            if items.is_empty() {
-                track = track.child(div().text_xs().text_color(muted).child("none applied"));
-            }
-            for item in items {
-                let width = (item.points.unsigned_abs() as f32 * POINT_WIDTH).max(POINT_WIDTH);
-                let sign = if item.points > 0 { "+" } else { "−" };
-                track = track
-                    .child(
-                        div()
-                            .w(px(width))
-                            .h(px(26.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .rounded_r_md()
-                            .bg(direction_colour(item.direction))
-                            .text_color(rgb(0xffffff))
-                            .text_xs()
-                            .font_weight(FontWeight::BOLD)
-                            .child(item.code.clone()),
-                    )
-                    .child(div().text_xs().text_color(muted).pr_2().child(format!(
-                        "{sign}{} {}",
-                        item.points.unsigned_abs(),
-                        item.strength.label()
-                    )));
-            }
-            lanes = lanes.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .py_1()
-                    .border_t_1()
-                    .border_color(border)
-                    .child(div().w(px(120.)).flex_none().text_xs().child(category.label()))
-                    .child(track),
-            );
-        }
-        lanes
-    }
-
-    fn what_changes(&self, result: &Assessment, cx: &mut Context<Self>) -> impl IntoElement {
-        let muted = cx.theme().muted_foreground;
-        let mut list = div().flex().flex_col().gap_1().text_sm();
-        if let Some(next) = result.to_upgrade {
-            list = list.child(format!(
-                "Up: {} more point{} of pathogenic evidence reaches {}.",
-                next.points_needed,
-                plural(next.points_needed),
-                next.class.label()
-            ));
-        }
-        if let Some(next) = result.to_downgrade {
-            list = list.child(format!(
-                "Down: {} more point{} of benign evidence reaches {}.",
-                next.points_needed,
-                plural(next.points_needed),
-                next.class.label()
-            ));
-        }
-        list.child(
-            div()
-                .text_xs()
-                .text_color(muted)
-                .child("To find the evidence that could move it, look at the lanes with nothing applied."),
         )
     }
 
-    fn warnings(&self, result: &Assessment, cx: &mut Context<Self>) -> impl IntoElement {
-        let warning = cx.theme().warning;
-        let mut list = div().flex().flex_col().gap_1().text_sm();
-        let mut texts: Vec<String> = Vec::new();
-        match self.gene_link {
-            GeneLink::Established => {}
-            GeneLink::Unconfirmed => texts.push(
-                "You have not confirmed that this gene causes the disease. ACMG/AMP criteria assume it does.".to_string(),
-            ),
-            GeneLink::NotEstablished => texts.push(
-                "You marked the gene-disease link as doubtful. ACMG/AMP criteria do not apply without it; treat any class below with great care.".to_string(),
-            ),
-        }
-        texts.extend(result.warnings.iter().map(|w| match w {
-            Warning::ConflictingEvidence => {
-                "Evidence points both ways. Check that each criterion really applies.".to_string()
+    fn apply_confirm(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(confirm) = self.confirm.take() else { return };
+        match confirm {
+            // An index, not a name: a record may have been removed while the
+            // question waited, so never index without checking.
+            Confirm::Clear(Editing::Today) => self.today.clear(),
+            Confirm::Clear(Editing::Record(i)) => {
+                if let Some(record) = self.records.get_mut(i) {
+                    record.evidence.clear();
+                }
             }
-            Warning::ExclusivePair { a, b, reason } => format!("{a} and {b} together: {reason}"),
-            Warning::Discouraged { code, note } => format!(
-                "{code} is no longer recommended by the experts.{}",
-                note.as_deref().map(|n| format!(" {n}")).unwrap_or_default()
-            ),
-            Warning::StrengthChanged { code, from, to } => {
-                format!("{code} strength changed from {} to {}.", from.label(), to.label())
+            Confirm::StartFromLatest => self.start_from_latest(),
+            Confirm::LoadExample => self.load_example(window, cx),
+            Confirm::OpenCase(case) => self.apply_case(*case, window, cx),
+            Confirm::RemoveRecord(index, _) => self.remove_record(index),
+            Confirm::NewGene(symbol) => {
+                self.clear_case(window, cx);
+                self.run_gene_check(symbol, window, cx);
             }
-        }));
-        if texts.is_empty() {
-            return list.child("No warnings.");
         }
-        for text in texts {
-            list = list.child(
-                div()
-                    .flex()
-                    .gap_2()
-                    .child(div().text_color(warning).child("!"))
-                    .child(div().flex_1().min_w_0().child(text)),
-            );
+        cx.notify();
+    }
+
+    fn cancel_confirm(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if matches!(self.confirm, Some(Confirm::NewGene(_))) {
+            // Put the old gene back in the box, so the box and the case agree.
+            let old = self.case_gene.clone();
+            self.gene_input.update(cx, |input, cx| input.set_value(old, window, cx));
         }
-        list
+        self.confirm = None;
+        cx.notify();
+    }
+
+    // ---------- confirm banner ----------
+
+    fn confirm_banner(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let confirm = self.confirm.as_ref()?;
+        let (background, foreground) = (warning_fill(), warning_ink());
+        let question = match confirm {
+            Confirm::Clear(scope) => {
+                format!("Clear every criterion from {}? This cannot be undone.", self.scope_label(*scope))
+            }
+            Confirm::StartFromLatest => {
+                "Replace today's evidence with a copy of the latest record's evidence? Today's criteria will be lost."
+                    .to_string()
+            }
+            Confirm::LoadExample => {
+                "Load the fictional example? It replaces today's evidence and all records.".to_string()
+            }
+            Confirm::OpenCase(case) => format!(
+                "Open the case for {}? It replaces today's evidence, the records and the gene decision on screen.",
+                if case.variant.is_empty() { "an unnamed variant" } else { case.variant.as_str() }
+            ),
+            Confirm::NewGene(symbol) => format!(
+                "You are switching from {} to {}. The evidence, records, gene decision and variant name belong to {}. Start a new case for {}? This clears them.",
+                self.case_gene, symbol, self.case_gene, symbol
+            ),
+            Confirm::RemoveRecord(_, label) => {
+                format!("Remove {label} and every criterion it reported? This cannot be undone.")
+            }
+        };
+        Some(
+            div()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap_3()
+                .px_4()
+                .py_2()
+                .bg(background)
+                .text_color(foreground)
+                .child(div().flex_1().min_w_0().text_sm().child(question))
+                .child(Button::new("confirm-yes").label("Yes, continue").small().on_click(cx.listener(
+                    |this, _, window, cx| {
+                        this.apply_confirm(window, cx);
+                    },
+                )))
+                .child(Button::new("confirm-no").label("Cancel").small().outline().on_click(cx.listener(
+                    |this, _, window, cx| {
+                        this.cancel_confirm(window, cx);
+                    },
+                )))
+                .into_any_element(),
+        )
     }
 }
 
-impl Render for Workbench {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let rules = self.rules;
-        // The screen only offers valid criteria and strengths, so these cannot fail.
-        let result = rules.assess(&to_applied(self.current())).expect("the screen only offers valid criteria");
-        let reevaluation = (self.mode == Mode::ReportedVariant).then(|| {
-            let submissions: Vec<Submission> = self
-                .records
-                .iter()
-                .map(|r| Submission {
-                    label: r.label.clone(),
-                    year: r.year,
-                    reported_class: r.class,
-                    reported_tier: None,
-                    criteria: to_applied(&r.evidence),
-                })
-                .collect();
-            rules.reevaluate(&submissions, &to_applied(&self.today)).expect("the screen only offers valid criteria")
-        });
+#[cfg(test)]
+mod tests {
+    // Explicit imports on purpose: `use super::*` would also bring in GPUI's own
+    // `#[test]` macro (through `gpui_kit::*`), which replaces Rust's.
+    use classivar_core::{Applied, Class, Direction, RuleSet, Strength};
+    use gpui_kit::{Rgba, rgb};
 
-        let theme = cx.theme();
-        let (background, foreground, border, muted, warning) =
-            (theme.background, theme.foreground, theme.border, theme.muted_foreground, theme.warning);
+    use super::{
+        CLASSES, EXAMPLE_RECORDS, EXAMPLE_TODAY, class_fill, class_ink, direction_colour, evidence_of, normalize_today,
+        scale_for, suggested_file_name, to_applied, warning_fill, warning_ink,
+    };
 
-        let classic = match (result.classic_class, result.frameworks_agree()) {
-            (Some(class), Some(true)) => format!("2015 combining table: {} (same as the points).", class.label()),
-            (Some(class), _) => format!(
-                "2015 combining table: {}. It differs from the points; the two methods are not identical.",
-                class.label()
-            ),
-            (None, _) => "2015 combining table: not defined for the strengths used.".to_string(),
-        };
+    fn rules() -> &'static RuleSet {
+        RuleSet::builtin().expect("the built-in rules are valid")
+    }
 
-        let sign = if result.total_points > 0 { "+" } else { "" };
-        let draft_note = format!(
-            "{} · version {} · {} · research and learning use only",
-            rules.meta.name,
-            rules.meta.version,
-            if rules.meta.status == classivar_core::rules::ReviewStatus::Unverified {
-                "UNVERIFIED rules"
-            } else {
-                "reviewed rules"
+    /// WCAG relative luminance of a colour.
+    fn luminance(c: Rgba) -> f32 {
+        let linear = |v: f32| if v <= 0.03928 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) };
+        0.2126 * linear(c.r) + 0.7152 * linear(c.g) + 0.0722 * linear(c.b)
+    }
+
+    fn contrast(a: Rgba, b: Rgba) -> f32 {
+        let (x, y) = (luminance(a), luminance(b));
+        (x.max(y) + 0.05) / (x.min(y) + 0.05)
+    }
+
+    #[test]
+    fn class_colours_reach_wcag_aa_contrast_for_their_text() {
+        for dark in [false, true] {
+            for class in CLASSES {
+                let ratio = contrast(class_fill(class, dark), class_ink(class, dark));
+                assert!(ratio >= 4.5, "{class:?} (dark={dark}): {ratio:.2}:1");
             }
-        );
-
-        let section = |title: &'static str| {
-            div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(muted).pb_2().child(title)
-        };
-
-        let mut right =
-            div().id("result").flex_1().min_w_0().h_full().overflow_y_scroll().p_4().flex().flex_col().gap_5();
-
-        if let Some(re) = &reevaluation {
-            right = right
-                .child(div().child(section("VERDICT")).child(self.verdict_card(re, cx)))
-                .when(re.verdict.is_some(), |d| {
-                    d.child(
-                        div().child(section("WHAT CHANGED SINCE THE LATEST RECORD")).child(self.reasons_list(re, cx)),
-                    )
-                })
-                .when(!re.records.is_empty(), |d| {
-                    d.child(div().child(section("HISTORY AGAINST TODAY'S RULES")).child(self.history_table(re, cx)))
-                })
-                .child(
-                    div()
-                        .pt_2()
-                        .border_t_1()
-                        .border_color(border)
-                        .text_sm()
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .child(format!("Details for: {}", self.editing_label())),
-                );
         }
+        for direction in [Direction::Pathogenic, Direction::Benign] {
+            let ratio = contrast(direction_colour(direction), rgb(0xffffff));
+            assert!(ratio >= 4.5, "{direction:?} chip text: {ratio:.2}:1");
+        }
+        let ratio = contrast(warning_fill(), warning_ink());
+        assert!(ratio >= 4.5, "warning text: {ratio:.2}:1");
+    }
 
-        right = right
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_3()
-                    .child(
-                        div()
-                            .px_3()
-                            .py_1()
-                            .rounded_md()
-                            .bg(class_fill(result.points_class))
-                            .text_color(class_ink(result.points_class))
-                            .font_weight(FontWeight::BOLD)
-                            .child(result.points_class.label()),
-                    )
-                    .child(
-                        div()
-                            .text_xl()
-                            .font_weight(FontWeight::BOLD)
-                            .child(format!("{sign}{} points", result.total_points)),
-                    )
-                    .when_some(result.vus_tier.clone(), |row, tier| row.child(tier)),
-            )
-            .child(div().text_sm().text_color(muted).child(classic))
-            .child(div().child(section("WHERE IT SITS")).child(self.points_scale(
-                result.total_points,
-                result.points_class,
-                cx,
-            )))
-            .child(div().child(section("WHAT IT IS MADE OF")).child(self.evidence_lanes(&result, cx)))
-            .child(div().child(section("WHAT WOULD CHANGE IT")).child(self.what_changes(&result, cx)))
-            .child(div().child(section("WARNINGS")).child(self.warnings(&result, cx)));
+    #[test]
+    fn the_scale_follows_the_rule_set() {
+        let scale = scale_for(rules());
+        assert_eq!((scale.min, scale.max), (-8, 12));
+        let expected = vec![
+            (Class::Benign, -8, -6),
+            (Class::LikelyBenign, -6, 0),
+            (Class::Vus, 0, 6),
+            (Class::LikelyPathogenic, 6, 10),
+            (Class::Pathogenic, 10, 12),
+        ];
+        assert_eq!(scale.zones, expected);
+        // Every point from the bottom to the top of the scale lies in the zone of the class the rules give it.
+        for points in scale.min..scale.max {
+            let zone = scale.zones.iter().find(|(_, from, to)| (*from..*to).contains(&points)).unwrap();
+            assert_eq!(zone.0, rules().class_for_points(points), "{points} points");
+        }
+    }
 
-        let intro = match (self.mode, self.editing) {
-            (Mode::NewVariant, _) => {
-                "New variant. Click a code to apply it. You decide which criteria apply; the app adds up the points."
-                    .to_string()
-            }
-            (Mode::ReportedVariant, _) => {
-                format!("Editing: {}. Click a code to apply it or remove it.", self.editing_label())
-            }
-        };
+    #[test]
+    fn the_scale_moves_when_the_rule_set_changes() {
+        let text =
+            include_str!("../../../rules/acmg-amp-points.toml").replacen("pathogenic = 10", "pathogenic = 12", 1);
+        let changed = RuleSet::parse(&text).unwrap();
+        assert_eq!(scale_for(&changed).max, 14);
+        assert!(scale_for(&changed).zones.contains(&(Class::LikelyPathogenic, 6, 12)));
+    }
 
-        div()
-            .size_full()
-            .flex()
-            .flex_col()
-            .bg(background)
-            .text_color(foreground)
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .px_4()
-                    .py_3()
-                    .border_b_1()
-                    .border_color(border)
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .child(div().text_lg().font_weight(FontWeight::BOLD).child("ClassiVAR"))
-                            .child(div().text_xs().text_color(warning).child(draft_note)),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .gap_2()
-                            .child(
-                                Button::new("mode-new")
-                                    .label("New variant")
-                                    .small()
-                                    .selected(self.mode == Mode::NewVariant)
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.set_mode(Mode::NewVariant);
-                                        cx.notify();
-                                    })),
-                            )
-                            .child(
-                                Button::new("mode-reported")
-                                    .label("Reported variant")
-                                    .small()
-                                    .selected(self.mode == Mode::ReportedVariant)
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.set_mode(Mode::ReportedVariant);
-                                        cx.notify();
-                                    })),
-                            )
-                            .child(div().w(px(16.)))
-                            .child(
-                                Button::new("learning")
-                                    .label(if self.learning { "Learning: on" } else { "Learning: off" })
-                                    .small()
-                                    .selected(self.learning)
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.learning = !this.learning;
-                                        cx.notify();
-                                    })),
-                            )
-                            .child(Button::new("clear").label("Clear evidence").small().outline().on_click(
-                                cx.listener(|this, _, _, cx| {
-                                    this.current_mut().clear();
-                                    cx.notify();
-                                }),
-                            )),
-                    ),
-            )
-            .child(self.gene_strip(cx))
-            .when(self.mode == Mode::ReportedVariant, |d| d.child(self.records_strip(cx)))
-            .child(
-                div()
-                    .flex()
-                    .flex_1()
-                    .min_h_0()
-                    .child(
-                        div()
-                            .id("criteria")
-                            .w(px(560.))
-                            .h_full()
-                            .flex_none()
-                            .overflow_y_scroll()
-                            .p_4()
-                            .border_r_1()
-                            .border_color(border)
-                            .child(div().pb_3().text_sm().text_color(muted).child(intro))
-                            .child(self.criteria_column(cx)),
-                    )
-                    .child(right),
-            )
+    #[test]
+    fn old_evidence_is_brought_onto_todays_rules_not_rejected() {
+        let rules = rules();
+        let (today, changed) = normalize_today(
+            rules,
+            &[Applied::new("PP3", Strength::VeryStrong), Applied::new("PVS1", Strength::VeryStrong)],
+        );
+        let today: std::collections::BTreeMap<_, _> = today.into_iter().collect();
+        assert_eq!(today["PP3"].strength, Strength::Strong, "today's cap lowers the saved strength");
+        assert!(today["PVS1"].situation.is_some(), "the guide answer is reconstructed");
+        assert_eq!(changed.len(), 1);
+        assert!(changed[0].starts_with("PP3 to Strong"));
+    }
+
+    #[test]
+    fn an_unknown_criterion_is_dropped_not_carried_into_an_unscorable_state() {
+        let (today, changed) = normalize_today(rules(), &[Applied::new("ZZ9", Strength::Strong)]);
+        assert!(today.is_empty());
+        assert!(changed[0].contains("ZZ9"));
+    }
+
+    #[test]
+    fn file_names_are_safe() {
+        assert_eq!(suggested_file_name("NM_007294.4:c.5266dup"), "NM_007294.4_c.5266dup.classivar.json");
+        assert_eq!(suggested_file_name("  "), "case.classivar.json");
+        assert_eq!(suggested_file_name("a/b\\c:d*e"), "a_b_c_d_e.classivar.json");
+        assert!(suggested_file_name(&"x".repeat(200)).len() < 60);
+        // Windows device names cannot be used as file names, even with an extension.
+        assert_eq!(suggested_file_name("CON"), "_CON.classivar.json");
+        assert_eq!(suggested_file_name("com1"), "_com1.classivar.json");
+        assert_eq!(suggested_file_name("COM10"), "COM10.classivar.json");
+    }
+
+    #[test]
+    fn the_fictional_example_only_uses_criteria_the_rules_accept() {
+        for (_, _, _, list) in EXAMPLE_RECORDS {
+            assert!(rules().assess(&to_applied(&evidence_of(list))).is_ok());
+        }
+        assert!(rules().assess(&to_applied(&evidence_of(EXAMPLE_TODAY))).is_ok());
     }
 }
