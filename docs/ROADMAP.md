@@ -35,8 +35,9 @@ Written 2026-11-04, after the audit in `docs/AUDIT-2026-11-04.md`. It replaces t
 Each phase ends with a state you can check. Sizes are rough.
 
 **Next three steps (in order):**
-1. **Phase C, item 4 onward** (the calibrated PP3/BP4 thresholds themselves, then PS3/BS3 and splicing). The safety items are done.
-2. **Phase E**, the UI follow-up from the code review: a lab-name box, a real modal confirmation, and the Save/Open hand check.
+0. Done since the commits (2026-11-04), all still UNVERIFIED rule content: Phase C items 4 (PP3/BP4 score tables, PM1+PP3 limit), 5 (PS3/BS3 functional helper) and 8 (a reason when a strength is raised); Phase E items 1, 2, 5, part of 4 (Escape, Page keys) and part of 7 (helper code moved out of `panels.rs`). A code review of this change (2026-11-04) led to these fixes: an assay with zero controls gives no evidence; a reason prompt no longer outlives its criterion; Page keys no longer scroll behind the confirmation window; the predictor helper reads its tool with a safe lookup. The review also suggested making the functional boundary check `>=`. It stays strict: the functional limits are strict on both sides, so equal limits do not overlap, and `>=` would reject valid tables.
+1. **Phase C, item 6 onward** (PP1/BS4/PP4 points table, then splicing, the BA1 exception list, PS2/PM6 and PM3 point tables).
+2. **Phase E**, what is left: Tab order, the Save/Open hand check, and the other open items below.
 3. **Phase D**, teaching, once the rules stop moving under it.
 
 ### Phase A: make the case real (DONE 2026-11-04, except the hand check)
@@ -56,11 +57,11 @@ Add each as a note, then as logic, with a source and a worked example:
 1. **Done.** PVS1 strength guide (Abou Tayoun 2018): nine situations with short labels, including "does not apply". The chosen situation is saved in the case file and shown on the row. The engine refuses a new PVS1 with no guide answer. Still shortened: it does not walk the tree question by question or apply the gene-level downgrade (Table 1).
 2. **Done, needs review.** Strength limits on weak evidence, all recorded as program safeguards. No Supporting-default criterion reaches Very Strong; benign criteria stop at Strong (BP4 at Moderate per Pejaver 2022); BA1 has only stand-alone; PM3 and PM6 stop at Strong. Limits do not apply to earlier records.
 3. **Done, with a curator's nuance.** When both sides of the 2015 table are met: if the points also say VUS, the class is VUS (the ordinary conflicting-evidence case); if the points would be confident, the class is withheld with "needs expert judgment" and the criteria on each side are listed. BA1 against evidence that itself reaches Pathogenic is withheld, because known common pathogenic variants exist (the ClinGen exception list).
-4. PP3 and BP4 calibrated thresholds (Pejaver 2022). The ceilings are in (PP3 Strong, BP4 Moderate); the score tables are not.
-5. PS3 and BS3 (Brnich 2019), and add its citation to `[[sources]]` (it is quoted in two notes but not listed).
+4. **Done (2026-11-04), needs review.** PP3 and BP4 calibrated thresholds (Pejaver 2022, Table 2) for REVEL, BayesDel without allele frequency, MutPred2 and VEST4, in `[[predictors]]`. A "Predictor score" helper in the criteria list reads a score and offers PP3 or BP4 at the published strength; a score between the limits gives neither. BP4 stays capped at Moderate, so REVEL at or below 0.016 (Strong in the paper) and at or below 0.003 (Very Strong) applies Moderate, and the screen says so. The PM1 + PP3 limit of Strong is a combined cap. Tests use the table's own limits. The numbers were read from the open-access paper (PMC9748256) and cross-checked against my memory of the REVEL row; a reviewer must still check them against the paper. Not built: the other nine tools in the paper, and the paper's advice to choose the tool before seeing its result (the screen only says it).
+5. **Done (2026-11-04), needs review.** PS3 and BS3 (Brnich 2019, read from the open-access paper): the citation is in `[[sources]]` and a "Functional assay" helper reads either the number of validation controls (11 or more reaches Moderate, 1 to 10 reaches Supporting, none gives no evidence, and this route goes no higher) or an OddsPath value (above 2.1, 4.3, 18.7 and 350 gives PS3 Supporting, Moderate, Strong and Very Strong; below 0.48, 0.23 and 0.053 gives BS3 Supporting, Moderate and Strong; each limit is crossed strictly; 0.48 to 2.1 gives nothing). The paper's four steps are shown as a reminder only. The paper says even Very Strong functional evidence is not enough alone for Pathogenic; the screen repeats this but the engine does not enforce it. Not built: the assay-class tables, or checking the number of controls against the paper's other conditions.
 6. PP1, BS4, PP4 (2023 and 2024 guidance). Done: the PP1+PP4 combined cap of 5 points, with the class withheld when exceeded. Not done: the full points table and BS4.
 7. Splicing (Walker 2023), the BA1 exception list, PS2 and PM6, PM3 point tables. A warning now flags PVS1 + PP3 as possible double counting for a splice variant.
-8. A required reason when a curator raises a strength.
+8. **Done (2026-11-04).** Clicking a strength above the criterion's default (on today's evidence) opens a prompt that needs a written reason before the raise is made; Cancel or Escape leaves the strength alone. The reason is saved with the case (`reason` on each criterion, 500 characters at most, old files still open), shown under the criterion and in the notes. The predictor and functional helpers fill the reason in themselves with the tool, score and source, so the score is now saved after all. The engine does not reject a raised strength without a reason (earlier records and "start from the latest" would break); it only reports the missing reason in the notes.
 9. The PVS1 guide's situation is part of the saved case; changing an `id` in the rule file would break old cases, so keep ids stable and bump the rule version when wording changes.
 - Done when: each item has a test with a published worked example.
 
@@ -88,13 +89,13 @@ The second three-part review (core/sources, GUI, docs/CI) is recorded in this ph
 - Docs, AGENTS.md, DEVELOPING.md and the check/smoke scripts are linked from the README; the smoke script starts from a known theme and re-checks focus before every synthetic click.
 
 Still open, in rough order:
-1. A lab-name box per record (M3). Every record is still "Record N".
-2. The confirmation as a real modal: the banner is better than before, but the rest of the screen stays clickable, and a refused question is silent.
+1. **Done (2026-11-04):** a lab-name box per record (M3). It shows when an earlier record is open, renames it as you type (60 characters at most; an empty box gives "Unnamed record"), and the name is saved in the case file. Checked by sight in the real window (the box shows the record's name); typing into it was not clicked by hand.
+2. **Done (2026-11-04):** the confirmation is a real window over a dimmed screen that takes every click, with Cancel and "Yes, continue"; Escape cancels. Checked in the real window by the smoke script.
 3. Record rule provenance: `Reason::RuleSetChanged` cannot be produced from the UI because per-record rule sets are not saved.
-4. Keyboard: the criteria list, points scale and history table scroll only with the mouse; the guide has no Escape.
-5. A record-count cap and an in-app message when a case file is too large or from a newer layout.
+4. Keyboard, partly done: Escape closes the PVS1 guide, the reason prompt and a question, wherever the focus is. Page Up, Page Down, Home and End scroll the pane under the mouse pointer (the criteria list when it is over neither pane); Home and End are left to a text box while it has focus. Still open: the points scale and history table scroll sideways only with the mouse, a keyboard-only user has no way to choose a pane, and Tab order was not checked.
+5. **Done (2026-11-04), partly:** a case holds at most 30 earlier records. "Add record" says so at the limit and a file with more is refused with a message. A file that is too large already had a message; a newer layout is refused by the core (the message shows on screen, not hand-checked).
 6. Hand checks: Save/Open dialogs, dark theme on macOS, keyboard-only use.
-7. Automated GPUI UI tests; splitting `view/panels.rs` by region and making the state machine testable without a window.
+7. Automated GPUI UI tests; splitting the rest of `view/panels.rs` by region (the three criteria helpers are already in `view/panels/helpers.rs`) and making the state machine testable without a window.
 8. One colour for one job (success and failure currently share the warning yellow), and a recoverable error screen.
 
 ### Phase F: before a colleague uses it (1 week)

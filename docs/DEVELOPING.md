@@ -80,6 +80,7 @@ It is Windows-only because it drives UI Automation. The paths it does **not** co
 | ClinGen/G2P/PanelApp access | `crates/classivar-sources/src/` |
 | screen state and actions | `crates/classivar/src/view.rs` |
 | drawing (top bar, panels, criteria, result) | `crates/classivar/src/view/panels.rs` |
+| criteria helpers (predictor score, functional assay, reason prompt) | `crates/classivar/src/view/panels/helpers.rs` |
 | gene suggestions | `crates/classivar/src/genes.rs` |
 | theme preference | `crates/classivar/src/settings.rs` |
 
