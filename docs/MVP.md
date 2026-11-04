@@ -4,6 +4,8 @@ The smallest version that is useful for real curation and teaches while you use 
 
 ## In scope
 
+Status on 2026-11-04 is in `docs/ROADMAP.md` and in `docs/AUDIT-2026-11-04.md` section 4. In short: items 1 and 2 work and a case can be saved and opened, 3 is partly done, and 4, 6 and most of 5 are not built yet.
+
 1. **New-variant path:** apply criteria, change strengths, see points, class, lanes, warnings, and what would change it.
 2. **Reported-variant path:** enter the existing class and what each lab used; see a side-by-side history against today's rules, with a verdict ("holds", "upgrade candidate", "downgrade candidate") and reasons.
 3. **Gene checks:** gene-disease validity and gene-specific rule-set lookup (OMIM, DECIPHER, PanelApp, ClinGen) with manual override and "source and date" on every answer.
@@ -31,10 +33,10 @@ Population and prediction fetching, gene-specific rule overlays, the saved re-ch
 | # | Milestone | Done when |
 |---|---|---|
 | M0 | Spike: GPUI Kit runs and draws on Windows | **Done 2026-11-03.** Builds, opens, draws the points scale; clicks work. macOS not yet tried. |
-| M1 | Rules engine with tests and the built-in rule file | **Done 2026-11-03.** 22 tests pass, 28 criteria, 2015 table rows covered. |
-| M2 | New-variant screen | **First slice done 2026-11-03.** Needs: automated UI tests, keyboard check, dark theme check. |
-| M3 | Reported-variant view | **First slice done 2026-11-03.** Engine (`reevaluate`, 8 tests), records strip, history table, reasons and verdict work in the real app with a fictional example. Still needed: lab names typed by hand (text box), ClinVar fills (M5), VUS tier text per record, three more sample variants. |
-| M4 | Gene checks | **Four sources done 2026-11-03** in `classivar-sources`: ClinGen gene-disease validity, Gene2Phenotype, PanelApp England, PanelApp Australia. 12 offline tests, 5 live tests run and passing. Shown in the app, each with its own date; a failure is shown as a failure; "not found" only when the service says so; your own yes/no answer on the gene-disease link, and a warning stays until you confirm. Still needed: GenCC (bulk file, no API yet), gene-specific rule-set (VCEP) lookup (the ClinGen CSpec registry has no documented API), OMIM (key pending), saving downloads to disk for offline use, smarter choice of which panels to show. |
+| M1 | Rules engine with tests and the built-in rule file | **Done 2026-11-03, hardened 2026-11-04** after the audit and the Phase C safety pass. 73 engine tests, 28 criteria, 2015 table rows, the ClinGen 2020 addition and the PVS1 guide covered. Content still UNVERIFIED. |
+| M2 | New-variant screen | **Done 2026-11-03; redesigned and audit-fixed 2026-11-04** (variant name, class withheld when criteria contradict, no class without evidence, contrast, confirm steps, saving and opening a case, light/dark switch, PVS1 situation guide). Needs: automated UI tests and a keyboard pass. |
+| M3 | Reported-variant view | **Done 2026-11-03; phase B 2026-11-04.** Engine (`reevaluate`, 16 tests), records strip, history table, reasons and verdict work in the real app with a fictional example, and each VUS record can name its sub-tier with the definition and source shown. Remove now asks first, and record labels stay unique. Still needed: lab names typed by hand (text box), ClinVar fills (M5), three more sample variants. |
+| M4 | Gene checks | **Four sources done 2026-11-03** in `classivar-sources`: ClinGen gene-disease validity, Gene2Phenotype, PanelApp England, PanelApp Australia. 29 offline tests, 5 live tests run and passing (2026-11-04). Shown in the app, each with its own date; a failure is shown as a failure; "not found" only when the service says so; your own yes/no answer on the gene-disease link, and a warning stays until you confirm. Still needed: GenCC (bulk file, no API yet), gene-specific rule-set (VCEP) lookup (the ClinGen CSpec registry has a public JSON API that is not used yet), OMIM (key pending), saving downloads to disk for offline use, smarter choice of which panels to show. |
 | M5 | ClinVar import | A ClinVar record fills the reported-variant view |
 | M6 | Lessons and practice shelf | Lessons 0-6 written with sources; at least 10 solved cases; answer stays hidden until commit |
 | M7 | Content review | A qualified reviewer has checked the rule file and lessons; status changes to "reviewed" |

@@ -71,7 +71,7 @@ The app fails if it silently classifies a variant, or gives a wrong answer with 
 ## 8. Non-functional requirements
 
 - **Correctness over speed.** The scoring is covered by automated tests, including the 2015 table rows.
-- **Privacy.** Local files only. Lookups send gene names and variant coordinates, never patient data.
+- **Privacy.** Local files only. Lookups send a gene symbol (and panel names in the query), never the variant or patient data; the ClinGen lookup downloads one public reference file.
 - **Offline.** Everything except lookups works without internet.
 - **Platforms.** Windows and macOS. Linux later.
 - **Accessibility.** Color is never the only clue. Keyboard use and visible focus. Light and dark themes.
