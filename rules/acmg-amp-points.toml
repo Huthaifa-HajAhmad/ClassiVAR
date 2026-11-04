@@ -20,9 +20,9 @@
 [meta]
 id = "acmg-amp-points"
 name = "ACMG/AMP 2015 criteria, points scoring (draft)"
-version = "0.1.0-draft"
+version = "0.4.0-draft"
 status = "unverified"
-note = "Draft. On 2026-11-03 the builder checked, against the sources on the web, the criteria wording (Richards 2015 Tables 3 and 4), the combining table (Table 5), the points and class thresholds (Tavtigian 2020, via its published summary), the PM2 recommendation (4 Sept 2020) and the PP5/BP6 recommendation (Biesecker and Harrison 2018). This is not a qualified review. Research and learning use only."
+note = "Draft. On 2026-11-03 the builder checked, against the sources on the web, the criteria wording (Richards 2015 Tables 3 and 4), the combining table (Table 5), the points and class thresholds (Tavtigian 2020, via its published summary), the PM2 recommendation (4 Sept 2020) and the PP5/BP6 recommendation (Biesecker and Harrison 2018). On 2026-11-04 an audit (docs/AUDIT-2026-11-04.md) found problems, and this version fixes them: PVS1 wording and strength guidance, the ClinGen 2020 combining addition, BP1 and PS4 wording, contradictory pairs now withhold the class, PP3 capped at Strong, discouraged criteria no longer counted. A later pass added the PVS1 situation guide, strength caps for weak evidence, PM4/PVS1 exclusivity, the PP1+PP4 combined cap, the BP4 Moderate ceiling, and saves the chosen PVS1 situation. This is not a qualified review. Research and learning use only."
 
 [[sources]]
 id = "richards2015"
@@ -48,6 +48,24 @@ doi = "10.1038/gim.2018.42"
 url = "https://pubmed.ncbi.nlm.nih.gov/29543229/"
 
 [[sources]]
+id = "abou-tayoun2018"
+citation = "Abou Tayoun AN, et al. Recommendations for interpreting the loss of function PVS1 ACMG/AMP variant criterion. Hum Mutat 2018;39:1517-1524."
+doi = "10.1002/humu.23626"
+url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC6185798/"
+
+[[sources]]
+id = "pejaver2022"
+citation = "Pejaver V, et al. Calibration of computational tools for missense variant pathogenicity classification and ClinGen recommendations for PP3/BP4 criteria. Am J Hum Genet 2022;109:2163-2177."
+doi = "10.1016/j.ajhg.2022.10.013"
+url = "https://pubmed.ncbi.nlm.nih.gov/36413997/"
+
+[[sources]]
+id = "clingen-pp1-pp4-2024"
+citation = "Biesecker LG, Byrne AB, Harrison SM, et al.; ClinGen Sequence Variant Interpretation Working Group. ClinGen guidance for use of the PP1/BS4 co-segregation and PP4 phenotype specificity criteria for sequence variant pathogenicity classification. Am J Hum Genet 2024;111:24-38."
+doi = "10.1016/j.ajhg.2023.11.009"
+url = "https://www.clinicalgenome.org/docs/clingen-guidance-for-use-of-the-pp1-bs4-co-segregation-and-pp4-phenotype-specificity-criteria-for-sequence-variant/"
+
+[[sources]]
 id = "bennett2025"
 citation = "Bennett G, et al. Distinct rates of VUS reclassification are observed when subclassifying VUS by evidence level. Genet Med 2025;27:101400."
 doi = "10.1016/j.gim.2025.101400"
@@ -59,7 +77,13 @@ doi = "10.1016/j.gim.2026.102583"
 
 # Points per evidence strength (magnitude). Pathogenic evidence adds this many
 # points, benign evidence subtracts it. "stand_alone" is only used by BA1 and
-# is treated here as equal to very strong benign evidence.
+# is treated here as equal to very strong benign evidence (8 points). That
+# equality is this file's own modelling choice, not a value from Tavtigian 2020,
+# which has no stand-alone level. It makes BA1 alone reach Benign (-8 <= -7).
+# The program also enforces the stronger rule from Richards 2015: while BA1 is
+# applied the class is Benign, unless pathogenic evidence also reaches a rule on
+# its own. That last case is withheld, because a known pathogenic variant can be
+# common (the reason ClinGen keeps a BA1 exception list).
 [points]
 supporting = 1
 moderate = 2
@@ -78,7 +102,11 @@ likely_benign = -6
 # VUS sub-tiers. The ACMG 2026 statement describes them in words but says the
 # point ranges will come with the revised standards (SVCv4.0, not yet
 # published). So no numeric cut-offs are set here. Add min_points to every
-# tier when official ranges exist, and the program will start using them.
+# tier when official ranges exist, and the program will start using them
+# (the loader checks that the ranges are different and cover the VUS range).
+# Two different papers describe the tiers, so each description keeps its own
+# paper's wording. VUS-high and VUS-mid follow the ACMG 2026 statement, whose
+# full text was not read (paywalled). VUS-low follows Bennett 2025.
 [[vus_tiers]]
 name = "VUS-high"
 description = "The upper part of the VUS range, bordering Likely Pathogenic. Most likely to be reclassified upward."
@@ -91,10 +119,12 @@ source = "mighton2026"
 
 [[vus_tiers]]
 name = "VUS-low"
-description = "The lowest level of pathogenic evidence in the VUS range. In four laboratories, none was ever reclassified to Likely Pathogenic or Pathogenic."
+description = "Bennett 2025: the evidence may be benign but is not enough for Likely benign. In the four laboratories they studied, no variant at this level was later reclassified to Likely pathogenic or Pathogenic."
 source = "bennett2025"
 
-# Criteria that should not be applied together. The program warns, it does not block.
+# Criteria that cannot both be true. While both are applied the program shows no
+# class, because adding contradictory evidence together would change the class
+# (the 2015 paper says contradictory evidence gives VUS).
 [[exclusive_pairs]]
 a = "PP3"
 b = "BP4"
@@ -120,15 +150,52 @@ reason = "Absent from population data and more frequent than expected cannot bot
 source = "richards2015"
 
 [[exclusive_pairs]]
+a = "PVS1"
+b = "PM4"
+reason = "PM4 should not be applied to a variant that also has PVS1 at any strength, because it counts the same change twice."
+source = "abou-tayoun2018"
+
+[[exclusive_pairs]]
 a = "PS3"
 b = "BS3"
 reason = "Functional studies cannot both show damage and show no damage."
 source = "richards2015"
 
+# Two criteria that may both apply, but not both at a high strength. The limit is
+# in this program's points. ClinGen limits phenotype (PP4) and co-segregation
+# (PP1) together at 5 points: the strongest allowed pair is Strong + Supporting.
+# Two Strong answers (8 points) are not allowed for the pair. Mapping the paper's
+# point bands onto this program's 1/2/4 strengths is an approximation, so the
+# program withholds the class rather than silently lowering a strength.
+[[combination_caps]]
+a = "PP1"
+b = "PP4"
+max_points = 5
+reason = "ClinGen's 2024 guidance allows PP1_Strong + PP4_Supporting, but not PP1_Strong + PP4_Strong or Strong + Moderate."
+source = "clingen-pp1-pp4-2024"
+
 # ---------------------------------------------------------------------------
 # Criteria. strength is the default strength from the 2015 paper unless a
 # note says a later recommendation changed it. The user may change the
-# strength of any criterion in the app; the program shows the change.
+# strength in the app, up to max_strength; the program shows the change.
+#
+# max_strength is a cautious safeguard chosen for this program, NOT a limit
+# published by ACMG/AMP or ClinGen, and a reviewer should check every one. Its
+# job is to stop weak evidence being raised until it alone gives a confident
+# class. No criterion that is Supporting by default can reach Very Strong.
+# Criteria with no limit (PVS1, PS2, PS3) have a published route to Very Strong.
+# PP5 and BP6 have none because they are not counted today. A gene-specific rule
+# set may allow more: edit a copy of this file and load it with --rules. The
+# limits do not apply to earlier records, which are read as they were made.
+#
+# Benign criteria offer Supporting, Moderate and Strong; the 2015 table has no
+# Very Strong benign row, and BA1 has only its single stand-alone level.
+#
+# [[criteria.guide]] lists the situations that set a criterion's strength. When
+# a criterion has a guide, the curator answers it instead of getting the default.
+# Each answer needs a stable id (saved in the case file), a short label for the
+# collapsed row and the screen reader, and the full situation text. Keep the id
+# unchanged when you reword; change the rule-set version if the meaning changes.
 # ---------------------------------------------------------------------------
 
 # ----- Pathogenic -----
@@ -139,14 +206,69 @@ direction = "pathogenic"
 strength = "very_strong"
 category = "variant_type"
 title = "Null variant in a loss-of-function gene"
-summary = "A variant that removes the gene's function (nonsense, frameshift, canonical splice site, start loss, or large deletion) in a gene where loss of function is a known disease mechanism."
+summary = "A variant that is expected to remove the gene's function (nonsense, frameshift, canonical +/-1 or 2 splice site, initiation codon, or single-exon or multi-exon deletion) in a gene where loss of function is a known disease mechanism."
 source = "richards2015"
-note = "ClinGen later published a decision tree that adjusts this strength by variant type and location. To be added and verified."
+note = "Very Strong is the 2015 strength and fits the clearest case only. The ClinGen decision tree (Abou Tayoun 2018) gives lower strengths or no PVS1 at all in many other cases, so this program asks what kind of variant it is instead of assuming Very Strong. For a canonical splice variant, consider both exon skipping and cryptic splice sites, and use the lowest strength among the scenarios; do not also apply PP3 for the splicing prediction. The list here is a shortened form of the tree, so read the paper for a difficult case."
+guide_source = "abou-tayoun2018"
+
+[[criteria.guide]]
+id = "nmd"
+short = "NMD predicted"
+situation = "Nonsense or frameshift variant, or a canonical splice variant, exon deletion or proven partial tandem duplication that shifts the reading frame: decay (NMD) is predicted, and the exon is in the biologically relevant transcripts."
+strength = "very_strong"
+
+[[criteria.guide]]
+id = "whole_gene_deletion"
+short = "Whole-gene deletion"
+situation = "Whole-gene deletion, where loss of function is an established disease mechanism. Abou Tayoun 2018 says a full-gene deletion of a known haploinsufficient gene warrants Pathogenic even though PVS1 alone is 8 points, so check the rest of the evidence."
+strength = "very_strong"
+
+[[criteria.guide]]
+id = "last_exon_critical"
+short = "Last exon, critical region"
+situation = "Decay is not predicted (for example a stop in the last exon), and the removed region is critical to the protein: pathogenic variants lie downstream of the new stop."
+strength = "strong"
+
+[[criteria.guide]]
+id = "over_10_percent"
+short = ">10% of protein removed"
+situation = "Decay is not predicted, the role of the removed region is not established, and more than 10% of the protein is removed."
+strength = "strong"
+
+[[criteria.guide]]
+id = "tandem_unknown"
+short = "Tandem duplication, unknown site"
+situation = "Duplication with an unknown insertion site that would shift the reading frame and cause decay if it is in tandem."
+strength = "strong"
+
+[[criteria.guide]]
+id = "under_10_percent"
+short = "<10% of protein removed"
+situation = "Decay is not predicted, the role of the removed region is not established, and less than 10% of the protein is removed."
+strength = "moderate"
+
+[[criteria.guide]]
+id = "start_loss_upstream"
+short = "Start-loss, variant upstream"
+situation = "Start-loss, no transcript uses an alternative start codon, and one or more pathogenic variants lie before the next in-frame methionine."
+strength = "moderate"
+
+[[criteria.guide]]
+id = "start_loss_none"
+short = "Start-loss, none upstream"
+situation = "Start-loss, no transcript uses an alternative start codon, and no pathogenic variants lie before the next in-frame methionine."
+strength = "supporting"
+
+[[criteria.guide]]
+id = "not_applicable"
+short = "Does not apply"
+situation = "The exon is missing from the biologically relevant transcripts or is enriched for common loss-of-function variants; a start-loss where a transcript uses an alternative start codon; a whole-gene tandem duplication or one inserted outside the gene; or a duplication where decay is unlikely or unknown."
 
 [[criteria]]
 code = "PS1"
 direction = "pathogenic"
 strength = "strong"
+max_strength = "strong"
 category = "variant_type"
 title = "Same amino acid change as a known pathogenic variant"
 summary = "The same amino acid change, caused by a different nucleotide change, is already established as pathogenic."
@@ -160,6 +282,7 @@ category = "family_cases"
 title = "Confirmed de novo"
 summary = "The variant arose new in a patient with the disease and no family history, with maternity and paternity confirmed."
 source = "richards2015"
+note = "ClinGen guidance weighs de novo evidence by how well the phenotype fits and whether parentage was confirmed. ClinGen has published refinements for this criterion that are not built in yet. The strength here is the generic 2015 default and may differ for your gene or evidence."
 
 [[criteria]]
 code = "PS3"
@@ -169,20 +292,23 @@ category = "functional"
 title = "Functional studies show damage"
 summary = "Well-established functional studies show a damaging effect on the gene or protein."
 source = "richards2015"
+note = "ClinGen's functional evidence framework (Brnich 2019) says how to weigh assays, from Supporting up to Very Strong, depending on the assay and the number of control variants tested. ClinGen has published refinements for this criterion that are not built in yet. The strength here is the generic 2015 default and may differ for your gene or evidence."
 
 [[criteria]]
 code = "PS4"
 direction = "pathogenic"
 strength = "strong"
-category = "family_cases"
+max_strength = "strong"
+category = "population"
 title = "More common in affected people"
-summary = "The variant is significantly more common in affected individuals than in controls."
+summary = "The prevalence of the variant in affected individuals is significantly increased compared with controls (odds ratio or relative risk above 5.0, with a confidence interval that does not include 1.0). For very rare variants, where case-control studies may not reach significance, seeing the variant in several unrelated patients with the same phenotype and never in controls can count as Moderate evidence."
 source = "richards2015"
 
 [[criteria]]
 code = "PM1"
 direction = "pathogenic"
 strength = "moderate"
+max_strength = "strong"
 category = "variant_type"
 title = "Hot spot or critical domain"
 summary = "The variant sits in a mutational hot spot or a well-established functional domain without benign variation."
@@ -192,26 +318,31 @@ source = "richards2015"
 code = "PM2"
 direction = "pathogenic"
 strength = "supporting"
+max_strength = "moderate"
 original_strength = "moderate"
 category = "population"
 title = "Absent or extremely rare in population data"
 summary = "Absent from controls in population databases (or at extremely low frequency for recessive disease)."
 source = "clingen-svi-pm2"
-note = "The 2015 paper gave this Moderate strength. The ClinGen SVI recommendation (4 Sept 2020) lowered it to Supporting. Gene-specific expert-panel rule sets set their own frequency limits (for example PALB2 and ATM differ), so check for one. The SVI working group was retired in April 2025; current guidance is at https://clinicalgenome.org/tools/clingen-variant-classification-guidance/."
+strength_source = "clingen-svi-pm2"
+note = "The 2015 paper gave this Moderate strength. The ClinGen SVI recommendation (4 Sept 2020) lowered it to Supporting. With Supporting strength, ClinGen added a combining rule: one Very Strong + one Supporting = Likely pathogenic (so PVS1 + PM2 stays Likely pathogenic). Gene-specific expert-panel rule sets set their own frequency limits (for example PALB2 and ATM differ), so check for one. The SVI working group was retired in April 2025; current guidance is at https://clinicalgenome.org/tools/clingen-variant-classification-guidance/."
 
 [[criteria]]
 code = "PM3"
 direction = "pathogenic"
 strength = "moderate"
+max_strength = "strong"
 category = "family_cases"
 title = "In trans with a pathogenic variant (recessive)"
 summary = "For a recessive disease, found on the other copy of the gene from a known pathogenic variant."
 source = "richards2015"
+note = "ClinGen uses a points table for PM3 that depends on the number of unrelated cases and on whether phase was confirmed. ClinGen has published refinements for this criterion that are not built in yet. The strength here is the generic 2015 default. This program caps it at Strong as a safeguard; no published route takes PM3 to Very Strong."
 
 [[criteria]]
 code = "PM4"
 direction = "pathogenic"
 strength = "moderate"
+max_strength = "strong"
 category = "variant_type"
 title = "Protein length change"
 summary = "An in-frame deletion or insertion in a non-repeat region, or a stop-loss variant, changes the protein length."
@@ -221,6 +352,7 @@ source = "richards2015"
 code = "PM5"
 direction = "pathogenic"
 strength = "moderate"
+max_strength = "strong"
 category = "variant_type"
 title = "New missense at a known pathogenic residue"
 summary = "A new missense change at an amino acid where a different missense change is established as pathogenic."
@@ -230,24 +362,30 @@ source = "richards2015"
 code = "PM6"
 direction = "pathogenic"
 strength = "moderate"
+max_strength = "strong"
 category = "family_cases"
 title = "Assumed de novo"
 summary = "Assumed to have arisen new, but maternity and paternity are not confirmed."
 source = "richards2015"
+note = "ClinGen guidance combines the de novo criteria (PS2 and PM6) by points. ClinGen has published refinements for this criterion that are not built in yet. The strength here is the generic 2015 default. This program caps it at Strong: an assumed de novo observation should not reach Very Strong on its own."
 
 [[criteria]]
 code = "PP1"
 direction = "pathogenic"
 strength = "supporting"
+max_strength = "strong"
 category = "family_cases"
 title = "Co-segregation with disease"
 summary = "The variant travels with the disease in several affected family members, in a gene definitively known to cause the disease."
 source = "richards2015"
+strength_source = "clingen-pp1-pp4-2024"
+note = "ClinGen's 2024 points guidance can raise this up to Strong when several family members share the variant and the disease. The same guidance caps PP1 and PP4 together at 5 points, so this program withholds the class when the pair exceeds it. The change in strength from a curator is shown."
 
 [[criteria]]
 code = "PP2"
 direction = "pathogenic"
 strength = "supporting"
+max_strength = "moderate"
 category = "variant_type"
 title = "Missense in a gene where missense causes disease"
 summary = "A missense variant in a gene with few benign missense variants, where missense changes are a common disease mechanism."
@@ -261,16 +399,21 @@ category = "computational"
 title = "Predictions support a damaging effect"
 summary = "Computational evidence (conservation, predicted effect on the protein or on splicing) supports a damaging effect."
 source = "richards2015"
-note = "ClinGen later calibrated score thresholds for prediction tools, which can raise or lower this strength. To be added and verified."
+strength_source = "pejaver2022"
+max_strength = "strong"
+note = "ClinGen later calibrated score thresholds for prediction tools (Pejaver 2022), which can raise this to Moderate or Strong for some tools and score ranges. Very Strong is not offered here. The calibrated thresholds are not built in yet, so choose the strength from the published table for the tool you used."
 
 [[criteria]]
 code = "PP4"
 direction = "pathogenic"
 strength = "supporting"
+max_strength = "strong"
 category = "phenotype"
 title = "Highly specific phenotype"
 summary = "The patient's features or family history are highly specific for a disease with a single genetic cause."
 source = "richards2015"
+strength_source = "clingen-pp1-pp4-2024"
+note = "ClinGen's 2024 guidance links this criterion to how specific the phenotype is for the gene and caps PP1 and PP4 together at 5 points. The program withholds the class when the pair exceeds that cap."
 
 [[criteria]]
 code = "PP5"
@@ -281,7 +424,7 @@ title = "Reputable source says pathogenic"
 summary = "A reputable source reports the variant as pathogenic, but the evidence is not available to review."
 source = "clingen-svi-pp5-bp6"
 discouraged = true
-note = "ClinGen (2018) proposed that laboratories stop using PP5 and BP6 and removed them from its curation tool. ACMG/AMP made no formal recommendation to remove them, and some tools still apply them."
+note = "ClinGen (2018) proposed that laboratories stop using PP5 and BP6 and removed them from its curation tool. ACMG/AMP made no formal recommendation to remove them, and some tools still apply them. In this program a new assessment lists this criterion but does not count it. Earlier records that used it are still counted, so their own class can be reproduced."
 
 # ----- Benign -----
 
@@ -299,15 +442,18 @@ note = "ClinGen keeps a short list of exceptions (known common pathogenic varian
 code = "BS1"
 direction = "benign"
 strength = "strong"
+max_strength = "strong"
 category = "population"
 title = "More frequent than expected for the disease"
 summary = "The allele frequency is greater than expected for the disorder."
 source = "richards2015"
+note = "The frequency limit for this criterion is set per gene and disease by expert panels. ClinGen has published refinements for this criterion that are not built in yet. The strength here is the generic 2015 default and may differ for your gene or evidence."
 
 [[criteria]]
 code = "BS2"
 direction = "benign"
 strength = "strong"
+max_strength = "strong"
 category = "population"
 title = "Seen in healthy adults"
 summary = "Observed in a healthy adult for a fully penetrant, early-onset disease (homozygous for recessive, heterozygous for dominant, hemizygous for X-linked)."
@@ -317,33 +463,39 @@ source = "richards2015"
 code = "BS3"
 direction = "benign"
 strength = "strong"
+max_strength = "strong"
 category = "functional"
 title = "Functional studies show no damage"
 summary = "Well-established functional studies show no damaging effect on the gene or protein."
 source = "richards2015"
+note = "See PS3: ClinGen's functional evidence framework applies in both directions. ClinGen has published refinements for this criterion that are not built in yet. The strength here is the generic 2015 default and may differ for your gene or evidence."
 
 [[criteria]]
 code = "BS4"
 direction = "benign"
 strength = "strong"
+max_strength = "strong"
 category = "family_cases"
 title = "Does not segregate with disease"
 summary = "The variant does not follow the disease in affected family members."
 source = "richards2015"
+note = "ClinGen guidance on segregation covers this criterion together with PP1. ClinGen has published refinements for this criterion that are not built in yet. The strength here is the generic 2015 default and may differ for your gene or evidence."
 
 [[criteria]]
 code = "BP1"
 direction = "benign"
 strength = "supporting"
+max_strength = "moderate"
 category = "variant_type"
-title = "Missense where only truncating variants cause disease"
-summary = "A missense variant in a gene where only truncating (protein-shortening) variants are known to cause disease."
+title = "Missense where primarily truncating variants cause disease"
+summary = "A missense variant in a gene for which primarily truncating (protein-shortening) variants are known to cause disease."
 source = "richards2015"
 
 [[criteria]]
 code = "BP2"
 direction = "benign"
 strength = "supporting"
+max_strength = "moderate"
 category = "family_cases"
 title = "In trans or in cis with a pathogenic variant"
 summary = "Seen in trans with a pathogenic variant for a fully penetrant dominant disease, or in cis with a pathogenic variant in any inheritance pattern."
@@ -353,6 +505,7 @@ source = "richards2015"
 code = "BP3"
 direction = "benign"
 strength = "supporting"
+max_strength = "moderate"
 category = "variant_type"
 title = "In-frame change in a repetitive region"
 summary = "An in-frame deletion or insertion in a repetitive region without known function."
@@ -362,15 +515,19 @@ source = "richards2015"
 code = "BP4"
 direction = "benign"
 strength = "supporting"
+max_strength = "moderate"
 category = "computational"
 title = "Predictions suggest no impact"
 summary = "Computational evidence suggests the variant has no impact on the gene or protein."
 source = "richards2015"
+strength_source = "pejaver2022"
+note = "ClinGen calibrated score thresholds for prediction tools (Pejaver 2022): BP4 reaches at most Moderate, while PP3 reaches at most Strong. The calibrated thresholds are not built in yet, so choose the strength from the published table for the tool you used."
 
 [[criteria]]
 code = "BP5"
 direction = "benign"
 strength = "supporting"
+max_strength = "moderate"
 category = "phenotype"
 title = "Another cause found"
 summary = "The variant is found in a case with an alternate, well-established molecular cause of the disease."
@@ -385,12 +542,13 @@ title = "Reputable source says benign"
 summary = "A reputable source reports the variant as benign, but the evidence is not available to review."
 source = "clingen-svi-pp5-bp6"
 discouraged = true
-note = "ClinGen (2018) proposed that laboratories stop using PP5 and BP6 and removed them from its curation tool. ACMG/AMP made no formal recommendation to remove them, and some tools still apply them."
+note = "ClinGen (2018) proposed that laboratories stop using PP5 and BP6 and removed them from its curation tool. ACMG/AMP made no formal recommendation to remove them, and some tools still apply them. In this program a new assessment lists this criterion but does not count it. Earlier records that used it are still counted, so their own class can be reproduced."
 
 [[criteria]]
 code = "BP7"
 direction = "benign"
 strength = "supporting"
+max_strength = "moderate"
 category = "computational"
 title = "Silent change with no predicted splice effect"
 summary = "A synonymous (silent) variant with no predicted effect on splicing, at a nucleotide that is not highly conserved."

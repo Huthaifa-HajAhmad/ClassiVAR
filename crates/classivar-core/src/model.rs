@@ -1,10 +1,14 @@
 //! Basic vocabulary shared by the rules and the scoring: strengths, directions,
 //! categories and classes.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// How much weight one piece of evidence carries.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Deserialize)]
+///
+/// There is deliberately no ordering on this type: `StandAlone` is worth the same
+/// points as `VeryStrong`, so a plain "bigger than" would be misleading. Compare
+/// points through the rule set instead.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Strength {
     Supporting,
@@ -73,7 +77,8 @@ impl Category {
 }
 
 /// The five official classes. Ordered from most benign to most pathogenic.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Class {
     Benign,
     LikelyBenign,
