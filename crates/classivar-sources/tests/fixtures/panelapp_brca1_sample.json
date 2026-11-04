@@ -1,0 +1,44 @@
+{
+  "count": 3,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "gene_data": { "hgnc_id": "HGNC:1100", "gene_symbol": "BRCA1", "omim_gene": ["113705"] },
+      "entity_type": "gene",
+      "entity_name": "BRCA1",
+      "confidence_level": "3",
+      "penetrance": "Complete",
+      "mode_of_pathogenicity": "",
+      "publications": [],
+      "evidence": ["Expert Review Green", "Expert list"],
+      "phenotypes": ["{Breast-ovarian cancer, familial, 1}, OMIM:604370"],
+      "mode_of_inheritance": "MONOALLELIC, autosomal or pseudoautosomal, NOT imprinted",
+      "tags": ["watchlist_moi"],
+      "panel": { "id": 158, "name": "Familial breast cancer", "status": "public", "version": "1.28" },
+      "transcript": null
+    },
+    {
+      "gene_data": { "hgnc_id": "HGNC:1100", "gene_symbol": "BRCA1", "omim_gene": ["113705"] },
+      "entity_type": "gene",
+      "entity_name": "BRCA1",
+      "confidence_level": "2",
+      "penetrance": "Complete",
+      "publications": ["27989354"],
+      "evidence": ["Expert Review Amber"],
+      "phenotypes": ["Prostate cancer, MONDO:0008315"],
+      "mode_of_inheritance": "MONOALLELIC, autosomal or pseudoautosomal, NOT imprinted",
+      "panel": { "id": 318, "name": "Familial prostate cancer", "status": "public", "version": "1.4" },
+      "transcript": null
+    },
+    {
+      "gene_data": { "hgnc_id": "HGNC:1100", "gene_symbol": "BRCA1" },
+      "entity_type": "gene",
+      "entity_name": "BRCA1",
+      "confidence_level": "1",
+      "phenotypes": [],
+      "mode_of_inheritance": "",
+      "panel": { "id": 9999, "name": "Example panel (invented for this test)", "status": "public", "version": "0.1" }
+    }
+  ]
+}
