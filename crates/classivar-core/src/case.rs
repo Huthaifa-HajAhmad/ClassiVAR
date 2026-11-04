@@ -149,6 +149,18 @@ mod tests {
     }
 
     #[test]
+    fn the_reason_for_a_strength_is_saved_and_an_empty_one_is_refused() {
+        let mut case = sample();
+        case.today[0] = Applied::new("PM2", Moderate).with_reason("Absent from 40,000 controls in this population");
+        let json = case.to_json();
+        assert!(json.contains("\"reason\": \"Absent from 40,000 controls in this population\""));
+        assert_eq!(CaseFile::from_json(&json, rules()).unwrap(), case);
+
+        case.today[0] = Applied::new("PM2", Moderate).with_reason("   ");
+        assert!(matches!(CaseFile::from_json(&case.to_json(), rules()), Err(CaseError::BadEvidence { .. })));
+    }
+
+    #[test]
     fn a_file_written_before_tiers_existed_can_still_be_opened() {
         let json =
             sample().to_json().replace("\"reported_tier\": \"VUS-low\",", "").replace("\"reported_tier\": null,", "");

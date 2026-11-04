@@ -12,6 +12,9 @@
 #   [class_min_points]  the lowest total that still gives each class
 #   [[vus_tiers]]    VUS sub-tiers. Numeric cut-offs are NOT published yet.
 #   [[exclusive_pairs]] criteria that should not be used together
+#   [[combination_caps]] two criteria that may be used together only up to a point total
+#   [[predictors]]   score limits for prediction tools, for PP3 and BP4
+#   [functional]     assay limits for PS3 and BS3 (controls and OddsPath)
 #   [[criteria]]     the 28 ACMG/AMP criteria
 #
 # Changing a rule means editing this file. The program checks the file when it
@@ -20,9 +23,9 @@
 [meta]
 id = "acmg-amp-points"
 name = "ACMG/AMP 2015 criteria, points scoring (draft)"
-version = "0.4.0-draft"
+version = "0.6.0-draft"
 status = "unverified"
-note = "Draft. On 2026-11-03 the builder checked, against the sources on the web, the criteria wording (Richards 2015 Tables 3 and 4), the combining table (Table 5), the points and class thresholds (Tavtigian 2020, via its published summary), the PM2 recommendation (4 Sept 2020) and the PP5/BP6 recommendation (Biesecker and Harrison 2018). On 2026-11-04 an audit (docs/AUDIT-2026-11-04.md) found problems, and this version fixes them: PVS1 wording and strength guidance, the ClinGen 2020 combining addition, BP1 and PS4 wording, contradictory pairs now withhold the class, PP3 capped at Strong, discouraged criteria no longer counted. A later pass added the PVS1 situation guide, strength caps for weak evidence, PM4/PVS1 exclusivity, the PP1+PP4 combined cap, the BP4 Moderate ceiling, and saves the chosen PVS1 situation. This is not a qualified review. Research and learning use only."
+note = "Draft. On 2026-11-03 the builder checked, against the sources on the web, the criteria wording (Richards 2015 Tables 3 and 4), the combining table (Table 5), the points and class thresholds (Tavtigian 2020, via its published summary), the PM2 recommendation (4 Sept 2020) and the PP5/BP6 recommendation (Biesecker and Harrison 2018). On 2026-11-04 an audit (docs/AUDIT-2026-11-04.md) found problems, and this version fixes them: PVS1 wording and strength guidance, the ClinGen 2020 combining addition, BP1 and PS4 wording, contradictory pairs now withhold the class, PP3 capped at Strong, discouraged criteria no longer counted. A later pass added the PVS1 situation guide, strength caps for weak evidence, PM4/PVS1 exclusivity, the PP1+PP4 combined cap, the BP4 Moderate ceiling, and saves the chosen PVS1 situation. Version 0.5.0 added the calibrated PP3/BP4 score limits for four tools (Pejaver 2022, Table 2) and the PM1+PP3 combined limit. Version 0.6.0 adds the functional-evidence limits for PS3/BS3 (Brnich 2019): the control-count route and the OddsPath limits. This is not a qualified review. Research and learning use only."
 
 [[sources]]
 id = "richards2015"
@@ -58,6 +61,12 @@ id = "pejaver2022"
 citation = "Pejaver V, et al. Calibration of computational tools for missense variant pathogenicity classification and ClinGen recommendations for PP3/BP4 criteria. Am J Hum Genet 2022;109:2163-2177."
 doi = "10.1016/j.ajhg.2022.10.013"
 url = "https://pubmed.ncbi.nlm.nih.gov/36413997/"
+
+[[sources]]
+id = "brnich2019"
+citation = "Brnich SE, Abou Tayoun AN, Couch FJ, et al.; ClinGen Sequence Variant Interpretation Working Group. Recommendations for application of the functional evidence PS3/BS3 criterion using the ACMG/AMP sequence variant interpretation framework. Genome Med 2019;12:3."
+doi = "10.1186/s13073-019-0690-2"
+url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC6938631/"
 
 [[sources]]
 id = "clingen-pp1-pp4-2024"
@@ -174,6 +183,55 @@ max_points = 5
 reason = "ClinGen's 2024 guidance allows PP1_Strong + PP4_Supporting, but not PP1_Strong + PP4_Strong or Strong + Moderate."
 source = "clingen-pp1-pp4-2024"
 
+# Pejaver 2022 recommends limiting the sum of PP3 and PM1 to Strong (4 points here).
+[[combination_caps]]
+a = "PM1"
+b = "PP3"
+max_points = 4
+reason = "Pejaver 2022 recommends that the evidence strength of PP3 and PM1 together does not go above Strong."
+source = "pejaver2022"
+
+# ---------------------------------------------------------------------------
+# Prediction tools calibrated by Pejaver 2022 (Table 2). `at` is the score limit
+# for each strength: for pathogenic a score at or above it reaches that strength,
+# for benign a score at or below it does. Listed weakest first. A score between
+# the weakest benign and weakest pathogenic limit supports neither PP3 nor BP4.
+# Only the four tools the paper names as able to reach Strong for pathogenicity
+# and Moderate for benignity are included. The program lowers a published level
+# to the criterion's limit (BP4 stops at Moderate), and says so on screen.
+# These numbers were read from the open-access paper on 2026-11-04 and must be
+# checked by a reviewer. The paper's own caveat: pick one tool, and pick it
+# before looking at its result.
+# ---------------------------------------------------------------------------
+[[predictors]]
+id = "revel"
+name = "REVEL"
+source = "pejaver2022"
+pathogenic = [{ strength = "supporting", at = 0.644 }, { strength = "moderate", at = 0.773 }, { strength = "strong", at = 0.932 }]
+benign = [{ strength = "supporting", at = 0.290 }, { strength = "moderate", at = 0.183 }, { strength = "strong", at = 0.016 }, { strength = "very_strong", at = 0.003 }]
+
+[[predictors]]
+id = "bayesdel-noaf"
+name = "BayesDel (no allele frequency)"
+source = "pejaver2022"
+note = "Only the version without minor allele frequency was calibrated. Do not use the version with it."
+pathogenic = [{ strength = "supporting", at = 0.13 }, { strength = "moderate", at = 0.27 }, { strength = "strong", at = 0.50 }]
+benign = [{ strength = "supporting", at = -0.18 }, { strength = "moderate", at = -0.36 }]
+
+[[predictors]]
+id = "mutpred2"
+name = "MutPred2"
+source = "pejaver2022"
+pathogenic = [{ strength = "supporting", at = 0.737 }, { strength = "moderate", at = 0.829 }, { strength = "strong", at = 0.932 }]
+benign = [{ strength = "supporting", at = 0.391 }, { strength = "moderate", at = 0.197 }, { strength = "strong", at = 0.010 }]
+
+[[predictors]]
+id = "vest4"
+name = "VEST4"
+source = "pejaver2022"
+pathogenic = [{ strength = "supporting", at = 0.764 }, { strength = "moderate", at = 0.861 }, { strength = "strong", at = 0.965 }]
+benign = [{ strength = "supporting", at = 0.449 }, { strength = "moderate", at = 0.302 }]
+
 # ---------------------------------------------------------------------------
 # Criteria. strength is the default strength from the 2015 paper unless a
 # note says a later recommendation changed it. The user may change the
@@ -284,6 +342,28 @@ summary = "The variant arose new in a patient with the disease and no family his
 source = "richards2015"
 note = "ClinGen guidance weighs de novo evidence by how well the phenotype fits and whether parentage was confirmed. ClinGen has published refinements for this criterion that are not built in yet. The strength here is the generic 2015 default and may differ for your gene or evidence."
 
+# ---------------------------------------------------------------------------
+# Functional evidence (Brnich 2019), for PS3 (damage) and BS3 (no damage).
+# Without a statistical analysis the number of validation controls decides: an
+# assay with at least 11 controls (a mix of pathogenic and benign variants)
+# reaches Moderate; one with 1 to 10 reaches Supporting; one with no controls
+# gives no evidence (Brnich's Supporting level assumes experimental controls;
+# a reviewer should confirm the minimum of 1). With an OddsPath calculation the
+# value decides, and each limit is crossed strictly: above 2.1, 4.3, 18.7 and
+# 350 gives PS3 at Supporting, Moderate, Strong and Very Strong; below 0.48,
+# 0.23 and 0.053 gives BS3 at Supporting, Moderate and Strong. Values from 0.48
+# to 2.1 are indeterminate. The paper also says that even Very Strong functional
+# evidence is not enough alone for a Pathogenic class. The program does not
+# enforce that; the screen repeats it. Numbers read from the open-access paper
+# (PMC6938631) on 2026-11-04; a reviewer must check them.
+# ---------------------------------------------------------------------------
+[functional]
+source = "brnich2019"
+controls_supporting_min = 1
+controls_moderate_min = 11
+pathogenic = [{ strength = "supporting", at = 2.1 }, { strength = "moderate", at = 4.3 }, { strength = "strong", at = 18.7 }, { strength = "very_strong", at = 350.0 }]
+benign = [{ strength = "supporting", at = 0.48 }, { strength = "moderate", at = 0.23 }, { strength = "strong", at = 0.053 }]
+
 [[criteria]]
 code = "PS3"
 direction = "pathogenic"
@@ -292,7 +372,7 @@ category = "functional"
 title = "Functional studies show damage"
 summary = "Well-established functional studies show a damaging effect on the gene or protein."
 source = "richards2015"
-note = "ClinGen's functional evidence framework (Brnich 2019) says how to weigh assays, from Supporting up to Very Strong, depending on the assay and the number of control variants tested. ClinGen has published refinements for this criterion that are not built in yet. The strength here is the generic 2015 default and may differ for your gene or evidence."
+note = "ClinGen's functional evidence framework (Brnich 2019) sets the strength from the assay: without statistics, at most Moderate by the number of validation controls; with an OddsPath calculation, up to Very Strong. Use the functional-evidence helper in the criteria list for those two routes. The paper's four steps (define the disease mechanism, judge the class of assay, judge this assay, then apply it to the variant) are for you to do first. Even Very Strong functional evidence is not enough alone for Pathogenic. The strength here is the generic 2015 default."
 
 [[criteria]]
 code = "PS4"
@@ -401,7 +481,7 @@ summary = "Computational evidence (conservation, predicted effect on the protein
 source = "richards2015"
 strength_source = "pejaver2022"
 max_strength = "strong"
-note = "ClinGen later calibrated score thresholds for prediction tools (Pejaver 2022), which can raise this to Moderate or Strong for some tools and score ranges. Very Strong is not offered here. The calibrated thresholds are not built in yet, so choose the strength from the published table for the tool you used."
+note = "ClinGen later calibrated score thresholds for prediction tools (Pejaver 2022), which can raise this to Moderate or Strong for some tools and score ranges. Very Strong is not offered here. Use the predictor helper in the criteria list for REVEL, BayesDel (no allele frequency), MutPred2 or VEST4; for any other tool choose the strength from the published table yourself. Choose one tool before you see its result."
 
 [[criteria]]
 code = "PP4"
@@ -468,7 +548,7 @@ category = "functional"
 title = "Functional studies show no damage"
 summary = "Well-established functional studies show no damaging effect on the gene or protein."
 source = "richards2015"
-note = "See PS3: ClinGen's functional evidence framework applies in both directions. ClinGen has published refinements for this criterion that are not built in yet. The strength here is the generic 2015 default and may differ for your gene or evidence."
+note = "See PS3: ClinGen's functional evidence framework (Brnich 2019) applies in both directions, and benign functional evidence reaches at most Strong. Use the functional-evidence helper in the criteria list. The strength here is the generic 2015 default."
 
 [[criteria]]
 code = "BS4"
@@ -521,7 +601,7 @@ title = "Predictions suggest no impact"
 summary = "Computational evidence suggests the variant has no impact on the gene or protein."
 source = "richards2015"
 strength_source = "pejaver2022"
-note = "ClinGen calibrated score thresholds for prediction tools (Pejaver 2022): BP4 reaches at most Moderate, while PP3 reaches at most Strong. The calibrated thresholds are not built in yet, so choose the strength from the published table for the tool you used."
+note = "ClinGen calibrated score thresholds for prediction tools (Pejaver 2022): BP4 reaches at most Moderate, while PP3 reaches at most Strong. Use the predictor helper in the criteria list for REVEL, BayesDel (no allele frequency), MutPred2 or VEST4; for any other tool choose the strength from the published table yourself. Choose one tool before you see its result."
 
 [[criteria]]
 code = "BP5"

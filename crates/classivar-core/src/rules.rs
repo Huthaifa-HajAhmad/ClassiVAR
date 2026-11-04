@@ -105,6 +105,60 @@ pub struct CombinationCap {
     pub source: String,
 }
 
+/// One published score limit of a prediction tool. For a pathogenic limit a score
+/// at or above `at` reaches `strength`; for a benign limit, at or below `at`.
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct Cutoff {
+    pub strength: Strength,
+    pub at: f64,
+}
+
+/// A prediction tool whose scores were calibrated to evidence strengths for PP3
+/// (pathogenic) and BP4 (benign). The numbers come from the cited source only.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Predictor {
+    pub id: String,
+    pub name: String,
+    pub source: String,
+    /// What to know before using the tool, for example which version was calibrated.
+    pub note: Option<String>,
+    /// Weakest first. Each stronger limit lies further from the middle of the scale.
+    pub pathogenic: Vec<Cutoff>,
+    pub benign: Vec<Cutoff>,
+}
+
+/// How strong functional-assay evidence is (Brnich 2019). Without a statistical
+/// analysis, the number of validation controls decides: at most `Moderate`. With
+/// one, the OddsPath value decides, and its limits are crossed strictly.
+#[derive(Debug, Clone, Deserialize)]
+pub struct FunctionalRules {
+    pub source: String,
+    /// An assay needs at least this many validation controls to give any evidence.
+    /// Brnich 2019's Supporting level assumes experimental controls, so 0 gives none.
+    pub controls_supporting_min: u32,
+    /// An assay with at least this many validation controls (a mix of pathogenic
+    /// and benign variants) reaches Moderate; one with fewer (but at least
+    /// `controls_supporting_min`) reaches Supporting.
+    pub controls_moderate_min: u32,
+    /// OddsPath strictly above `at` reaches the strength (PS3). Weakest first.
+    pub pathogenic: Vec<Cutoff>,
+    /// OddsPath strictly below `at` reaches the strength (BS3). Weakest first.
+    pub benign: Vec<Cutoff>,
+}
+
+/// What a score or an assay result means for one criterion. Between the two
+/// sets of limits there is no reading, so the evidence is neither side.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvidenceReading {
+    /// The criterion the evidence supports, for example `PP3`, `BP4`, `PS3`, `BS3`.
+    pub code: &'static str,
+    /// The strength the source gives this score.
+    pub published: Strength,
+    /// The strength this program lets the curator apply: `published`, lowered to
+    /// the criterion's limit when the source goes higher.
+    pub strength: Strength,
+}
+
 /// One situation that sets a criterion's strength.
 #[derive(Debug, Clone, Deserialize)]
 pub struct StrengthGuide {
@@ -204,6 +258,9 @@ struct RuleSetFile {
     exclusive_pairs: Vec<ExclusivePair>,
     #[serde(default)]
     combination_caps: Vec<CombinationCap>,
+    #[serde(default)]
+    predictors: Vec<Predictor>,
+    functional: Option<FunctionalRules>,
     criteria: Vec<Criterion>,
 }
 
@@ -218,6 +275,10 @@ pub struct RuleSet {
     pub exclusive_pairs: Vec<ExclusivePair>,
     /// Pairs whose combined points are limited (empty in older rule files).
     pub combination_caps: Vec<CombinationCap>,
+    /// Calibrated prediction tools for PP3 and BP4 (empty in older rule files).
+    pub predictors: Vec<Predictor>,
+    /// Functional-assay evidence limits for PS3 and BS3 (absent in older rule files).
+    pub functional: Option<FunctionalRules>,
     pub criteria: Vec<Criterion>,
 }
 
@@ -233,6 +294,8 @@ impl TryFrom<RuleSetFile> for RuleSet {
             vus_tiers: file.vus_tiers,
             exclusive_pairs: file.exclusive_pairs,
             combination_caps: file.combination_caps,
+            predictors: file.predictors,
+            functional: file.functional,
             criteria: file.criteria,
         };
         rules.check()?;
@@ -282,6 +345,10 @@ pub enum RuleError {
     MissingCriteria,
     #[error("the rule set is marked reviewed but has no reviewer name or no review date in the form YYYY-MM-DD")]
     ReviewIncomplete,
+    #[error("functional evidence limits: {0}")]
+    BadFunctional(String),
+    #[error("predictor {id}: {problem}")]
+    BadPredictor { id: String, problem: String },
     #[error("VUS tiers: {0}")]
     BadTiers(String),
 }
@@ -311,6 +378,62 @@ impl RuleSet {
 
     pub fn source(&self, id: &str) -> Option<&Source> {
         self.sources.iter().find(|s| s.id == id)
+    }
+
+    pub fn predictor(&self, id: &str) -> Option<&Predictor> {
+        self.predictors.iter().find(|p| p.id == id)
+    }
+
+    /// What a tool's score means for the evidence, or `None` when the score lies
+    /// between the limits, is not a finite number, or the tool id is unknown.
+    pub fn read_predictor(&self, id: &str, score: f64) -> Option<EvidenceReading> {
+        let tool = self.predictor(id)?;
+        if !score.is_finite() {
+            return None;
+        }
+        // Limits run weakest first, so the last one a score reaches is the strongest.
+        if let Some(cut) = tool.pathogenic.iter().rfind(|cut| score >= cut.at) {
+            self.reading("PP3", cut.strength)
+        } else {
+            let cut = tool.benign.iter().rfind(|cut| score <= cut.at)?;
+            self.reading("BP4", cut.strength)
+        }
+    }
+
+    /// The strength of functional evidence from the number of validation controls
+    /// alone (no statistical analysis). `damaging` says whether the assay showed
+    /// damage (PS3) or no damage (BS3). `None` when the rules have no functional table
+    /// or the assay has too few controls to give any evidence.
+    pub fn read_functional_controls(&self, damaging: bool, controls: u32) -> Option<EvidenceReading> {
+        let rules = self.functional.as_ref()?;
+        if controls < rules.controls_supporting_min {
+            return None;
+        }
+        let strength = if controls >= rules.controls_moderate_min { Strength::Moderate } else { Strength::Supporting };
+        self.reading(if damaging { "PS3" } else { "BS3" }, strength)
+    }
+
+    /// The strength of functional evidence from an OddsPath value. `None` when the
+    /// value lies in the indeterminate range, is negative or is not a finite number.
+    pub fn read_oddspath(&self, value: f64) -> Option<EvidenceReading> {
+        let rules = self.functional.as_ref()?;
+        if !value.is_finite() || value < 0.0 {
+            return None;
+        }
+        if let Some(cut) = rules.pathogenic.iter().rfind(|cut| value > cut.at) {
+            self.reading("PS3", cut.strength)
+        } else {
+            let cut = rules.benign.iter().rfind(|cut| value < cut.at)?;
+            self.reading("BS3", cut.strength)
+        }
+    }
+
+    /// A published strength for `code`, lowered to the highest this program offers
+    /// for that criterion when the source goes higher.
+    fn reading(&self, code: &'static str, published: Strength) -> Option<EvidenceReading> {
+        let allowed = self.criterion(code)?.allowed_strengths();
+        let strength = if allowed.contains(&published) { published } else { *allowed.last()? };
+        Some(EvidenceReading { code, published, strength })
     }
 
     /// Points (always positive) for a strength.
@@ -489,10 +612,106 @@ impl RuleSet {
             }
         }
 
+        self.check_predictors(&known_sources)?;
+        self.check_functional(&known_sources)?;
+
         for tier in &self.vus_tiers {
             needs_source(tier.name.clone(), &tier.source)?;
         }
         self.check_tiers()
+    }
+
+    /// The functional table needs a known source, the criteria PS3 and BS3, and
+    /// limits that run away from the indeterminate middle without overlapping.
+    fn check_functional(&self, known_sources: &HashSet<&str>) -> Result<(), RuleError> {
+        let Some(rules) = &self.functional else { return Ok(()) };
+        let bad = |problem: &str| Err(RuleError::BadFunctional(problem.to_string()));
+        if !known_sources.contains(rules.source.as_str()) {
+            return Err(RuleError::UnknownSource {
+                item: "functional evidence".to_string(),
+                source_id: rules.source.clone(),
+            });
+        }
+        if self.criterion("PS3").is_none() || self.criterion("BS3").is_none() {
+            return bad("it needs the criteria PS3 and BS3");
+        }
+        if rules.controls_supporting_min == 0 || rules.controls_supporting_min >= rules.controls_moderate_min {
+            return bad("controls_supporting_min must be at least 1 and below controls_moderate_min");
+        }
+        let order = [Strength::Supporting, Strength::Moderate, Strength::Strong, Strength::VeryStrong];
+        for (limits, rising) in [(&rules.pathogenic, true), (&rules.benign, false)] {
+            let ranks: Option<Vec<usize>> =
+                limits.iter().map(|cut| order.iter().position(|o| *o == cut.strength)).collect();
+            let Some(ranks) = ranks else { return bad("a limit uses a strength other than supporting to very_strong") };
+            if ranks.windows(2).any(|w| w[0] >= w[1]) {
+                return bad("limits must list strengths from weakest to strongest, once each");
+            }
+            // An OddsPath value cannot be negative.
+            if limits.iter().any(|cut| !cut.at.is_finite() || cut.at < 0.0) {
+                return bad("an OddsPath limit is not a number of zero or more");
+            }
+            if limits.windows(2).any(|w| if rising { w[0].at >= w[1].at } else { w[0].at <= w[1].at }) {
+                return bad("stronger limits must lie further from the middle of the scale");
+            }
+        }
+        if let (Some(p), Some(b)) = (rules.pathogenic.first(), rules.benign.first())
+            && b.at > p.at
+        {
+            return bad("the benign and pathogenic limits overlap");
+        }
+        Ok(())
+    }
+
+    /// Every predictor needs a known source, and its limits must run in order, so
+    /// a stronger level can never be reached by a score that misses a weaker one.
+    fn check_predictors(&self, known_sources: &HashSet<&str>) -> Result<(), RuleError> {
+        if self.predictors.is_empty() {
+            return Ok(());
+        }
+        let mut ids = HashSet::new();
+        for tool in &self.predictors {
+            let bad =
+                |problem: &str| Err(RuleError::BadPredictor { id: tool.id.clone(), problem: problem.to_string() });
+            if self.criterion("PP3").is_none() || self.criterion("BP4").is_none() {
+                return bad("predictors need the criteria PP3 and BP4");
+            }
+            if tool.id.trim().is_empty() || tool.name.trim().is_empty() || !ids.insert(tool.id.as_str()) {
+                return bad("the id and name must be filled in, and the id must be unique");
+            }
+            if !known_sources.contains(tool.source.as_str()) {
+                return Err(RuleError::UnknownSource {
+                    item: format!("predictor {}", tool.id),
+                    source_id: tool.source.clone(),
+                });
+            }
+            if tool.pathogenic.is_empty() && tool.benign.is_empty() {
+                return bad("it has no score limits");
+            }
+            let order = [Strength::Supporting, Strength::Moderate, Strength::Strong, Strength::VeryStrong];
+            for (limits, rising) in [(&tool.pathogenic, true), (&tool.benign, false)] {
+                let ranks: Option<Vec<usize>> =
+                    limits.iter().map(|cut| order.iter().position(|o| *o == cut.strength)).collect();
+                let Some(ranks) = ranks else {
+                    return bad("a limit uses a strength other than supporting, moderate, strong or very_strong");
+                };
+                if ranks.windows(2).any(|w| w[0] >= w[1]) {
+                    return bad("limits must list strengths from weakest to strongest, once each");
+                }
+                if limits.iter().any(|cut| !cut.at.is_finite()) {
+                    return bad("a score limit is not a number");
+                }
+                if limits.windows(2).any(|w| if rising { w[0].at >= w[1].at } else { w[0].at <= w[1].at }) {
+                    return bad("stronger limits must lie further from the middle of the scale");
+                }
+            }
+            // A score must never be both PP3 and BP4.
+            if let (Some(p), Some(b)) = (tool.pathogenic.first(), tool.benign.first())
+                && b.at >= p.at
+            {
+                return bad("the benign and pathogenic limits overlap");
+            }
+        }
+        Ok(())
     }
 
     /// Tiers are either all unranged (no official cut-offs yet) or all ranged,
@@ -531,6 +750,161 @@ mod tests {
     fn edited(old: &str, new: &str) -> Result<RuleSet, RuleError> {
         assert!(BUILTIN.contains(old), "the test text '{old}' is not in the rule file");
         RuleSet::parse(&BUILTIN.replacen(old, new, 1))
+    }
+
+    fn reading(tool: &str, score: f64) -> Option<(&'static str, Strength, Strength)> {
+        RuleSet::builtin().unwrap().read_predictor(tool, score).map(|r| (r.code, r.published, r.strength))
+    }
+
+    #[test]
+    fn revel_scores_follow_pejaver_2022_table_2() {
+        use Strength::*;
+        // Each pair of lines: a score just inside a band, and the limit itself.
+        assert_eq!(reading("revel", 0.644), Some(("PP3", Supporting, Supporting)));
+        assert_eq!(reading("revel", 0.772), Some(("PP3", Supporting, Supporting)));
+        assert_eq!(reading("revel", 0.773), Some(("PP3", Moderate, Moderate)));
+        assert_eq!(reading("revel", 0.931), Some(("PP3", Moderate, Moderate)));
+        assert_eq!(reading("revel", 0.932), Some(("PP3", Strong, Strong)));
+        assert_eq!(reading("revel", 1.0), Some(("PP3", Strong, Strong)));
+        assert_eq!(reading("revel", 0.290), Some(("BP4", Supporting, Supporting)));
+        assert_eq!(reading("revel", 0.183), Some(("BP4", Moderate, Moderate)));
+        // Between the two sides, the table gives no evidence at all.
+        assert_eq!(reading("revel", 0.291), None);
+        assert_eq!(reading("revel", 0.5), None);
+        assert_eq!(reading("revel", 0.643), None);
+    }
+
+    #[test]
+    fn a_benign_score_the_paper_rates_above_moderate_is_lowered_to_moderate() {
+        use Strength::*;
+        // The paper rates REVEL <= 0.016 as Strong and <= 0.003 as Very Strong;
+        // this program stops BP4 at Moderate and keeps the published level for display.
+        assert_eq!(reading("revel", 0.016), Some(("BP4", Strong, Moderate)));
+        assert_eq!(reading("revel", 0.003), Some(("BP4", VeryStrong, Moderate)));
+        assert_eq!(reading("revel", 0.0), Some(("BP4", VeryStrong, Moderate)));
+    }
+
+    #[test]
+    fn the_other_calibrated_tools_read_their_own_limits() {
+        use Strength::*;
+        assert_eq!(reading("bayesdel-noaf", 0.50), Some(("PP3", Strong, Strong)));
+        assert_eq!(reading("bayesdel-noaf", -0.36), Some(("BP4", Moderate, Moderate)));
+        assert_eq!(reading("bayesdel-noaf", -0.18), Some(("BP4", Supporting, Supporting)));
+        assert_eq!(reading("bayesdel-noaf", 0.0), None);
+        assert_eq!(reading("mutpred2", 0.829), Some(("PP3", Moderate, Moderate)));
+        assert_eq!(reading("mutpred2", 0.01), Some(("BP4", Strong, Moderate)));
+        assert_eq!(reading("vest4", 0.965), Some(("PP3", Strong, Strong)));
+        assert_eq!(reading("vest4", 0.302), Some(("BP4", Moderate, Moderate)));
+    }
+
+    fn oddspath(value: f64) -> Option<(&'static str, Strength)> {
+        RuleSet::builtin().unwrap().read_oddspath(value).map(|r| (r.code, r.strength))
+    }
+
+    #[test]
+    fn oddspath_limits_follow_brnich_2019_and_are_crossed_strictly() {
+        use Strength::*;
+        // Pathogenic: above 2.1, 4.3, 18.7 and 350. A value on a limit does not cross it.
+        assert_eq!(oddspath(2.1), None);
+        assert_eq!(oddspath(2.11), Some(("PS3", Supporting)));
+        assert_eq!(oddspath(4.3), Some(("PS3", Supporting)));
+        assert_eq!(oddspath(4.31), Some(("PS3", Moderate)));
+        assert_eq!(oddspath(18.7), Some(("PS3", Moderate)));
+        assert_eq!(oddspath(18.71), Some(("PS3", Strong)));
+        assert_eq!(oddspath(350.0), Some(("PS3", Strong)));
+        assert_eq!(oddspath(350.1), Some(("PS3", VeryStrong)));
+        // Benign: below 0.48, 0.23 and 0.053.
+        assert_eq!(oddspath(0.48), None);
+        assert_eq!(oddspath(0.47), Some(("BS3", Supporting)));
+        assert_eq!(oddspath(0.23), Some(("BS3", Supporting)));
+        assert_eq!(oddspath(0.22), Some(("BS3", Moderate)));
+        assert_eq!(oddspath(0.053), Some(("BS3", Moderate)));
+        assert_eq!(oddspath(0.05), Some(("BS3", Strong)));
+        assert_eq!(oddspath(0.0), Some(("BS3", Strong)));
+        // The indeterminate range, and values that cannot be an OddsPath.
+        assert_eq!(oddspath(1.0), None);
+        assert_eq!(oddspath(-0.1), None);
+        assert_eq!(oddspath(f64::NAN), None);
+        assert_eq!(oddspath(f64::INFINITY), None);
+    }
+
+    #[test]
+    fn without_statistics_the_number_of_controls_decides_and_stops_at_moderate() {
+        use Strength::*;
+        let rules = RuleSet::builtin().unwrap();
+        let read =
+            |damaging, controls| rules.read_functional_controls(damaging, controls).map(|r| (r.code, r.strength));
+        // No validation controls: no evidence at all, in either direction.
+        assert_eq!(read(true, 0), None);
+        assert_eq!(read(false, 0), None);
+        assert_eq!(read(true, 1), Some(("PS3", Supporting)));
+        assert_eq!(read(true, 10), Some(("PS3", Supporting)));
+        assert_eq!(read(true, 11), Some(("PS3", Moderate)));
+        assert_eq!(read(true, 500), Some(("PS3", Moderate)));
+        assert_eq!(read(false, 10), Some(("BS3", Supporting)));
+        assert_eq!(read(false, 11), Some(("BS3", Moderate)));
+    }
+
+    #[test]
+    fn functional_limits_that_run_the_wrong_way_are_refused() {
+        assert!(matches!(
+            edited(r#"{ strength = "strong", at = 18.7 }"#, r#"{ strength = "strong", at = 3.0 }"#),
+            Err(RuleError::BadFunctional(_))
+        ));
+        assert!(matches!(
+            edited(r#"{ strength = "supporting", at = 0.48 }"#, r#"{ strength = "supporting", at = 3.0 }"#),
+            Err(RuleError::BadFunctional(_))
+        ));
+        assert!(matches!(
+            edited("controls_moderate_min = 11", "controls_moderate_min = 0"),
+            Err(RuleError::BadFunctional(_))
+        ));
+        assert!(matches!(
+            edited("controls_supporting_min = 1", "controls_supporting_min = 0"),
+            Err(RuleError::BadFunctional(_))
+        ));
+        assert!(matches!(
+            edited("controls_supporting_min = 1", "controls_supporting_min = 11"),
+            Err(RuleError::BadFunctional(_))
+        ));
+        assert!(matches!(
+            edited("source = \"brnich2019\"\ncontrols", "source = \"nowhere\"\ncontrols"),
+            Err(RuleError::UnknownSource { .. })
+        ));
+    }
+
+    #[test]
+    fn a_score_that_is_not_a_number_or_an_unknown_tool_gives_nothing() {
+        assert_eq!(reading("revel", f64::NAN), None);
+        assert_eq!(reading("revel", f64::INFINITY), None);
+        assert_eq!(reading("not-a-tool", 0.9), None);
+    }
+
+    #[test]
+    fn predictor_limits_that_run_the_wrong_way_are_refused() {
+        // Strong must lie further from the middle than Moderate.
+        assert!(matches!(
+            edited(
+                r#"{ strength = "strong", at = 0.932 }]
+benign = [{ strength = "supporting", at = 0.290 }"#,
+                r#"{ strength = "strong", at = 0.700 }]
+benign = [{ strength = "supporting", at = 0.290 }"#
+            ),
+            Err(RuleError::BadPredictor { .. })
+        ));
+        // The benign and pathogenic sides may not overlap.
+        assert!(matches!(
+            edited(r#"{ strength = "supporting", at = 0.290 }"#, r#"{ strength = "supporting", at = 0.700 }"#),
+            Err(RuleError::BadPredictor { .. })
+        ));
+        // A predictor must cite a source the file lists.
+        assert!(matches!(
+            edited(
+                "id = \"vest4\"\nname = \"VEST4\"\nsource = \"pejaver2022\"",
+                "id = \"vest4\"\nname = \"VEST4\"\nsource = \"nowhere\""
+            ),
+            Err(RuleError::UnknownSource { .. })
+        ));
     }
 
     #[test]

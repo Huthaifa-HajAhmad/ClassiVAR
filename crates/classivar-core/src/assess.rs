@@ -19,17 +19,30 @@ pub struct Applied {
     /// files have no field and load with `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub situation: Option<String>,
+    /// Why the curator chose this strength, in their own words or from a helper
+    /// (for example "REVEL 0.95, Pejaver 2022"). Old files have no field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
+
+/// The longest reason a case file may carry, in characters.
+pub const MAX_REASON_CHARS: usize = 500;
 
 impl Applied {
     /// A criterion applied without a guide answer.
     pub fn new(code: impl Into<String>, strength: Strength) -> Self {
-        Self { code: code.into(), strength, situation: None }
+        Self { code: code.into(), strength, situation: None, reason: None }
     }
 
     /// A criterion whose strength came from a named guide situation.
     pub fn guided(code: impl Into<String>, strength: Strength, situation: impl Into<String>) -> Self {
-        Self { code: code.into(), strength, situation: Some(situation.into()) }
+        Self { code: code.into(), strength, situation: Some(situation.into()), reason: None }
+    }
+
+    /// The same criterion with the reason for its strength.
+    pub fn with_reason(mut self, reason: impl Into<String>) -> Self {
+        self.reason = Some(reason.into());
+        self
     }
 }
 
@@ -66,7 +79,8 @@ pub enum Warning {
     /// A criterion the experts no longer recommend. `counted` says whether it was scored.
     Discouraged { code: String, note: Option<String>, counted: bool },
     /// The curator changed a criterion's strength from its default.
-    StrengthChanged { code: String, from: Strength, to: Strength },
+    /// `reason` is what the curator wrote, if anything.
+    StrengthChanged { code: String, from: Strength, to: Strength, reason: Option<String> },
     /// Both criteria count, and one of them already covers the same observation.
     DoubleCounted { a: String, b: String, reason: String },
 }
@@ -164,6 +178,8 @@ pub enum AssessError {
     GuideMismatch { code: String, situation: String },
     #[error("criterion {code} has a strength guide; a new assessment must answer it")]
     GuideAnswerRequired { code: String },
+    #[error("criterion {code}: the reason is empty or longer than {MAX_REASON_CHARS} characters")]
+    BadReason { code: String },
 }
 
 impl RuleSet {
@@ -181,6 +197,11 @@ impl RuleSet {
             let c = self.criterion(&a.code).ok_or_else(|| AssessError::UnknownCriterion(a.code.clone()))?;
             if !seen.insert(a.code.as_str()) {
                 return Err(AssessError::DuplicateCriterion(a.code.clone()));
+            }
+            if let Some(reason) = &a.reason
+                && (reason.trim().is_empty() || reason.chars().count() > MAX_REASON_CHARS)
+            {
+                return Err(AssessError::BadReason { code: a.code.clone() });
             }
             // Today's strength limits apply to new assessments only; an old record may predate them.
             let allowed = match counting {
@@ -210,7 +231,12 @@ impl RuleSet {
                 Direction::Benign => -magnitude,
             };
             if a.strength != c.strength && counting == Counting::Current {
-                warnings.push(Warning::StrengthChanged { code: a.code.clone(), from: c.strength, to: a.strength });
+                warnings.push(Warning::StrengthChanged {
+                    code: a.code.clone(),
+                    from: c.strength,
+                    to: a.strength,
+                    reason: a.reason.clone(),
+                });
             }
             if c.discouraged {
                 warnings.push(Warning::Discouraged { code: a.code.clone(), note: c.note.clone(), counted });
@@ -589,6 +615,20 @@ mod tests {
     }
 
     #[test]
+    fn pm1_and_pp3_together_are_capped_at_strong() {
+        // Pejaver 2022: the sum of PP3 and PM1 may not go above Strong (4 points).
+        let a = apply(&[("PM1", Moderate), ("PP3", Strong)]);
+        assert_eq!(a.total_points, 6);
+        assert_eq!(a.combination_overuse.len(), 1);
+        assert_eq!(a.class(), None);
+
+        // Moderate + Moderate is exactly Strong, which is allowed.
+        let a = apply(&[("PM1", Moderate), ("PP3", Moderate)]);
+        assert!(a.combination_overuse.is_empty());
+        assert_eq!(a.class(), Some(Class::Vus));
+    }
+
+    #[test]
     fn a_start_loss_at_the_guide_strength_does_not_become_likely_pathogenic() {
         // PVS1_Supporting for a start-loss + PM2_Supporting: 2 points, a VUS. At the old
         // Very Strong default the same variant scored 9 points, Likely pathogenic.
@@ -703,6 +743,23 @@ mod tests {
     }
 
     #[test]
+    fn the_reason_for_a_raised_strength_travels_with_the_warning() {
+        let list = [Applied::new("PM2", Moderate).with_reason("founder population")];
+        let a = rules().assess(&list).unwrap();
+        assert!(a.warnings.contains(&Warning::StrengthChanged {
+            code: "PM2".into(),
+            from: Supporting,
+            to: Moderate,
+            reason: Some("founder population".into())
+        }));
+        // Empty and over-long reasons are refused at the door.
+        let empty = [Applied::new("PM2", Moderate).with_reason("  ")];
+        assert_eq!(rules().assess(&empty), Err(AssessError::BadReason { code: "PM2".into() }));
+        let long = [Applied::new("PM2", Moderate).with_reason("x".repeat(MAX_REASON_CHARS + 1))];
+        assert_eq!(rules().assess(&long), Err(AssessError::BadReason { code: "PM2".into() }));
+    }
+
+    #[test]
     fn discouraged_criteria_are_listed_but_not_counted_today() {
         let a = apply(&[("PP5", Supporting)]);
         assert!(!a.has_evidence);
@@ -730,7 +787,12 @@ mod tests {
     fn changing_a_strength_is_reported() {
         let a = apply(&[("PM2", Moderate)]);
         assert_eq!(a.total_points, 2);
-        assert!(a.warnings.contains(&Warning::StrengthChanged { code: "PM2".into(), from: Supporting, to: Moderate }));
+        assert!(a.warnings.contains(&Warning::StrengthChanged {
+            code: "PM2".into(),
+            from: Supporting,
+            to: Moderate,
+            reason: None
+        }));
     }
 
     #[test]
