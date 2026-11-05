@@ -15,6 +15,8 @@
 #   [[combination_caps]] two criteria that may be used together only up to a point total
 #   [[predictors]]   score limits for prediction tools, for PP3 and BP4
 #   [functional]     assay limits for PS3 and BS3 (controls and OddsPath)
+#   [locus_evidence] PP1 and PP4 points, their joint limit, and the allowed strengths
+#   [non_segregation] the situations in which BS4 does and does not apply
 #   [[criteria]]     the 28 ACMG/AMP criteria
 #
 # Changing a rule means editing this file. The program checks the file when it
@@ -23,9 +25,9 @@
 [meta]
 id = "acmg-amp-points"
 name = "ACMG/AMP 2015 criteria, points scoring (draft)"
-version = "0.6.0-draft"
+version = "0.8.0-draft"
 status = "unverified"
-note = "Draft. On 2026-11-03 the builder checked, against the sources on the web, the criteria wording (Richards 2015 Tables 3 and 4), the combining table (Table 5), the points and class thresholds (Tavtigian 2020, via its published summary), the PM2 recommendation (4 Sept 2020) and the PP5/BP6 recommendation (Biesecker and Harrison 2018). On 2026-11-04 an audit (docs/AUDIT-2026-11-04.md) found problems, and this version fixes them: PVS1 wording and strength guidance, the ClinGen 2020 combining addition, BP1 and PS4 wording, contradictory pairs now withhold the class, PP3 capped at Strong, discouraged criteria no longer counted. A later pass added the PVS1 situation guide, strength caps for weak evidence, PM4/PVS1 exclusivity, the PP1+PP4 combined cap, the BP4 Moderate ceiling, and saves the chosen PVS1 situation. Version 0.5.0 added the calibrated PP3/BP4 score limits for four tools (Pejaver 2022, Table 2) and the PM1+PP3 combined limit. Version 0.6.0 adds the functional-evidence limits for PS3/BS3 (Brnich 2019): the control-count route and the OddsPath limits. This is not a qualified review. Research and learning use only."
+note = "Draft. On 2026-11-03 the builder checked, against the sources on the web, the criteria wording (Richards 2015 Tables 3 and 4), the combining table (Table 5), the points and class thresholds (Tavtigian 2020, via its published summary), the PM2 recommendation (4 Sept 2020) and the PP5/BP6 recommendation (Biesecker and Harrison 2018). On 2026-11-04 an audit (docs/AUDIT-2026-11-04.md) found problems, and this version fixes them: PVS1 wording and strength guidance, the ClinGen 2020 combining addition, BP1 and PS4 wording, contradictory pairs now withhold the class, PP3 capped at Strong, discouraged criteria no longer counted. A later pass added the PVS1 situation guide, strength caps for weak evidence, PM4/PVS1 exclusivity, the PP1+PP4 combined cap, the BP4 Moderate ceiling, and saves the chosen PVS1 situation. Version 0.5.0 added the calibrated PP3/BP4 score limits for four tools (Pejaver 2022, Table 2) and the PM1+PP3 combined limit. Version 0.6.0 adds the functional-evidence limits for PS3/BS3 (Brnich 2019): the control-count route and the OddsPath limits. Version 0.7.0 adds the PP1/PP4 points arithmetic (ClinGen 2024, Tables 2 to 4) as a helper: points from diagnostic yield and from co-segregations, the 5 point limit, and the strength choices the paper allows. Version 0.8.0 adds a BS4 situation helper (same paper): BS4 stays Strong, and the helper applies it only where the paper supports it (not for compound heterozygotes, reduced penetrance with unaffected carriers, or high phenocopy rates). No points changed. The PP1/PP4 helper does not count PP1 when only one gene can cause the phenotype (the paper's locus homogeneity), and for several variants on one allele it divides the PP4 yield as the paper does and refuses PP1 (the paper's sharing worksheet is not built in). This is not a qualified review. Research and learning use only."
 
 [[sources]]
 id = "richards2015"
@@ -173,9 +175,10 @@ source = "richards2015"
 # Two criteria that may both apply, but not both at a high strength. The limit is
 # in this program's points. ClinGen limits phenotype (PP4) and co-segregation
 # (PP1) together at 5 points: the strongest allowed pair is Strong + Supporting.
-# Two Strong answers (8 points) are not allowed for the pair. Mapping the paper's
-# point bands onto this program's 1/2/4 strengths is an approximation, so the
-# program withholds the class rather than silently lowering a strength.
+# Two Strong answers (8 points) are not allowed for the pair. The [locus_evidence]
+# helper offers only strength choices that keep the pair within this limit. A
+# choice made by hand can still go over it, and then the program withholds the
+# class rather than silently lowering a strength.
 [[combination_caps]]
 a = "PP1"
 b = "PP4"
@@ -364,6 +367,125 @@ controls_moderate_min = 11
 pathogenic = [{ strength = "supporting", at = 2.1 }, { strength = "moderate", at = 4.3 }, { strength = "strong", at = 18.7 }, { strength = "very_strong", at = 350.0 }]
 benign = [{ strength = "supporting", at = 0.48 }, { strength = "moderate", at = 0.23 }, { strength = "strong", at = 0.053 }]
 
+# ---------------------------------------------------------------------------
+# Co-segregation (PP1) and phenotype specificity (PP4), ClinGen 2024. The paper
+# scores both in points that can be fractions (0.4, 1.5), then limits the two
+# together to 5 points and maps the total to strengths in its Table 4. This
+# program counts whole points per strength, so the helper only does the paper's
+# arithmetic and lists the Table 4 strength choices; the curator picks one.
+#   pp4_yield:    Table 2. A diagnostic yield (percent) at or above `at` earns
+#                 `points`; a yield between two rows rounds down to the lower row.
+#                 When several variants lie on one allele, the paper divides the
+#                 YIELD (a probability) among them and then reads this table; it
+#                 says one must not divide the points ("that would be
+#                 mathematically incorrect"). Its example: a 95.8% yield shared by
+#                 two variants is 47.9% each, which is 2.5 points each.
+#   yield_text_minimum: the paper's text says PP4 needs a yield "over 20%", but its
+#                 Table 2 gives 1 point at 19.1%. The table is followed, and the
+#                 screen warns for a yield below this value. A reviewer should
+#                 decide whether to start at 20 instead.
+#   segregation:  Table 3. Points for each informative co-segregation. The
+#                 paper's table stops at five; it says to keep adding for an
+#                 autosomal-recessive unaffected relative, and the total is
+#                 capped anyway, so a straight multiple matches every row.
+#   cap_points:   the limit for PP1 and PP4 together. The loader requires the
+#                 PP1/PP4 combination cap to be the same number, and the standard
+#                 point scale (Supporting 1, Moderate 2, Strong 4), because Table 4
+#                 is written in those points.
+#   bands:        Table 4. From `min_points` upwards (and below the next band) the
+#                 paper allows these strengths. Each option is one allowed choice.
+#                 The loader checks that no option is worth more program points
+#                 than the band's lower edge.
+#   homogeneity_text: when only one gene can cause the phenotype (locus
+#                 homogeneity) the paper says not to use segregation to support
+#                 pathogenicity, so PP1 is not counted and only PP4 is offered.
+#   notes:        cautions for PP4 from the paper, shown with the helper.
+# Numbers read from the open-access paper (PMC10806742) on 2026-11-04 and
+# 2026-11-05 and agreed each time; a reviewer must still check them. Not built in:
+# sharing PP1 points among several variants on one allele (the paper gives a
+# worksheet, its Table S1, which was not available); the helper refuses PP1 when
+# more than one variant shares the allele. BS4 has its own table below.
+# ---------------------------------------------------------------------------
+[locus_evidence]
+source = "clingen-pp1-pp4-2024"
+cap_points = 5.0
+yield_text_minimum = 20.0
+homogeneity_text = "If only this gene can cause the phenotype (locus homogeneity), the paper says that co-segregation cannot be counted as evidence beyond the phenotype points, and not to use segregation to support pathogenicity. PP1 is not counted; use PP4 only."
+notes = [
+  "The yield must come from testing comparable to this patient's test, for the same phenotype. The paper says the evidence depends on the phenotype matching.",
+  "PP4 is for genes with definitive or strong gene-disease validity, not for new gene-disease claims.",
+  "When many genes can cause the phenotype (high locus heterogeneity), use PP4 with caution.",
+  "A family seen before counts as PP4 or PS4, not both.",
+]
+pp4_yield = [
+  { at = 19.1, points = 1.0 }, { at = 25.4, points = 1.5 }, { at = 33.0, points = 2.0 }, { at = 41.5, points = 2.5 },
+  { at = 50.6, points = 3.0 }, { at = 59.6, points = 3.5 }, { at = 68.0, points = 4.0 }, { at = 75.4, points = 4.5 },
+  { at = 81.6, points = 5.0 }, { at = 86.4, points = 5.5 }, { at = 90.2, points = 6.0 }, { at = 93.0, points = 6.5 },
+  { at = 95.0, points = 7.0 }, { at = 96.5, points = 7.5 }, { at = 97.5, points = 8.0 }, { at = 98.3, points = 8.5 },
+  { at = 98.8, points = 9.0 }, { at = 99.2, points = 9.5 }, { at = 99.4, points = 10.0 }, { at = 99.6, points = 10.5 },
+  { at = 99.7, points = 11.0 }, { at = 99.8, points = 11.5 }, { at = 99.9, points = 12.0 },
+]
+segregation = [
+  { id = "dominant", label = "Autosomal dominant", points_each = 1.0, note = "Count affected relatives who carry the variant. The table also lists unaffected relatives: count an unaffected relative who does not carry the variant only if the disease is fully penetrant. For reduced penetrance the paper recommends counting affected relatives only. Do not count unaffected parents: they are used to establish phase." },
+  { id = "x-linked-male", label = "X-linked recessive, male", points_each = 1.0, note = "Count affected males who carry the variant, and unaffected males who do not carry it, the latter only if the disease is fully penetrant. A female whose carrier status is certain (for example she has an affected brother or son) can count too, and extra segregations in obligate heterozygous females can be counted. Do not count unaffected parents." },
+  { id = "recessive-affected", label = "Autosomal recessive, affected", points_each = 2.0, note = "Count affected relatives who have the same genotype as the patient." },
+  { id = "recessive-unaffected", label = "Autosomal recessive, unaffected", points_each = 0.4, note = "Count unaffected relatives who did not inherit the patient's variants, only if the disease is fully penetrant. Do not count unaffected parents: they are used to establish phase." },
+]
+bands = [
+  { min_points = 1.0, options = [{ pp1 = "supporting" }, { pp4 = "supporting" }] },
+  { min_points = 2.0, options = [{ pp1 = "moderate" }, { pp4 = "moderate" }, { pp1 = "supporting", pp4 = "supporting" }] },
+  { min_points = 3.0, options = [{ pp1 = "supporting", pp4 = "moderate" }, { pp1 = "moderate", pp4 = "supporting" }] },
+  { min_points = 4.0, options = [{ pp1 = "strong" }, { pp4 = "strong" }, { pp1 = "moderate", pp4 = "moderate" }] },
+  { min_points = 5.0, options = [{ pp1 = "strong", pp4 = "supporting" }, { pp1 = "supporting", pp4 = "strong" }] },
+]
+
+# ---------------------------------------------------------------------------
+# Non-segregation (BS4), same ClinGen 2024 paper. It recommends -4.0 points for
+# non-segregation in autosomal dominant, autosomal recessive (patient homozygous)
+# and X-linked disease. That is Strong benign in this program's points, which is
+# already BS4's default strength, so no number changes. The paper says it has not
+# formally measured this strength and keeps the earlier one. What the paper adds
+# is the conditions: when non-segregation is not evidence. Each situation below
+# says whether BS4 applies; the helper applies `strength` only for those that do.
+# Read from the open-access paper (PMC10806742, Europe PMC copy) on 2026-11-05 and
+# agreeing with an earlier reading; a reviewer must check the wording. Not built:
+# counting individuals (the paper gives no per-person BS4 table), and how to weigh
+# BS4 against PP1 in one family (the text read does not say).
+# ---------------------------------------------------------------------------
+[non_segregation]
+source = "clingen-pp1-pp4-2024"
+strength = "strong"
+
+[[non_segregation.situations]]
+id = "follows-not"
+label = "Does not follow the disease"
+applies = true
+text = "Autosomal dominant, X-linked, or autosomal recessive with the patient homozygous: the variant does not follow the disease in the family (non-segregation). The paper recommends -4 points, which is Strong for BS4. It has not formally measured this strength and keeps the earlier one. Count only family members whose status is certain."
+
+[[non_segregation.situations]]
+id = "compound-heterozygous"
+label = "Recessive, compound heterozygous"
+applies = false
+text = "Autosomal recessive and the patient has two different variants (compound heterozygous). A relative who lacks one of them gives little to no evidence that the variant is not pathogenic, because only one of the two alleles is necessarily benign (ClinGen 2024). Do not apply BS4."
+
+[[non_segregation.situations]]
+id = "reduced-penetrance"
+label = "Reduced penetrance, unaffected carriers"
+applies = false
+text = "The disease has reduced penetrance and only unaffected carriers were seen. An unaffected carrier is not evidence against the variant, because carriers may stay unaffected. The paper counts unaffected people only if the disease is fully penetrant. Its quick method then looks at affected people only, and it warns that this can miss evidence against pathogenicity; for low penetrance it points to formal linkage analysis. Do not apply BS4 from unaffected carriers."
+
+[[non_segregation.situations]]
+id = "high-phenocopy"
+label = "Many look-alike cases (phenocopy)"
+applies = false
+text = "The disease has a high rate of phenocopy: people who have the same disease from another cause, for example colon cancer. The paper does not recommend its quick points method for such diseases and says valid segregation evidence needs formal segregation analysis. Do not use this helper."
+
+[[non_segregation.situations]]
+id = "conflicting-or-large"
+label = "Conflicting results or a very large family"
+applies = false
+text = "The family results conflict with each other, or the family is very large or has a complex structure. The paper says to use formal linkage analysis in these cases, which needs statistical genetics expertise. Do not use this helper."
+
 [[criteria]]
 code = "PS3"
 direction = "pathogenic"
@@ -459,7 +581,7 @@ title = "Co-segregation with disease"
 summary = "The variant travels with the disease in several affected family members, in a gene definitively known to cause the disease."
 source = "richards2015"
 strength_source = "clingen-pp1-pp4-2024"
-note = "ClinGen's 2024 points guidance can raise this up to Strong when several family members share the variant and the disease. The same guidance caps PP1 and PP4 together at 5 points, so this program withholds the class when the pair exceeds it. The change in strength from a curator is shown."
+note = "ClinGen's 2024 points guidance can raise this up to Strong when several family members share the variant and the disease. The same guidance caps PP1 and PP4 together at 5 points, so this program withholds the class when the pair exceeds it. The guidance also says that when only one gene can cause the phenotype (locus homogeneity), co-segregation is not evidence beyond the phenotype points, so PP1 does not apply then. Use the co-segregation and phenotype helper in the criteria list to turn the family and phenotype facts into the strengths the paper allows. The change in strength from a curator is shown."
 
 [[criteria]]
 code = "PP2"
@@ -493,7 +615,7 @@ title = "Highly specific phenotype"
 summary = "The patient's features or family history are highly specific for a disease with a single genetic cause."
 source = "richards2015"
 strength_source = "clingen-pp1-pp4-2024"
-note = "ClinGen's 2024 guidance links this criterion to how specific the phenotype is for the gene and caps PP1 and PP4 together at 5 points. The program withholds the class when the pair exceeds that cap."
+note = "ClinGen's 2024 guidance links this criterion to how specific the phenotype is for the gene (the diagnostic yield of testing for it) and caps PP1 and PP4 together at 5 points. The program withholds the class when the pair exceeds that cap. Use the co-segregation and phenotype helper in the criteria list for the points and the strengths the paper allows."
 
 [[criteria]]
 code = "PP5"
@@ -559,7 +681,7 @@ category = "family_cases"
 title = "Does not segregate with disease"
 summary = "The variant does not follow the disease in affected family members."
 source = "richards2015"
-note = "ClinGen guidance on segregation covers this criterion together with PP1. ClinGen has published refinements for this criterion that are not built in yet. The strength here is the generic 2015 default and may differ for your gene or evidence."
+note = "ClinGen's 2024 guidance on segregation covers this criterion together with PP1. It recommends -4 points (Strong) for non-segregation in dominant, X-linked and homozygous recessive disease, and says it gives little to no evidence for compound heterozygous recessive cases; it did not formally measure the strength. Use the non-segregation helper in the criteria list to check which situation fits."
 
 [[criteria]]
 code = "BP1"

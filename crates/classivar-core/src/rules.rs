@@ -146,6 +146,100 @@ pub struct FunctionalRules {
     pub benign: Vec<Cutoff>,
 }
 
+/// One row of the PP4 table: a diagnostic yield (in percent) and the points it earns.
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct YieldStep {
+    pub at: f64,
+    pub points: f64,
+}
+
+/// One kind of co-segregation evidence for PP1, and what each informative
+/// family member is worth.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SegregationKind {
+    /// Stable id, for the program to refer to the kind.
+    pub id: String,
+    pub label: String,
+    pub points_each: f64,
+    /// Who may be counted, in the paper's words.
+    pub note: Option<String>,
+}
+
+/// One strength choice the paper allows for a number of points. A criterion left
+/// out of the choice is not part of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+pub struct LocusChoice {
+    pub pp1: Option<Strength>,
+    pub pp4: Option<Strength>,
+}
+
+/// The choices the paper allows once the points reach `min_points` (and until the next band starts).
+#[derive(Debug, Clone, Deserialize)]
+pub struct LocusBand {
+    pub min_points: f64,
+    pub options: Vec<LocusChoice>,
+}
+
+/// Co-segregation (PP1) and phenotype specificity (PP4) in points, ClinGen 2024.
+/// The paper limits the two together to `cap_points`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct LocusRules {
+    pub source: String,
+    pub cap_points: f64,
+    /// The paper's text asks for a yield over this (percent); its table starts lower.
+    /// The screen warns for a yield below it.
+    pub yield_text_minimum: f64,
+    /// What the paper says when only one gene can cause the phenotype: PP1 does not count.
+    pub homogeneity_text: String,
+    /// Cautions for PP4 from the paper, shown with the helper.
+    #[serde(default)]
+    pub notes: Vec<String>,
+    /// Weakest first. A yield at or above `at` earns the points; between two rows it rounds down.
+    pub pp4_yield: Vec<YieldStep>,
+    pub segregation: Vec<SegregationKind>,
+    /// Lowest points first.
+    pub bands: Vec<LocusBand>,
+}
+
+/// What the PP1 and PP4 points add up to and which strengths the paper allows for them.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LocusReading {
+    /// The sum of the PP1 and PP4 points, before the cap.
+    pub sum: f64,
+    /// The sum after the cap.
+    pub total: f64,
+    /// True when the sum was above the cap and was cut down to it.
+    pub capped: bool,
+    /// Empty when the points are below the lowest band: the paper gives no evidence.
+    pub choices: Vec<LocusChoice>,
+}
+
+/// One situation in which non-segregation is, or is not, evidence against a variant (BS4).
+#[derive(Debug, Clone, Deserialize)]
+pub struct NonSegregationSituation {
+    /// Stable id, for the program to refer to the situation.
+    pub id: String,
+    /// A few words for the button.
+    pub label: String,
+    /// True when the source supports BS4 in this situation.
+    pub applies: bool,
+    /// What the source says about this situation, in plain words.
+    pub text: String,
+}
+
+/// When BS4 applies (ClinGen 2024). Where it does, it is applied at `strength`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct NonSegregationRules {
+    pub source: String,
+    pub strength: Strength,
+    pub situations: Vec<NonSegregationSituation>,
+}
+
+/// Points come in steps of 0.1 or more; rounding removes sums such as 2.9999999999999996.
+fn round_points(points: f64) -> f64 {
+    (points * 100.0).round() / 100.0
+}
+
 /// What a score or an assay result means for one criterion. Between the two
 /// sets of limits there is no reading, so the evidence is neither side.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -261,6 +355,8 @@ struct RuleSetFile {
     #[serde(default)]
     predictors: Vec<Predictor>,
     functional: Option<FunctionalRules>,
+    locus_evidence: Option<LocusRules>,
+    non_segregation: Option<NonSegregationRules>,
     criteria: Vec<Criterion>,
 }
 
@@ -279,6 +375,10 @@ pub struct RuleSet {
     pub predictors: Vec<Predictor>,
     /// Functional-assay evidence limits for PS3 and BS3 (absent in older rule files).
     pub functional: Option<FunctionalRules>,
+    /// PP1 and PP4 points and the strengths the paper allows (absent in older rule files).
+    pub locus_evidence: Option<LocusRules>,
+    /// The situations in which BS4 applies (absent in older rule files).
+    pub non_segregation: Option<NonSegregationRules>,
     pub criteria: Vec<Criterion>,
 }
 
@@ -296,6 +396,8 @@ impl TryFrom<RuleSetFile> for RuleSet {
             combination_caps: file.combination_caps,
             predictors: file.predictors,
             functional: file.functional,
+            locus_evidence: file.locus_evidence,
+            non_segregation: file.non_segregation,
             criteria: file.criteria,
         };
         rules.check()?;
@@ -347,6 +449,10 @@ pub enum RuleError {
     ReviewIncomplete,
     #[error("functional evidence limits: {0}")]
     BadFunctional(String),
+    #[error("co-segregation and phenotype limits: {0}")]
+    BadLocusEvidence(String),
+    #[error("non-segregation situations: {0}")]
+    BadNonSegregation(String),
     #[error("predictor {id}: {problem}")]
     BadPredictor { id: String, problem: String },
     #[error("VUS tiers: {0}")]
@@ -426,6 +532,66 @@ impl RuleSet {
             let cut = rules.benign.iter().rfind(|cut| value < cut.at)?;
             self.reading("BS3", cut.strength)
         }
+    }
+
+    /// The PP4 points a diagnostic yield (percent) earns. When `variants_on_allele`
+    /// variants share one allele, the paper divides the yield (a probability) among
+    /// them before it reads the table; points must not be divided. `None` when the
+    /// rules have no table, the yield is not between 0 and 100, there are no
+    /// variants, or the (divided) yield is below the table's first row.
+    pub fn pp4_points(&self, diagnostic_yield: f64, variants_on_allele: u32) -> Option<f64> {
+        let rules = self.locus_evidence.as_ref()?;
+        if !(0.0..=100.0).contains(&diagnostic_yield) || variants_on_allele == 0 {
+            return None;
+        }
+        let shared = diagnostic_yield / f64::from(variants_on_allele);
+        rules.pp4_yield.iter().rfind(|step| shared >= step.at).map(|step| step.points)
+    }
+
+    /// The PP1 points for `count` informative co-segregations of one kind. `None`
+    /// when the rules have no table or the kind id is unknown.
+    pub fn pp1_points(&self, kind_id: &str, count: u32) -> Option<f64> {
+        let kind = self.locus_evidence.as_ref()?.segregation.iter().find(|kind| kind.id == kind_id)?;
+        Some(round_points(kind.points_each * f64::from(count)))
+    }
+
+    /// Adds the PP1 and PP4 points, applies the limit for the two together and
+    /// lists the strength choices the paper allows. `None` when the rules have no
+    /// table or a point value is negative or not a number.
+    ///
+    /// With `pp1_allowed` false (only one gene can cause the phenotype) only PP4
+    /// choices are listed: the highest band that has a PP4-only choice, at or
+    /// below the total. Table 4 says "maximum allowable", so a lower band's choice
+    /// is also allowed.
+    pub fn read_locus(&self, pp1_points: f64, pp4_points: f64, pp1_allowed: bool) -> Option<LocusReading> {
+        let rules = self.locus_evidence.as_ref()?;
+        if [pp1_points, pp4_points].iter().any(|points| !points.is_finite() || *points < 0.0) {
+            return None;
+        }
+        let sum = round_points(pp1_points + pp4_points);
+        let total = sum.min(rules.cap_points);
+        let choices = rules
+            .bands
+            .iter()
+            .rev()
+            .filter(|band| total >= band.min_points)
+            .map(|band| {
+                band.options.iter().filter(|choice| pp1_allowed || choice.pp1.is_none()).copied().collect::<Vec<_>>()
+            })
+            .find(|options| !options.is_empty())
+            .unwrap_or_default();
+        Some(LocusReading { sum, total, capped: sum > rules.cap_points, choices })
+    }
+
+    /// The BS4 evidence for a situation. `None` when the rules have no such table,
+    /// the id is unknown, or the source says BS4 does not apply in that situation.
+    pub fn read_non_segregation(&self, situation_id: &str) -> Option<EvidenceReading> {
+        let rules = self.non_segregation.as_ref()?;
+        let situation = rules.situations.iter().find(|s| s.id == situation_id)?;
+        if !situation.applies {
+            return None;
+        }
+        self.reading("BS4", rules.strength)
     }
 
     /// A published strength for `code`, lowered to the highest this program offers
@@ -614,6 +780,8 @@ impl RuleSet {
 
         self.check_predictors(&known_sources)?;
         self.check_functional(&known_sources)?;
+        self.check_locus(&known_sources)?;
+        self.check_non_segregation(&known_sources)?;
 
         for tier in &self.vus_tiers {
             needs_source(tier.name.clone(), &tier.source)?;
@@ -658,6 +826,134 @@ impl RuleSet {
             && b.at > p.at
         {
             return bad("the benign and pathogenic limits overlap");
+        }
+        Ok(())
+    }
+
+    /// The BS4 table needs a known source, the criterion BS4 at a strength it allows,
+    /// and situations with unique ids, of which at least one applies.
+    fn check_non_segregation(&self, known_sources: &HashSet<&str>) -> Result<(), RuleError> {
+        let Some(rules) = &self.non_segregation else { return Ok(()) };
+        let bad = |problem: &str| Err(RuleError::BadNonSegregation(problem.to_string()));
+        if !known_sources.contains(rules.source.as_str()) {
+            return Err(RuleError::UnknownSource {
+                item: "non-segregation situations".to_string(),
+                source_id: rules.source.clone(),
+            });
+        }
+        let Some(bs4) = self.criterion("BS4") else { return bad("it needs the criterion BS4") };
+        if bs4.direction != Direction::Benign || bs4.discouraged {
+            return bad("BS4 must be a benign criterion that is not discouraged");
+        }
+        if !bs4.allowed_strengths().contains(&rules.strength) {
+            return bad("the strength is one that BS4 does not allow");
+        }
+        // The paper recommends -4 points; the helper says so on screen.
+        if self.magnitude(rules.strength) != 4 {
+            return bad("the strength must be worth 4 points, the paper's -4");
+        }
+        let mut ids = HashSet::new();
+        let shaped = rules
+            .situations
+            .iter()
+            .all(|s| !s.id.trim().is_empty() && !s.label.trim().is_empty() && !s.text.trim().is_empty());
+        if rules.situations.is_empty() || !shaped {
+            return bad("there must be situations, each with an id, a label and a text");
+        }
+        if !rules.situations.iter().all(|s| ids.insert(s.id.as_str())) {
+            return bad("situation ids must be unique");
+        }
+        if !rules.situations.iter().any(|s| s.applies) {
+            return bad("at least one situation must apply, or BS4 could never be offered");
+        }
+        Ok(())
+    }
+
+    /// The PP1/PP4 tables need a known source, the criteria PP1 and PP4, rising
+    /// rows, and strength choices that the criteria allow and that never promise
+    /// more points than the evidence has earned.
+    fn check_locus(&self, known_sources: &HashSet<&str>) -> Result<(), RuleError> {
+        let Some(rules) = &self.locus_evidence else { return Ok(()) };
+        let bad = |problem: &str| Err(RuleError::BadLocusEvidence(problem.to_string()));
+        if !known_sources.contains(rules.source.as_str()) {
+            return Err(RuleError::UnknownSource {
+                item: "co-segregation and phenotype limits".to_string(),
+                source_id: rules.source.clone(),
+            });
+        }
+        let (Some(pp1), Some(pp4)) = (self.criterion("PP1"), self.criterion("PP4")) else {
+            return bad("it needs the criteria PP1 and PP4");
+        };
+        if [pp1, pp4].iter().any(|c| c.direction != Direction::Pathogenic || c.discouraged) {
+            return bad("PP1 and PP4 must be pathogenic criteria that are not discouraged");
+        }
+        // Table 4 is written in the standard points, so a different scale would make its choices wrong.
+        if (self.points.supporting, self.points.moderate, self.points.strong) != (1, 2, 4) {
+            return bad("it needs the standard point scale: Supporting 1, Moderate 2, Strong 4");
+        }
+        let positive = |x: f64| x.is_finite() && x > 0.0;
+        if !positive(rules.cap_points) || rules.cap_points > f64::from(MAX_POINTS) {
+            return bad("cap_points must be a positive number");
+        }
+        // The class is withheld by the combination cap, so it must match the limit the helper uses.
+        let pair_cap = self
+            .combination_caps
+            .iter()
+            .find(|cap| (cap.a == "PP1" && cap.b == "PP4") || (cap.a == "PP4" && cap.b == "PP1"));
+        if pair_cap.is_none_or(|cap| f64::from(cap.max_points) != rules.cap_points) {
+            return bad("it needs a PP1/PP4 combination cap equal to cap_points");
+        }
+        if !positive(rules.yield_text_minimum) || rules.yield_text_minimum > 100.0 {
+            return bad("yield_text_minimum must be a percentage above 0");
+        }
+        if rules.homogeneity_text.trim().is_empty() || rules.notes.iter().any(|note| note.trim().is_empty()) {
+            return bad("the homogeneity text and every note must be filled in");
+        }
+        if rules.pp4_yield.is_empty()
+            || rules.pp4_yield.iter().any(|step| !positive(step.points) || !positive(step.at) || step.at > 100.0)
+        {
+            return bad("every yield row needs a yield between 0 and 100 and positive points, and there must be rows");
+        }
+        if rules.pp4_yield.windows(2).any(|w| w[0].at >= w[1].at || w[0].points >= w[1].points) {
+            return bad("yield rows must rise in both yield and points");
+        }
+        let mut ids = HashSet::new();
+        if rules.segregation.is_empty()
+            || rules
+                .segregation
+                .iter()
+                .any(|kind| kind.id.trim().is_empty() || kind.label.trim().is_empty() || !positive(kind.points_each))
+        {
+            return bad("every co-segregation kind needs an id, a label and positive points, and there must be kinds");
+        }
+        if !rules.segregation.iter().all(|kind| ids.insert(kind.id.as_str())) {
+            return bad("co-segregation ids must be unique");
+        }
+        if rules.bands.is_empty()
+            || rules.bands.iter().any(|band| !positive(band.min_points) || band.min_points > rules.cap_points)
+            || rules.bands.windows(2).any(|w| w[0].min_points >= w[1].min_points)
+        {
+            return bad("bands must start above zero, rise, and not start above cap_points");
+        }
+        for band in &rules.bands {
+            if band.options.is_empty() {
+                return bad("every band needs at least one strength choice");
+            }
+            for choice in &band.options {
+                if choice.pp1.is_none() && choice.pp4.is_none() {
+                    return bad("a strength choice names neither PP1 nor PP4");
+                }
+                let allowed = |criterion: &Criterion, strength: Option<Strength>| {
+                    strength.is_none_or(|s| criterion.allowed_strengths().contains(&s))
+                };
+                if !allowed(pp1, choice.pp1) || !allowed(pp4, choice.pp4) {
+                    return bad("a strength choice uses a strength the criterion does not allow");
+                }
+                let worth: i32 = [choice.pp1, choice.pp4].into_iter().flatten().map(|s| self.magnitude(s)).sum();
+                if f64::from(worth) > band.min_points || f64::from(worth) > rules.cap_points {
+                    return bad("a strength choice is worth more points than its band has earned");
+                }
+            }
         }
         Ok(())
     }
@@ -871,6 +1167,312 @@ mod tests {
             edited("source = \"brnich2019\"\ncontrols", "source = \"nowhere\"\ncontrols"),
             Err(RuleError::UnknownSource { .. })
         ));
+    }
+
+    /// ClinGen 2024, Table 2, copied here by hand so the rule file is checked against
+    /// an independent copy: (diagnostic yield in percent, points).
+    const TABLE_2: [(f64, f64); 23] = [
+        (19.1, 1.0),
+        (25.4, 1.5),
+        (33.0, 2.0),
+        (41.5, 2.5),
+        (50.6, 3.0),
+        (59.6, 3.5),
+        (68.0, 4.0),
+        (75.4, 4.5),
+        (81.6, 5.0),
+        (86.4, 5.5),
+        (90.2, 6.0),
+        (93.0, 6.5),
+        (95.0, 7.0),
+        (96.5, 7.5),
+        (97.5, 8.0),
+        (98.3, 8.5),
+        (98.8, 9.0),
+        (99.2, 9.5),
+        (99.4, 10.0),
+        (99.6, 10.5),
+        (99.7, 11.0),
+        (99.8, 11.5),
+        (99.9, 12.0),
+    ];
+
+    #[test]
+    fn pp4_points_follow_every_row_of_table_2_and_round_down_between_rows() {
+        let rules = RuleSet::builtin().unwrap();
+        let mut below = None;
+        for (at, points) in TABLE_2 {
+            assert_eq!(rules.pp4_points(at, 1), Some(points), "at {at}%");
+            // Just under a row, the row below applies (nothing under the first row).
+            assert_eq!(rules.pp4_points(at - 0.01, 1), below, "just under {at}%");
+            below = Some(points);
+        }
+        assert_eq!(rules.pp4_points(0.0, 1), None);
+        assert_eq!(rules.pp4_points(100.0, 1), Some(12.0));
+        // Not a percentage.
+        assert_eq!(rules.pp4_points(100.1, 1), None);
+        assert_eq!(rules.pp4_points(-5.0, 1), None);
+        assert_eq!(rules.pp4_points(f64::NAN, 1), None);
+        assert_eq!(rules.pp4_points(f64::INFINITY, 1), None);
+    }
+
+    #[test]
+    fn variants_sharing_an_allele_divide_the_yield_not_the_points() {
+        let rules = RuleSet::builtin().unwrap();
+        // The paper's example (Figure 2B and Section 3.3): a 95.8% yield is 7 points.
+        // Shared by two variants, each has 47.9%, which rounds down to the 41.5% row:
+        // 2.5 points each. Dividing the 7 points would wrongly give 3.5.
+        assert_eq!(rules.pp4_points(95.8, 1), Some(7.0));
+        assert_eq!(rules.pp4_points(95.8, 2), Some(2.5));
+        // A yield that falls below the table once shared earns nothing.
+        assert_eq!(rules.pp4_points(30.0, 2), None);
+        // No variants is not a case.
+        assert_eq!(rules.pp4_points(95.8, 0), None);
+    }
+
+    #[test]
+    fn pp1_points_follow_table_3() {
+        let rules = RuleSet::builtin().unwrap();
+        assert_eq!(rules.pp1_points("dominant", 0), Some(0.0));
+        assert_eq!(rules.pp1_points("dominant", 3), Some(3.0));
+        assert_eq!(rules.pp1_points("dominant", 5), Some(5.0));
+        assert_eq!(rules.pp1_points("x-linked-male", 4), Some(4.0));
+        assert_eq!(rules.pp1_points("recessive-affected", 1), Some(2.0));
+        assert_eq!(rules.pp1_points("recessive-affected", 5), Some(10.0));
+        // 0.4 is not exact in binary; the result must still read as the table does.
+        assert_eq!(rules.pp1_points("recessive-unaffected", 3), Some(1.2));
+        assert_eq!(rules.pp1_points("recessive-unaffected", 5), Some(2.0));
+        // The paper says to keep adding 0.4 for each one above five.
+        assert_eq!(rules.pp1_points("recessive-unaffected", 7), Some(2.8));
+        assert_eq!(rules.pp1_points("not-a-kind", 3), None);
+    }
+
+    /// The PP1 and PP4 strengths of each choice, in the order the rule file lists them.
+    type Choices = Vec<(Option<Strength>, Option<Strength>)>;
+
+    fn locus_with(pp1: f64, pp4: f64, pp1_allowed: bool) -> (f64, bool, Choices) {
+        let r = RuleSet::builtin().unwrap().read_locus(pp1, pp4, pp1_allowed).unwrap();
+        (r.total, r.capped, r.choices.iter().map(|c| (c.pp1, c.pp4)).collect())
+    }
+
+    fn locus(pp1: f64, pp4: f64) -> (f64, bool, Choices) {
+        locus_with(pp1, pp4, true)
+    }
+
+    #[test]
+    fn locus_points_give_the_strength_choices_of_table_4() {
+        use Strength::*;
+        // 0 to 0.9 points: not applicable.
+        assert_eq!(locus(0.0, 0.0), (0.0, false, vec![]));
+        assert_eq!(locus(0.4, 0.5), (0.9, false, vec![]));
+        // 1 to 1.9: one criterion at Supporting.
+        let one = vec![(Some(Supporting), None), (None, Some(Supporting))];
+        assert_eq!(locus(1.0, 0.0), (1.0, false, one.clone()));
+        assert_eq!(locus(0.5, 1.4), (1.9, false, one));
+        // 2 to 2.9.
+        let two = vec![(Some(Moderate), None), (None, Some(Moderate)), (Some(Supporting), Some(Supporting))];
+        assert_eq!(locus(1.0, 1.0), (2.0, false, two.clone()));
+        assert_eq!(locus(0.0, 2.9), (2.9, false, two));
+        // 3 to 3.9.
+        let three = vec![(Some(Supporting), Some(Moderate)), (Some(Moderate), Some(Supporting))];
+        assert_eq!(locus(1.0, 2.0), (3.0, false, three.clone()));
+        assert_eq!(locus(0.0, 3.5), (3.5, false, three));
+        // 4 to 4.9.
+        let four = vec![(Some(Strong), None), (None, Some(Strong)), (Some(Moderate), Some(Moderate))];
+        assert_eq!(locus(4.0, 0.0), (4.0, false, four.clone()));
+        assert_eq!(locus(2.0, 2.5), (4.5, false, four));
+        // 5 or more: the largest allowed pair is Strong with Supporting, and the sum stops at 5.
+        let five = vec![(Some(Strong), Some(Supporting)), (Some(Supporting), Some(Strong))];
+        assert_eq!(locus(3.0, 2.0), (5.0, false, five.clone()));
+        assert_eq!(locus(5.0, 12.0), (5.0, true, five));
+    }
+
+    #[test]
+    fn the_reading_keeps_the_sum_before_the_cap() {
+        let reading = RuleSet::builtin().unwrap().read_locus(5.0, 12.0, true).unwrap();
+        assert_eq!((reading.sum, reading.total, reading.capped), (17.0, 5.0, true));
+    }
+
+    #[test]
+    fn when_only_one_gene_causes_the_phenotype_only_pp4_choices_are_listed() {
+        use Strength::*;
+        // Table 4 says "maximum allowable", so a lower band's PP4-only choice is allowed
+        // when the band the total reaches has none (bands 3 and 5 have only pairs).
+        assert_eq!(locus_with(0.0, 0.5, false), (0.5, false, vec![]));
+        assert_eq!(locus_with(0.0, 1.5, false), (1.5, false, vec![(None, Some(Supporting))]));
+        assert_eq!(locus_with(0.0, 2.0, false), (2.0, false, vec![(None, Some(Moderate))]));
+        assert_eq!(locus_with(0.0, 3.5, false), (3.5, false, vec![(None, Some(Moderate))]));
+        assert_eq!(locus_with(0.0, 4.5, false), (4.5, false, vec![(None, Some(Strong))]));
+        // The most PP4 can reach alone is Strong, even at the 5 point limit.
+        assert_eq!(locus_with(0.0, 12.0, false), (5.0, true, vec![(None, Some(Strong))]));
+    }
+
+    #[test]
+    fn a_point_value_that_is_not_a_number_or_is_negative_gives_no_reading() {
+        let rules = RuleSet::builtin().unwrap();
+        for (pp1, pp4) in [(f64::NAN, 1.0), (1.0, f64::NAN), (f64::INFINITY, 0.0), (0.0, f64::INFINITY), (-1.0, 3.0)] {
+            assert_eq!(rules.read_locus(pp1, pp4, true), None, "{pp1}, {pp4}");
+        }
+    }
+
+    #[test]
+    fn locus_points_that_add_to_a_band_edge_are_not_lost_to_rounding_noise() {
+        // 0.1 + 0.7 is 0.7999999999999999 in binary arithmetic, and plus 0.2 it
+        // lands just under 1.0. The sum is rounded before the band is chosen.
+        let (total, _, choices) = locus(0.1 + 0.7, 0.2);
+        assert_eq!(total, 1.0);
+        assert_eq!(choices.len(), 2);
+    }
+
+    #[test]
+    fn no_locus_choice_promises_more_than_the_points_earned_or_the_pair_limit() {
+        let rules = RuleSet::builtin().unwrap();
+        let locus = rules.locus_evidence.as_ref().unwrap();
+        let cap = rules.combination_caps.iter().find(|c| c.a == "PP1" && c.b == "PP4").unwrap();
+        for band in &locus.bands {
+            for choice in &band.options {
+                let worth: i32 = [choice.pp1, choice.pp4].into_iter().flatten().map(|s| rules.magnitude(s)).sum();
+                assert!(f64::from(worth) <= band.min_points, "{choice:?} in the band from {}", band.min_points);
+                assert!(worth <= cap.max_points, "{choice:?} goes over the PP1+PP4 limit");
+            }
+        }
+        assert_eq!(f64::from(cap.max_points), locus.cap_points);
+    }
+
+    /// The built-in file with every line that starts with `prefix` removed.
+    fn without_lines(prefix: &str) -> Result<RuleSet, RuleError> {
+        let kept: Vec<&str> = BUILTIN.lines().filter(|line| !line.trim_start().starts_with(prefix)).collect();
+        assert!(kept.len() < BUILTIN.lines().count(), "no line starts with '{prefix}'");
+        RuleSet::parse(&kept.join("\n"))
+    }
+
+    /// The built-in file with every line that starts with `prefix` replaced by `new_line`.
+    fn with_line_replaced(prefix: &str, new_line: &str) -> Result<RuleSet, RuleError> {
+        let text: Vec<&str> =
+            BUILTIN.lines().map(|line| if line.starts_with(prefix) { new_line } else { line }).collect();
+        assert_ne!(text.join("\n"), BUILTIN.replace("\r\n", "\n"), "no line starts with '{prefix}'");
+        RuleSet::parse(&text.join("\n"))
+    }
+
+    #[test]
+    fn locus_tables_that_would_overstate_the_evidence_are_refused() {
+        let is_bad = |result: Result<RuleSet, RuleError>| matches!(result, Err(RuleError::BadLocusEvidence(_)));
+        let band_one = r#"{ min_points = 1.0, options = [{ pp1 = "supporting" }, { pp4 = "supporting" }] }"#;
+        // A Moderate choice in the band that starts at one point.
+        assert!(is_bad(edited(
+            band_one,
+            r#"{ min_points = 1.0, options = [{ pp1 = "moderate" }, { pp4 = "supporting" }] }"#
+        )));
+        // A choice that names neither criterion.
+        assert!(is_bad(edited(band_one, r#"{ min_points = 1.0, options = [{ }, { pp4 = "supporting" }] }"#)));
+        // A band with no choice.
+        assert!(is_bad(edited(band_one, "{ min_points = 1.0, options = [] }")));
+        // A choice with a strength PP1 does not allow.
+        assert!(is_bad(edited(
+            r#"{ pp1 = "strong", pp4 = "supporting" }"#,
+            r#"{ pp1 = "stand_alone", pp4 = "supporting" }"#
+        )));
+        // No bands at all.
+        assert!(is_bad(without_lines("{ min_points")));
+        // A band that starts above the limit for the pair can never be reached.
+        assert!(is_bad(edited("cap_points = 5.0", "cap_points = 3.0")));
+        // Yield rows must rise and stay percentages.
+        assert!(is_bad(edited("{ at = 25.4, points = 1.5 }", "{ at = 10.0, points = 1.5 }")));
+        assert!(is_bad(edited("{ at = 99.9, points = 12.0 }", "{ at = 120.0, points = 12.0 }")));
+        // Co-segregation kinds need positive points, unique ids, and there must be some.
+        assert!(is_bad(edited("points_each = 0.4", "points_each = 0.0")));
+        assert!(is_bad(edited(r#"id = "x-linked-male""#, r#"id = "dominant""#)));
+        assert!(is_bad(edited(r#"{ id = "dominant", label"#, r#"{ id = "", label"#)));
+        assert!(is_bad(without_lines("{ id = ")));
+        // Bands must rise.
+        assert!(is_bad(edited("{ min_points = 3.0,", "{ min_points = 1.0,")));
+        // The texts shown with the helper must not be empty.
+        assert!(is_bad(with_line_replaced("homogeneity_text", r#"homogeneity_text = """#)));
+        assert!(is_bad(edited("yield_text_minimum = 20.0", "yield_text_minimum = 0.0")));
+        // The table must cite a source the file lists.
+        assert!(matches!(
+            edited("source = \"clingen-pp1-pp4-2024\"\ncap_points", "source = \"nowhere\"\ncap_points"),
+            Err(RuleError::UnknownSource { .. })
+        ));
+    }
+
+    #[test]
+    fn the_locus_table_must_agree_with_the_rest_of_the_rules() {
+        let is_bad = |result: Result<RuleSet, RuleError>| matches!(result, Err(RuleError::BadLocusEvidence(_)));
+        // The class is withheld by the PP1/PP4 combination cap, so it must equal the helper's limit.
+        assert!(is_bad(edited("max_points = 5", "max_points = 6")));
+        assert!(is_bad(edited("a = \"PP1\"\nb = \"PP4\"", "a = \"PP1\"\nb = \"PM1\"")));
+        // Table 4 is written in the standard points.
+        assert!(is_bad(edited("strong = 4\nvery_strong = 8", "strong = 5\nvery_strong = 8")));
+    }
+
+    #[test]
+    fn bs4_applies_only_where_the_paper_supports_it() {
+        let rules = RuleSet::builtin().unwrap();
+        let read = |id| rules.read_non_segregation(id).map(|r| (r.code, r.strength));
+        assert_eq!(read("follows-not"), Some(("BS4", Strength::Strong)));
+        // The paper: little to no evidence for compound heterozygotes; no points for
+        // unaffected carriers under reduced penetrance; formal analysis for common
+        // phenocopies, conflicting results and very large families.
+        assert_eq!(read("compound-heterozygous"), None);
+        assert_eq!(read("reduced-penetrance"), None);
+        assert_eq!(read("high-phenocopy"), None);
+        assert_eq!(read("conflicting-or-large"), None);
+        assert_eq!(read("not-a-situation"), None);
+    }
+
+    #[test]
+    fn the_bs4_strength_is_the_minus_4_points_the_paper_recommends() {
+        // ClinGen 2024: -4.0 points for non-segregation. No number in the rules changed.
+        let rules = RuleSet::builtin().unwrap();
+        let strength = rules.non_segregation.as_ref().unwrap().strength;
+        assert_eq!(rules.magnitude(strength), 4);
+        assert_eq!(rules.criterion("BS4").unwrap().strength, strength);
+    }
+
+    #[test]
+    fn a_bs4_table_that_could_never_offer_or_misapply_bs4_is_refused() {
+        let is_bad = |result: Result<RuleSet, RuleError>| matches!(result, Err(RuleError::BadNonSegregation(_)));
+        let own_source = "source = \"clingen-pp1-pp4-2024\"\nstrength = \"strong\"";
+        // No situation applies.
+        assert!(is_bad(edited("applies = true", "applies = false")));
+        // A strength BS4 does not allow (benign criteria stop at Strong), and one that is not -4 points.
+        assert!(is_bad(edited(own_source, "source = \"clingen-pp1-pp4-2024\"\nstrength = \"very_strong\"")));
+        assert!(is_bad(edited(own_source, "source = \"clingen-pp1-pp4-2024\"\nstrength = \"moderate\"")));
+        // A repeated id.
+        assert!(is_bad(edited("id = \"high-phenocopy\"", "id = \"follows-not\"")));
+        // An empty id, label or text.
+        assert!(is_bad(edited("id = \"follows-not\"", "id = \"\"")));
+        assert!(is_bad(edited("label = \"Does not follow the disease\"", "label = \"\"")));
+        assert!(is_bad(with_line_replaced("text = \"Autosomal dominant, X-linked", "text = \"\"")));
+        // A situation that does not say whether BS4 applies cannot even be read.
+        assert!(matches!(without_lines("applies = "), Err(RuleError::Parse(_))));
+        // An unknown source.
+        assert!(matches!(
+            edited("source = \"clingen-pp1-pp4-2024\"\nstrength", "source = \"nowhere\"\nstrength"),
+            Err(RuleError::UnknownSource { .. })
+        ));
+    }
+
+    #[test]
+    fn a_rule_file_without_the_bs4_table_still_loads_and_gives_nothing() {
+        let start = BUILTIN.find("\n[non_segregation]\n").unwrap();
+        let end = BUILTIN[start..].find("\n[[criteria]]").unwrap() + start;
+        let rules = RuleSet::parse(&format!("{}{}", &BUILTIN[..start], &BUILTIN[end..])).unwrap();
+        assert!(rules.read_non_segregation("follows-not").is_none());
+    }
+
+    #[test]
+    fn a_rule_file_without_the_locus_table_still_loads_and_gives_nothing() {
+        // Cut only the PP1/PP4 section: from its header to the BS4 section's header.
+        let start = BUILTIN.find("\n[locus_evidence]\n").unwrap();
+        let end = BUILTIN.find("\n[non_segregation]\n").unwrap();
+        let rules = RuleSet::parse(&format!("{}{}", &BUILTIN[..start], &BUILTIN[end..])).unwrap();
+        assert!(rules.pp4_points(90.0, 1).is_none());
+        assert!(rules.pp1_points("dominant", 3).is_none());
+        assert!(rules.read_locus(1.0, 1.0, true).is_none());
+        // The BS4 table is still there.
+        assert!(rules.read_non_segregation("follows-not").is_some());
     }
 
     #[test]

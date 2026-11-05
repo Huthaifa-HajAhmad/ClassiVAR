@@ -14,4 +14,8 @@ pub use assess::{Applied, AssessError, Assessment, Conflict, Counting, Item, MAX
 pub use case::{CASE_FORMAT, CaseError, CaseFile, GeneDecision, SavedRecord};
 pub use model::{Category, Class, Direction, Strength};
 pub use reevaluate::{Consistency, Reason, Reevaluation, Rescored, Row, Submission, Verdict};
-pub use rules::{Criterion, Cutoff, EvidenceReading, FunctionalRules, Predictor, RuleError, RuleSet, RuleSetRef};
+pub use rules::{
+    Criterion, Cutoff, EvidenceReading, FunctionalRules, LocusBand, LocusChoice, LocusReading, LocusRules,
+    NonSegregationRules, NonSegregationSituation, Predictor, RuleError, RuleSet, RuleSetRef, SegregationKind,
+    YieldStep,
+};
