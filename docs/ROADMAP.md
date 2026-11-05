@@ -25,7 +25,7 @@ Written 2026-11-04, after the audit in `docs/AUDIT-2026-11-04.md`. It replaces t
 | U2 | Done | A variant name box is shown beside every class and is saved in the case file. |
 | U9, U13 | Partly | Horizontal scroll, a window minimum size, pressed state for assistive technology and accessible names are in. The pinned Today column and the full-row click target are not. |
 | D2 | Partly | `--rules <file>` loads a rule file at run time. There is no in-app file picker. |
-| D3 | Written, never run | CI workflows exist but have never run: they were untracked, and the repo had no remote, on 2026-11-04. |
+| D3 | Partly done (2026-11-05) | CI runs on GitHub now that the remote exists: first run [42080890167](https://github.com/Huthaifa-HajAhmad/ClassiVAR/actions/runs/42080890167) — audit and Windows green; macOS never acquired a runner (capacity; see "Repository status" for what was changed). |
 | D7 | Done | Docs updated 2026-11-04; `DEVELOPING.md`, `AGENTS.md` and the scripts are linked from the README and the counts were refreshed. |
 | D5 | Done (phase A, 2026-11-04) | Save and open a case file. The Save and Open dialogs were not clicked by hand. |
 | D4, D6 | Open | See phase F and "Needs your decision". |
@@ -119,7 +119,7 @@ Still open, in rough order:
 8. One colour for one job (success and failure currently share the warning yellow), and a recoverable error screen.
 
 ### Phase F: before a colleague uses it (1 week)
-- Run CI on GitHub and fix what it finds (D3). The workflows need to be committed and a remote added first. `permissions`, a timeout and concurrency are in; add caching, pin `cargo-audit` and the actions, and consider `cargo deny` for advisories and licences.
+- Run CI on GitHub and fix what it finds (D3). **Done partly (2026-11-05):** the remote `github.com/Huthaifa-HajAhmad/ClassiVAR` exists, the workflows are committed, and CI runs on GitHub (first run and result: see "Repository status"). `permissions`, a timeout and concurrency are in; add caching, pin `cargo-audit` and the actions, and consider `cargo deny` for advisories and licences.
 - Build on macOS. This has never been tried (D4). Budget a spike first. Also an installer for each platform.
 - Choose a licence and add third-party notices (D6). About 800 crates ship in the binary.
 - Put a contact address or project link in the HTTP user-agent (E, S8): the services expect one.
@@ -133,4 +133,4 @@ Gene-specific rule sets from the ClinGen CSpec API (it works: checked 2026-11-04
 ## Needs your decision
 - **Licence (D6).** I did not pick one. "Internal proprietary" is the simplest if the code stays inside your team.
 - **BA1 against Pathogenic evidence: decided, please confirm.** The program withholds the class when BA1 and evidence that itself reaches a Pathogenic rule are both applied. The reasoning: a known pathogenic variant can be common (founder effect, reduced penetrance), which is exactly what ClinGen's BA1 exception list is for. BA1 with weaker pathogenic evidence stays Benign.
-- **Repository status (2026-11-05).** The earlier work is committed through `6be69b6`. The de novo (PS2) helper (0.9.0-draft) and the PM3/BA1 reference and patients helper (0.10.0-draft, including the smoke-script and doc corrections from the three-part code review) are in the working tree and not committed. No remote is configured and CI has never run.
+- **Repository status (2026-11-05).** The rule versions 0.9.0/0.10.0 (PM3 helper, BA1 reference, the de novo helper, and all corrections from the three-part code review) are committed through `8ec6c31`. The first remote is `github.com/Huthaifa-HajAhmad/ClassiVAR` (private). First CI run [42080890167](https://github.com/Huthaifa-HajAhmad/ClassiVAR/actions/runs/42080890167): `audit` and `check (windows-latest)` green; the `macos` job never ran — GitHub cancelled it twice for runner capacity ("The job was not acquired by Runner of type hosted even after multiple attempts"; the `macos-latest` arm64 pool was saturated, and `macos-13` and `macos-14` are retired, the latter on 2026-11-02). The macOS job now targets `macos-15-intel` (available until August 2027) and still does not block a merge until its first build is green (D4). Until a green macOS build, treat Windows CI as the only proven platform there.

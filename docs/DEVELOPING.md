@@ -151,4 +151,4 @@ Before asking for review:
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs fmt, clippy, tests and build on Windows (blocking) and macOS (non-blocking until the first green run), plus `cargo audit`. `.github/workflows/live-sources.yml` runs the live source tests weekly. As of 2026-11-04 these have never run: the repository had no remote. Put the first green run URL in `docs/ROADMAP.md` under D3.
+`.github/workflows/ci.yml` runs fmt, clippy, tests and build on Windows (blocking) and macOS (non-blocking until the first green run), plus `cargo audit`. `.github/workflows/live-sources.yml` runs the live source tests weekly. First run 2026-11-05 on `github.com/Huthaifa-HajAhmad/ClassiVAR`: audit and Windows green; the macOS job has not run yet (GitHub runner capacity, twice; the workflow now targets `macos-15-intel`). The first green runs are recorded in `docs/ROADMAP.md` under D3.

@@ -1,5 +1,9 @@
-# Checks that must pass before a change is merged. Written on 2026-11-04 and
-# NOT yet run: the first run on GitHub will show what needs adjusting.
+# Checks that must pass before a change is merged. First run on GitHub
+# 2026-11-05 (run 42080890167): windows and audit green; the macos job was
+# cancelled twice for runner capacity (macos-latest = macos-26, arm64 pool
+# saturated), so it moved to the macos-15-intel pool, which runs until
+# August 2027. A macos failure does not block a merge until the first
+# macOS build is green (audit finding D4).
 name: ci
 
 on:
@@ -23,12 +27,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-latest, macos-15-intel]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     # No macOS build of the app has ever been made. Until the first one is green,
     # a macOS failure is shown but does not block a merge (audit finding D4).
-    continue-on-error: ${{ matrix.os == 'macos-latest' }}
+    continue-on-error: ${{ matrix.os == 'macos-15-intel' }}
     steps:
       - uses: actions/checkout@v4
       # Shows the toolchain pinned in rust-toolchain.toml; the first cargo command installs it if missing.
