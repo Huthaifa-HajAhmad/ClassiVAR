@@ -107,10 +107,45 @@ try {
             if ($hit.Count -gt 0) { return $hit[0] }
             Start-Sleep -Milliseconds 150
         }
-        $seen = @($buttons | ForEach-Object { $_.Current.Name } | Where-Object { $_ -like "*PVS1*" }) -join " | "
-        throw "button not found like: $name. PVS1 names seen: $seen"
+        # Show the buttons that start with the same word, so a wrong name is easy to spot.
+        $first = $name.Split(' ')[0].TrimEnd(':').TrimEnd('*')
+        $seen = @($buttons | ForEach-Object { $_.Current.Name } | Where-Object { $_ -like "$first*" }) -join " | "
+        throw "button not found like: $name. Names that start with '$first': $seen"
+    }
+    # Where the criteria list sits on screen. The list starts below the pane header,
+    # about 255 px under the top of the window; a row above that line is hidden.
+    function Get-ListArea {
+        $client = New-Object ClassiVarSmokeWin+RECT
+        [ClassiVarSmokeWin]::GetClientRect($h, [ref]$client) | Out-Null
+        $origin = New-Object ClassiVarSmokeWin+POINT
+        [ClassiVarSmokeWin]::ClientToScreen($h, [ref]$origin) | Out-Null
+        $top = $origin.Y + 255
+        $bottom = $origin.Y + $client.Bottom
+        return [pscustomobject]@{
+            Top = $top; Bottom = $bottom
+            PointerX = $origin.X + 200; PointerY = [int](($top + $bottom) / 2)
+        }
+    }
+    # Page keys scroll the pane under the pointer, so put the pointer over the list first.
+    function Point-At-List {
+        $a = Get-ListArea
+        [ClassiVarSmokeWin]::SetCursorPos($a.PointerX, $a.PointerY) | Out-Null
+    }
+    # A click on a button whose centre is below the window does nothing. Like a
+    # person would, scroll down until the centre is on screen. This is only a safety
+    # net for the generic click helpers: a row of the criteria list can also hide
+    # under the pane header, and Scroll-To-Button (which knows where the list
+    # starts) is used for those.
+    function Bring-Into-View($el) {
+        for ($i = 0; $i -lt 10; $i++) {
+            $r = $el.Current.BoundingRectangle
+            if (($r.Y + $r.Height / 2) -le (Get-ListArea).Bottom) { return }
+            Point-At-List
+            Press-Key "{PGDN}"
+        }
     }
     function Invoke-Element($el) {
+        Bring-Into-View $el
         try {
             $el.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
         } catch {
@@ -160,6 +195,31 @@ try {
         Start-Sleep -Milliseconds 120
         if ($text -ne "") { [System.Windows.Forms.SendKeys]::SendWait($text) }
         Start-Sleep -Milliseconds 650
+    }
+    # A button outside the visible part of the criteria list (below it, or hidden
+    # under the pane header) ignores a click. Like a person would, scroll the list
+    # (Page Up or Page Down with the pointer over it) until the button is fully on screen.
+    function Scroll-To-Button([string]$name) {
+        for ($i = 0; $i -lt 10; $i++) {
+            $r = (Find-Button-Like $name).Current.BoundingRectangle
+            $area = Get-ListArea
+            if ($r.Y -ge $area.Top -and ($r.Y + $r.Height) -le $area.Bottom) { return }
+            Point-At-List
+            if ($r.Y -lt $area.Top) { Press-Key "{PGUP}" } else { Press-Key "{PGDN}" }
+        }
+        throw "could not scroll the button into view: $name"
+    }
+    # Put the criteria list back at the top, so the next steps start from a known
+    # place. The first thing in the list is the predictor helper's button (the helper
+    # must be closed); the list is at the top when that button is below the header.
+    function Scroll-List-To-Top {
+        for ($i = 0; $i -lt 12; $i++) {
+            $r = (Find-Button "Open the predictor score helper").Current.BoundingRectangle
+            if ($r.Y -ge (Get-ListArea).Top) { return }
+            Point-At-List
+            Press-Key "{PGUP}"
+        }
+        throw "could not scroll the criteria list to the top"
     }
     function Capture([string]$name) {
         Focus-App
@@ -265,18 +325,83 @@ try {
     $functional = Capture "05c-functional"
     Click-Button "Close the functional evidence helper"
 
+    # The family and phenotype helper: a yield of 60% earns 3.5 PP4 points and
+    # three dominant co-segregations earn 3 PP1 points. The sum, 6.5, is cut to
+    # the limit of 5, where the paper allows Strong with Supporting.
+    $yieldBox = "Diagnostic yield %, e.g. 60"
+    $countBox = "Informative family members, e.g. 3"
+    $variantsBox = "Variants on the allele, e.g. 1"
+    $anyApply = { @(Names | Where-Object { $_ -like "Apply PP1*" -or $_ -like "Apply PP4*" }).Count -ne 0 }
+    Click-Button "Open the co-segregation and phenotype helper"
+    Set-BoxText $yieldBox "60"
+    Set-BoxText $countBox "3"
+    # PP1 is not counted until the curator says whether other genes can cause the phenotype.
+    if (& $anyApply) { throw "PP1 was offered before the question about other genes was answered" }
+    # Only one gene causes the phenotype: PP1 is not counted, and only PP4 choices are listed.
+    Click-Button "Only this gene causes it"
+    Find-Button-Like "Apply PP4 Moderate*" | Out-Null
+    if (@(Names | Where-Object { $_ -like "Apply PP1*" }).Count -ne 0) {
+        throw "PP1 was offered although only one gene causes the phenotype"
+    }
+    # Several genes: the pairs of Table 4 appear.
+    Click-Button "Several genes can cause it"
+    # Plain text is not exposed to automation, so the total (5, "cut to the
+    # limit") is read from the screenshot; the two choice buttons are checked here.
+    Find-Button-Like "Apply PP1 Supporting + PP4 Strong*" | Out-Null
+    Scroll-To-Button "Apply PP1 Strong + PP4 Supporting*"
+    $locus = Capture "05e-pp1-pp4"
+    Click-Button-Like "Apply PP1 Strong + PP4 Supporting*"
+    Find-Button-Like "PP1 strength: Strong*" | Out-Null
+    Find-Button-Like "PP4 strength: Supporting*" | Out-Null
+    # Variants sharing an allele: the yield is divided (95.8% / 2 = 47.9%, 2.5 points),
+    # and PP1 is refused because the paper's sharing worksheet is not built in.
+    Set-BoxText $variantsBox "2"
+    if (& $anyApply) { throw "PP1 was offered for variants that share an allele" }
+    Set-BoxText $countBox ""
+    Set-BoxText $yieldBox "95.8"
+    Find-Button-Like "Apply PP4 Moderate*" | Out-Null
+    Set-BoxText $variantsBox ""
+    # A yield below the table, or a number that is not a percentage, offers nothing.
+    Set-BoxText $yieldBox "10"
+    if (& $anyApply) { throw "a yield below the table still offered to apply PP4" }
+    Set-BoxText $yieldBox "150"
+    if (& $anyApply) { throw "a yield above 100% still offered to apply PP4" }
+    Click-Button "Close the co-segregation and phenotype helper"
+
+    # The non-segregation helper offers BS4 only where the paper supports it.
+    Click-Button "Open the non-segregation helper"
+    foreach ($label in @("Recessive, compound heterozygous", "Reduced penetrance, unaffected carriers", "Many look-alike cases (phenocopy)")) {
+        Click-Button $label
+        if (@(Names | Where-Object { $_ -like "Apply BS4*" }).Count -ne 0) {
+            throw "BS4 was offered for a situation where the paper does not support it: $label"
+        }
+    }
+    Click-Button "Does not follow the disease"
+    Scroll-To-Button "Apply BS4 Strong*"
+    $segregation = Capture "05f-bs4"
+    Click-Button-Like "Apply BS4 Strong*"
+    Find-Button-Like "BS4 strength: Strong*" | Out-Null
+    Click-Button "Close the non-segregation helper"
+    Scroll-List-To-Top
+
     # Raising a strength above its default asks for a reason first.
+    # The helper panels above push these rows down, so each click scrolls to its button first.
+    Scroll-To-Button "PM1:*not applied*"
     Click-Button-Like "PM1:*not applied*"
+    Scroll-To-Button "PM1 strength: Moderate*"
     Click-Button-Like "PM1 strength: Moderate*"
     $raise = Capture "05d-raise-reason"
     Set-BoxText "Why is this stronger than the default?" "Hot spot in a well-studied domain"
+    Scroll-To-Button "Save the reason and raise PM1*"
     Click-Button-Like "Save the reason and raise PM1*"
     Find-Button-Like "PM1 strength: Strong*" | Out-Null
     # Strong -> Supporting -> Moderate (the default) need no reason; the next
     # click raises again and asks. Escape then leaves the strength unchanged.
+    Scroll-To-Button "PM1 strength:*"
     Click-Button-Like "PM1 strength:*"
     Click-Button-Like "PM1 strength:*"
     Find-Button-Like "PM1 strength: Moderate*" | Out-Null
+    Scroll-To-Button "PM1 strength:*"
     Click-Button-Like "PM1 strength:*"
     Find-Button-Like "Save the reason and raise PM1*" | Out-Null
     Press-Escape
@@ -285,8 +410,10 @@ try {
         throw "Escape did not close the reason prompt"
     }
     # Clicking the criterion code removes it, and its open reason prompt goes with it.
+    Scroll-To-Button "PM1 strength:*"
     Click-Button-Like "PM1 strength:*"
     Find-Button-Like "Save the reason and raise PM1*" | Out-Null
+    Scroll-To-Button "PM1:*applied*"
     Click-Button-Like "PM1:*applied*"
     Find-Button-Like "PM1:*not applied*" | Out-Null
     if (@(Names | Where-Object { $_ -like "Save the reason and raise*" }).Count -ne 0) {
@@ -294,6 +421,7 @@ try {
     }
 
     # Page Down and Page Up scroll the list under the mouse pointer.
+    Scroll-To-Button "PS1:*"
     $ps1 = Find-Button-Like "PS1:*"
     $r = $ps1.Current.BoundingRectangle
     $before = $r.Y
