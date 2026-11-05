@@ -507,6 +507,16 @@ pub struct Workbench {
     /// The non-segregation helper (BS4): open or closed, and the situation chosen.
     segregation_open: bool,
     segregation_situation: usize,
+    /// The de novo helper (PS2): open or closed, the recessive answer, and two
+    /// patient-count boxes (parents confirmed, not confirmed) for each row of the
+    /// rule file's de novo table.
+    pm3_open: bool,
+    pm3_eligible: bool,
+    pm3_inputs: Vec<Entity<InputState>>,
+    ba1_open: bool,
+    de_novo_open: bool,
+    de_novo_recessive: bool,
+    de_novo_inputs: Vec<[Entity<InputState>; 2]>,
     gene: GeneChecks,
     /// Why the gene box was not checked (empty or not a symbol), shown under the row.
     gene_error: Option<String>,
@@ -626,6 +636,38 @@ impl Workbench {
                     cx.notify();
                 }
             });
+        let mut pm3_inputs = Vec::new();
+        let mut pm3_subscriptions = Vec::new();
+        for row in rules.pm3.iter().flat_map(|table| &table.rows) {
+            let placeholder = format!("PM3 patients: {}", row.id);
+            let input = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder));
+            pm3_subscriptions.push(cx.subscribe_in(&input, window, |_this, _, event: &InputEvent, _window, cx| {
+                if matches!(event, InputEvent::Change) {
+                    cx.notify();
+                }
+            }));
+            pm3_inputs.push(input);
+        }
+        let mut de_novo_inputs = Vec::new();
+        let mut de_novo_subscriptions = Vec::new();
+        for _ in rules.de_novo.iter().flat_map(|de_novo| &de_novo.phenotypes) {
+            let mut new_input = |window: &mut Window, cx: &mut Context<Self>| {
+                let input = cx.new(|cx| InputState::new(window, cx).placeholder("Patients, e.g. 1"));
+                de_novo_subscriptions.push(cx.subscribe_in(
+                    &input,
+                    window,
+                    |_this, _, event: &InputEvent, _window, cx| {
+                        if matches!(event, InputEvent::Change) {
+                            cx.notify();
+                        }
+                    },
+                ));
+                input
+            };
+            let confirmed = new_input(window, cx);
+            let unconfirmed = new_input(window, cx);
+            de_novo_inputs.push([confirmed, unconfirmed]);
+        }
         Self {
             rules,
             mode: Mode::NewVariant,
@@ -656,6 +698,13 @@ impl Workbench {
             locus_genes: PhenotypeGenes::Unanswered,
             segregation_open: false,
             segregation_situation: 0,
+            pm3_open: false,
+            pm3_eligible: false,
+            pm3_inputs,
+            ba1_open: false,
+            de_novo_open: false,
+            de_novo_recessive: false,
+            de_novo_inputs,
             gene: GeneChecks::idle(),
             gene_error: None,
             case_gene: String::new(),
@@ -670,7 +719,7 @@ impl Workbench {
             lookup_id: 0,
             _lookup_tasks: Vec::new(),
             _file_task: None,
-            _subscriptions: vec![
+            _subscriptions: [
                 on_gene_input,
                 on_variant_input,
                 on_record_name,
@@ -682,7 +731,11 @@ impl Workbench {
                 on_variants_input,
                 on_reason_input,
                 on_escape,
-            ],
+            ]
+            .into_iter()
+            .chain(pm3_subscriptions)
+            .chain(de_novo_subscriptions)
+            .collect(),
         }
     }
 
@@ -730,7 +783,13 @@ impl Workbench {
                 &self.variants_input,
                 &self.reason_input,
             ];
-            if inputs.iter().any(|input| input.read(cx).focus_handle(cx).is_focused(window)) {
+            let de_novo = self.de_novo_inputs.iter().flatten();
+            if inputs
+                .into_iter()
+                .chain(de_novo)
+                .chain(&self.pm3_inputs)
+                .any(|input| input.read(cx).focus_handle(cx).is_focused(window))
+            {
                 return;
             }
         }
@@ -981,6 +1040,16 @@ impl Workbench {
         (!typed.is_empty()).then(|| typed.parse::<f64>().ok().filter(|n| n.is_finite()).ok_or(()))
     }
 
+    /// A patient count typed in a helper's box: `None` when the box is empty,
+    /// `Some(Err(()))` when it is not a whole number that fits a count.
+    fn typed_count(&self, input: &Entity<InputState>, cx: &App) -> Option<Result<u32, ()>> {
+        match self.typed_number(input, cx) {
+            None => None,
+            Some(Ok(n)) if n >= 0.0 && n.fract() == 0.0 && n <= f64::from(u32::MAX) => Some(Ok(n as u32)),
+            Some(_) => Some(Err(())),
+        }
+    }
+
     /// Put the strength a score or an assay result gives onto today's evidence.
     /// The reason records where the number came from, so it is saved with the case.
     fn apply_reading(&mut self, reading: &classivar_core::EvidenceReading, reason: String) {
@@ -1017,6 +1086,17 @@ impl Workbench {
         self.locus_genes = PhenotypeGenes::Unanswered;
         self.segregation_open = false;
         self.segregation_situation = 0;
+        self.pm3_open = false;
+        self.pm3_eligible = false;
+        self.ba1_open = false;
+        for input in &self.pm3_inputs {
+            input.update(cx, |input, cx| input.set_value("", window, cx));
+        }
+        self.de_novo_open = false;
+        self.de_novo_recessive = false;
+        for input in self.de_novo_inputs.iter().flatten() {
+            input.update(cx, |input, cx| input.set_value("", window, cx));
+        }
     }
 
     fn set_mode(&mut self, mode: Mode) {

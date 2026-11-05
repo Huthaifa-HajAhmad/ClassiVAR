@@ -56,7 +56,7 @@ Key types: `RuleSet` → `Applied` → `Assessment` (`class()`, `points_class`, 
 Tests do not draw the window, and a stack overflow or a bad binding only appears on screen. After a UI change:
 
 1. `scripts/check.ps1`
-2. `scripts/gui-smoke.ps1` (it clicks "Check gene", so it needs network; it refuses to act unless ClassiVAR is the foreground window; screenshots go to `%TEMP%\classivar-smoke`)
+2. `scripts/gui-smoke.ps1` (it never calls the live sources, so it runs offline; it refuses to act unless ClassiVAR is the foreground window; screenshots go to `%TEMP%\classivar-smoke`)
 3. Click the changed path yourself if the smoke script does not cover it (Save/Open dialogs and keyboard are not covered).
 
 ## Gotchas

@@ -609,6 +609,18 @@ impl Workbench {
         if self.editing == Editing::Today && self.rules.non_segregation.is_some() {
             list = list.child(self.non_segregation_helper(cx));
         }
+        if self.editing == Editing::Today && self.rules.pm3.is_some() {
+            list = list.child(self.pm3_helper(cx));
+        }
+        // Deliberate, not an omission: the BA1 list is a dated static reference,
+        // not an evidence helper. It shows for earlier records too and cannot
+        // insert evidence, so the `Editing::Today` gates above do not apply to it.
+        if !self.rules.ba1_exceptions.is_empty() {
+            list = list.child(self.ba1_reference(cx));
+        }
+        if self.editing == Editing::Today && self.rules.de_novo.is_some() {
+            list = list.child(self.de_novo_helper(cx));
+        }
         for (direction, title, points) in [
             (Direction::Pathogenic, "For disease (pathogenic)", format!("+{}", result.pathogenic_points)),
             (Direction::Benign, "Against disease (benign)", format!("−{}", result.benign_points.abs())),
@@ -992,7 +1004,7 @@ impl Workbench {
                     hero = hero.child(self.vus_note(result.total_points, cx));
                 }
                 hero = hero.child(div().text_xs().text_color(muted).child(
-                    "Default strengths follow 2015, except PVS1 (guide), PM2 (Supporting, ClinGen 2020) and PP5/BP6 (listed, not counted). Gene-specific rules and later ClinGen refinements (splicing, PS2/PM6, PM3) can change them and are not built in yet. Four helpers in the criteria list apply published tables: predictor scores (PP3/BP4), functional assays (PS3/BS3), family and phenotype points (PP1/PP4) and non-segregation (BS4).",
+                    "Default strengths follow 2015, except PVS1 (guide), PM2 (Supporting, ClinGen 2020) and PP5/BP6 (listed, not counted). Gene-specific rules and later ClinGen refinements (splicing, PM6) can change them and are not built in yet. Six helpers in the criteria list apply published tables: predictor scores (PP3/BP4), functional assays (PS3/BS3), family and phenotype points (PP1/PP4), non-segregation (BS4), de novo patients (PS2) and recessive patients (PM3). A dated BA1 exceptions reference is also available.",
                 ));
             }
             None if !result.conflicts.is_empty() => {

@@ -235,6 +235,82 @@ pub struct NonSegregationRules {
     pub situations: Vec<NonSegregationSituation>,
 }
 
+/// One row of the de novo points table (ClinGen SVI v1.1, Table 1): how well a
+/// patient's phenotype fits the gene, and the points one such patient earns.
+#[derive(Debug, Clone, Deserialize)]
+pub struct DeNovoPhenotype {
+    /// Stable id, for the program to refer to the row.
+    pub id: String,
+    pub label: String,
+    /// Points for a patient whose parental relationships were confirmed.
+    pub confirmed: f64,
+    /// Points for a patient whose parental relationships were not confirmed.
+    pub unconfirmed: f64,
+    /// The most this row may add to the total, when the paper limits it.
+    pub max_points: Option<f64>,
+}
+
+/// De novo evidence for PS2 (ClinGen SVI v1.1): points per patient, and the
+/// strength each total reaches.
+#[derive(Debug, Clone, Deserialize)]
+pub struct DeNovoRules {
+    pub source: String,
+    /// Said on screen when the recessive rule is asked about.
+    pub recessive_text: String,
+    pub notes: Vec<String>,
+    /// Weakest first. A total at or above `at` reaches `strength` (Table 2).
+    pub thresholds: Vec<Cutoff>,
+    pub phenotypes: Vec<DeNovoPhenotype>,
+}
+
+/// What a list of de novo patients adds up to.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DeNovoReading {
+    /// The total points, after the limit of any row that has one.
+    pub points: f64,
+    /// `None` when the points are below the lowest threshold, or the recessive
+    /// rule lowered the strength below the lowest level.
+    pub evidence: Option<EvidenceReading>,
+    /// True when the recessive rule lowered the strength by one level.
+    pub lowered_for_recessive: bool,
+}
+
+/// One patient group in the PM3 table. Counts must not overlap.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Pm3Row {
+    pub id: String,
+    pub label: String,
+    pub points: f64,
+    pub max_points: Option<f64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Pm3Rules {
+    pub source: String,
+    pub notes: Vec<String>,
+    pub rows: Vec<Pm3Row>,
+    pub thresholds: Vec<Cutoff>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Pm3Reading {
+    pub points: f64,
+    pub evidence: Option<EvidenceReading>,
+}
+
+/// The source every rule file with BA1 exception entries must define: ClinGen's
+/// published list of common pathogenic-variant exceptions (July 2018).
+pub const BA1_SOURCE: &str = "clingen-ba1-2018";
+
+/// A dated reference entry, not an automatic variant match.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Ba1Exception {
+    pub gene: String,
+    pub variant: String,
+    pub clinvar_id: String,
+    pub allele_id: String,
+}
+
 /// Points come in steps of 0.1 or more; rounding removes sums such as 2.9999999999999996.
 fn round_points(points: f64) -> f64 {
     (points * 100.0).round() / 100.0
@@ -357,6 +433,10 @@ struct RuleSetFile {
     functional: Option<FunctionalRules>,
     locus_evidence: Option<LocusRules>,
     non_segregation: Option<NonSegregationRules>,
+    de_novo: Option<DeNovoRules>,
+    pm3: Option<Pm3Rules>,
+    #[serde(default)]
+    ba1_exceptions: Vec<Ba1Exception>,
     criteria: Vec<Criterion>,
 }
 
@@ -379,6 +459,10 @@ pub struct RuleSet {
     pub locus_evidence: Option<LocusRules>,
     /// The situations in which BS4 applies (absent in older rule files).
     pub non_segregation: Option<NonSegregationRules>,
+    /// De novo points for PS2 (absent in older rule files).
+    pub de_novo: Option<DeNovoRules>,
+    pub pm3: Option<Pm3Rules>,
+    pub ba1_exceptions: Vec<Ba1Exception>,
     pub criteria: Vec<Criterion>,
 }
 
@@ -398,6 +482,9 @@ impl TryFrom<RuleSetFile> for RuleSet {
             functional: file.functional,
             locus_evidence: file.locus_evidence,
             non_segregation: file.non_segregation,
+            de_novo: file.de_novo,
+            pm3: file.pm3,
+            ba1_exceptions: file.ba1_exceptions,
             criteria: file.criteria,
         };
         rules.check()?;
@@ -453,6 +540,12 @@ pub enum RuleError {
     BadLocusEvidence(String),
     #[error("non-segregation situations: {0}")]
     BadNonSegregation(String),
+    #[error("de novo points: {0}")]
+    BadDeNovo(String),
+    #[error("PM3 points: {0}")]
+    BadPm3(String),
+    #[error("BA1 reference: {0}")]
+    BadBa1(String),
     #[error("predictor {id}: {problem}")]
     BadPredictor { id: String, problem: String },
     #[error("VUS tiers: {0}")]
@@ -592,6 +685,64 @@ impl RuleSet {
             return None;
         }
         self.reading("BS4", rules.strength)
+    }
+
+    /// Adds the de novo points of the patients and reads the total as a PS2
+    /// strength. `counts` has one `(confirmed, unconfirmed)` pair of patient
+    /// numbers for each row of the table, in the table's order. With
+    /// `recessive_without_second_variant` true the strength is lowered one level.
+    /// `None` when the rules have no table or `counts` does not match its rows.
+    pub fn read_de_novo(&self, counts: &[(u32, u32)], recessive_without_second_variant: bool) -> Option<DeNovoReading> {
+        let rules = self.de_novo.as_ref()?;
+        if counts.len() != rules.phenotypes.len() {
+            return None;
+        }
+        let sum: f64 = rules
+            .phenotypes
+            .iter()
+            .zip(counts)
+            .map(|(row, (confirmed, unconfirmed))| {
+                let points = row.confirmed * f64::from(*confirmed) + row.unconfirmed * f64::from(*unconfirmed);
+                row.max_points.map_or(points, |max| points.min(max))
+            })
+            .sum();
+        let points = round_points(sum);
+        // Thresholds run weakest first; the last one the total reaches is the strength.
+        let reached = rules.thresholds.iter().rposition(|cut| points >= cut.at);
+        let level = if recessive_without_second_variant { reached.and_then(|i| i.checked_sub(1)) } else { reached };
+        let evidence = level.and_then(|i| self.reading("PS2", rules.thresholds[i].strength));
+        Some(DeNovoReading {
+            points,
+            evidence,
+            lowered_for_recessive: recessive_without_second_variant && reached.is_some(),
+        })
+    }
+
+    /// Adds PM3 patient counts after the curator has checked the source's
+    /// eligibility conditions. Counts follow the rule table's row order.
+    pub fn read_pm3(&self, counts: &[u32]) -> Option<Pm3Reading> {
+        let rules = self.pm3.as_ref()?;
+        if counts.len() != rules.rows.len() {
+            return None;
+        }
+        let points = round_points(
+            rules
+                .rows
+                .iter()
+                .zip(counts)
+                .map(|(row, count)| {
+                    let sum = row.points * f64::from(*count);
+                    row.max_points.map_or(sum, |max| sum.min(max))
+                })
+                .sum(),
+        );
+        let evidence = rules
+            .thresholds
+            .iter()
+            .rev()
+            .find(|cut| points >= cut.at)
+            .and_then(|cut| self.reading("PM3", cut.strength));
+        Some(Pm3Reading { points, evidence })
     }
 
     /// A published strength for `code`, lowered to the highest this program offers
@@ -782,6 +933,9 @@ impl RuleSet {
         self.check_functional(&known_sources)?;
         self.check_locus(&known_sources)?;
         self.check_non_segregation(&known_sources)?;
+        self.check_de_novo(&known_sources)?;
+        self.check_pm3(&known_sources)?;
+        self.check_ba1(&known_sources)?;
 
         for tier in &self.vus_tiers {
             needs_source(tier.name.clone(), &tier.source)?;
@@ -826,6 +980,129 @@ impl RuleSet {
             && b.at > p.at
         {
             return bad("the benign and pathogenic limits overlap");
+        }
+        Ok(())
+    }
+
+    /// The BA1 entries are a dated manual reference, not evidence logic. The list
+    /// only makes sense with the source that published it, and each entry must
+    /// still be findable in ClinVar.
+    fn check_ba1(&self, known_sources: &HashSet<&str>) -> Result<(), RuleError> {
+        let bad = |s: &str| Err(RuleError::BadBa1(s.to_string()));
+        if self.ba1_exceptions.is_empty() {
+            return Ok(());
+        }
+        if !known_sources.contains(BA1_SOURCE) {
+            return bad("BA1 entries need the clingen-ba1-2018 source");
+        }
+        let mut ids = HashSet::new();
+        for row in &self.ba1_exceptions {
+            if row.gene.trim().is_empty()
+                || row.variant.trim().is_empty()
+                || row.clinvar_id.is_empty()
+                || !row.clinvar_id.bytes().all(|c| c.is_ascii_digit())
+                || !row.allele_id.starts_with("CA")
+                || !ids.insert(&row.allele_id)
+            {
+                return bad("BA1 entries need a gene, variant, numeric ClinVar id and unique allele id");
+            }
+        }
+        Ok(())
+    }
+
+    /// The PM3 table needs a known source, the criterion PM3, rows with unique
+    /// ids and nonnegative finite points, and thresholds that rise with the
+    /// strength, offering only strengths the criterion may use.
+    fn check_pm3(&self, known_sources: &HashSet<&str>) -> Result<(), RuleError> {
+        let bad = |s: &str| Err(RuleError::BadPm3(s.to_string()));
+        let Some(table) = &self.pm3 else { return Ok(()) };
+        if !known_sources.contains(table.source.as_str()) {
+            return Err(RuleError::UnknownSource { item: "PM3 points".into(), source_id: table.source.clone() });
+        }
+        let Some(criterion) = self.criterion("PM3").filter(|c| c.direction == Direction::Pathogenic && !c.discouraged)
+        else {
+            return bad("PM3 must be a counted pathogenic criterion");
+        };
+        let mut ids = HashSet::new();
+        if table.rows.is_empty()
+            || table.rows.iter().any(|r| {
+                r.id.trim().is_empty()
+                    || r.label.trim().is_empty()
+                    || !ids.insert(&r.id)
+                    || !r.points.is_finite()
+                    || r.points < 0.0
+                    || r.max_points.is_some_and(|m| !m.is_finite() || m <= 0.0)
+            })
+        {
+            return bad("PM3 rows need unique ids, labels, nonnegative finite points and positive finite limits");
+        }
+        let order = [Strength::Supporting, Strength::Moderate, Strength::Strong, Strength::VeryStrong];
+        let ranks: Option<Vec<usize>> =
+            table.thresholds.iter().map(|c| order.iter().position(|s| *s == c.strength)).collect();
+        if ranks.is_none_or(|r| r.is_empty() || r.windows(2).any(|w| w[0] >= w[1]))
+            || table.thresholds.iter().any(|c| !c.at.is_finite() || c.at <= 0.0)
+            || table.thresholds.windows(2).any(|w| w[0].at >= w[1].at)
+        {
+            return bad("PM3 thresholds must rise in points and strength from Supporting to Very Strong");
+        }
+        if table.thresholds.iter().any(|cut| !criterion.allowed_strengths().contains(&cut.strength)) {
+            return bad("a PM3 threshold offers a strength the PM3 criterion does not let a curator use");
+        }
+        Ok(())
+    }
+
+    /// The de novo table needs a known source, the criterion PS2, rows that never
+    /// give less for confirmed parents, and thresholds that rise with the strength.
+    fn check_de_novo(&self, known_sources: &HashSet<&str>) -> Result<(), RuleError> {
+        let Some(rules) = &self.de_novo else { return Ok(()) };
+        let bad = |problem: &str| Err(RuleError::BadDeNovo(problem.to_string()));
+        if !known_sources.contains(rules.source.as_str()) {
+            return Err(RuleError::UnknownSource {
+                item: "de novo points".to_string(),
+                source_id: rules.source.clone(),
+            });
+        }
+        match self.criterion("PS2") {
+            Some(ps2) if ps2.direction == Direction::Pathogenic && !ps2.discouraged => {}
+            _ => return bad("it needs the criterion PS2, as a pathogenic criterion that is not discouraged"),
+        }
+        let points_ok = |points: f64| points.is_finite() && points >= 0.0;
+        let mut ids = HashSet::new();
+        let rows_ok = rules.phenotypes.iter().all(|row| {
+            !row.id.trim().is_empty()
+                && !row.label.trim().is_empty()
+                && points_ok(row.confirmed)
+                && points_ok(row.unconfirmed)
+                && row.unconfirmed <= row.confirmed
+                && row.max_points.is_none_or(|max| max.is_finite() && max > 0.0)
+        });
+        if rules.phenotypes.is_empty() || !rows_ok {
+            return bad(
+                "each row needs an id, a label, points of zero or more that are not higher without confirmed parents, and a limit above zero if it has one",
+            );
+        }
+        if !rules.phenotypes.iter().all(|row| ids.insert(row.id.as_str())) {
+            return bad("row ids must be unique");
+        }
+        let order = [Strength::Supporting, Strength::Moderate, Strength::Strong, Strength::VeryStrong];
+        let ranks: Option<Vec<usize>> =
+            rules.thresholds.iter().map(|cut| order.iter().position(|o| *o == cut.strength)).collect();
+        let Some(ranks) = ranks.filter(|ranks| !ranks.is_empty()) else {
+            return bad("thresholds must use the strengths supporting to very_strong");
+        };
+        if ranks.windows(2).any(|w| w[0] >= w[1]) {
+            return bad("thresholds must list strengths from weakest to strongest, once each");
+        }
+        let at_ok = rules.thresholds.iter().all(|cut| cut.at.is_finite() && cut.at > 0.0);
+        if !at_ok || rules.thresholds.windows(2).any(|w| w[0].at >= w[1].at) {
+            return bad("threshold points must be above zero and rise with the strength");
+        }
+        let allowed = self.criterion("PS2").map(|c| c.allowed_strengths()).unwrap_or_default();
+        if rules.thresholds.iter().any(|cut| !allowed.contains(&cut.strength)) {
+            return bad("a threshold offers a strength the PS2 criterion does not let a curator use");
+        }
+        if rules.recessive_text.trim().is_empty() {
+            return bad("the recessive text is empty");
         }
         Ok(())
     }
@@ -1452,6 +1729,238 @@ mod tests {
             edited("source = \"clingen-pp1-pp4-2024\"\nstrength", "source = \"nowhere\"\nstrength"),
             Err(RuleError::UnknownSource { .. })
         ));
+    }
+
+    /// Reads de novo counts as (points, strength) with the table's four rows in
+    /// order: highly specific, consistent, consistent but many genes, not consistent.
+    fn de_novo(counts: [(u32, u32); 4], recessive: bool) -> (f64, Option<Strength>, bool) {
+        let r = RuleSet::builtin().unwrap().read_de_novo(&counts, recessive).unwrap();
+        (r.points, r.evidence.map(|e| e.strength), r.lowered_for_recessive)
+    }
+
+    #[test]
+    fn pm3_follows_pah_example_and_every_strength_edge() {
+        use Strength::*;
+        let rules = RuleSet::builtin().unwrap();
+        // ClinGen 2019: one confirmed LP partner and one confirmed P partner.
+        let example = rules.read_pm3(&[2, 0, 0, 0, 0]).unwrap();
+        assert_eq!(example.points, 2.0);
+        assert_eq!(example.evidence.unwrap().strength, Strong);
+        for (count, expected) in [
+            (0, None),
+            (1, None),
+            (2, Some(Supporting)),
+            (3, Some(Supporting)),
+            (4, Some(Moderate)),
+            (7, Some(Moderate)),
+            (8, Some(Strong)),
+            (15, Some(Strong)),
+            (16, Some(VeryStrong)),
+        ] {
+            let r = rules.read_pm3(&[0, 0, count, 0, 0]).unwrap();
+            assert_eq!(r.points, f64::from(count) * 0.25);
+            assert_eq!(r.evidence.map(|e| e.strength), expected, "{count}");
+        }
+        assert_eq!(rules.read_pm3(&[0, 1, 0, 0, 0]).unwrap().points, 0.5);
+        let applied = crate::Applied::new("PM3", VeryStrong);
+        assert!(rules.assess(&[applied]).is_ok());
+    }
+
+    #[test]
+    fn pm3_limits_homozygous_and_uncertain_rows_separately() {
+        let rules = RuleSet::builtin().unwrap();
+        for (counts, points, strength) in [
+            ([0, 0, 0, 100, 0], 1.0, Strength::Moderate),
+            ([0, 0, 0, 0, 100], 0.5, Strength::Supporting),
+            ([0, 0, 0, 100, 100], 1.5, Strength::Moderate),
+            ([1, 0, 0, 100, 100], 2.5, Strength::Strong),
+        ] {
+            let r = rules.read_pm3(&counts).unwrap();
+            assert_eq!(r.points, points);
+            assert_eq!(r.evidence.unwrap().strength, strength);
+        }
+        assert!(rules.read_pm3(&[]).is_none());
+        assert!(rules.read_pm3(&[1]).is_none());
+    }
+
+    #[test]
+    fn pm3_rejects_bad_tables_and_supports_old_rule_files() {
+        for replacement in ["points = -1.0", "points = nan"] {
+            let text = BUILTIN.replacen("points = 1.0\n", &format!("{replacement}\n"), 1);
+            assert!(RuleSet::parse(&text).is_err());
+        }
+        for (from, to) in [
+            ("source = \"clingen-svi-pm3\"\nnotes", "source = \"missing\"\nnotes"),
+            ("id = \"unknown_p\"", "id = \"confirmed\""),
+            ("max_points = 1.0\n", "max_points = 0.0\n"),
+            ("{ strength = \"strong\", at = 2.0 }", "{ strength = \"strong\", at = 0.25 }"),
+        ] {
+            assert!(RuleSet::parse(&BUILTIN.replacen(from, to, 1)).is_err(), "{to}");
+        }
+        let start = BUILTIN.find("\n[pm3]\n").unwrap();
+        let end = BUILTIN[start..].find("# ----- Benign -----").unwrap() + start;
+        let old = format!("{}{}", &BUILTIN[..start], &BUILTIN[end..]);
+        let old = RuleSet::parse(&old).unwrap();
+        assert!(old.read_pm3(&[1, 0, 0, 0, 0]).is_none());
+        assert!(old.ba1_exceptions.is_empty());
+    }
+
+    #[test]
+    fn ba1_reference_has_the_nine_published_identifiers() {
+        let rules = RuleSet::builtin().unwrap();
+        let actual: Vec<_> = rules
+            .ba1_exceptions
+            .iter()
+            .map(|r| (r.gene.as_str(), r.clinvar_id.as_str(), r.allele_id.as_str()))
+            .collect();
+        assert_eq!(
+            actual,
+            vec![
+                ("ACAD9", "1018", "CA114709"),
+                ("GJB2", "17023", "CA172210"),
+                ("HFE", "10", "CA113797"),
+                ("HFE", "9", "CA113795"),
+                ("MEFV", "2551", "CA280114"),
+                ("MEFV", "2552", "CA280116"),
+                ("PIBF1", "217689", "CA210261"),
+                ("ACADS", "3830", "CA312214"),
+                ("BTD", "1900", "CA090886"),
+            ]
+        );
+        assert!(RuleSet::parse(&BUILTIN.replace("allele_id = \"CA090886\"", "allele_id = \"CA312214\"")).is_err());
+        assert!(RuleSet::parse(&BUILTIN.replace("clinvar_id = \"1900\"", "clinvar_id = \"bad\"")).is_err());
+    }
+
+    #[test]
+    fn pm3_calculation_reason_survives_case_reopening() {
+        use crate::{Applied, CASE_FORMAT, CaseFile, GeneDecision};
+        let rules = RuleSet::builtin().unwrap();
+        let r = rules.read_pm3(&[4, 0, 0, 0, 0]).unwrap();
+        let item = Applied::new("PM3", r.evidence.unwrap().strength).with_reason(
+            "PM3: 4 x confirmed = 4 patient points after row limits; conditions checked (clingen-svi-pm3)",
+        );
+        let case = CaseFile {
+            format: CASE_FORMAT,
+            app_version: "test".into(),
+            saved_on: "2026-11-05".into(),
+            rule_set: rules.reference(),
+            variant: "test".into(),
+            gene: "PAH".into(),
+            gene_decision: GeneDecision::NotDecided,
+            today: vec![item],
+            records: vec![],
+        };
+        let reopened = CaseFile::from_json(&case.to_json(), rules).unwrap();
+        assert_eq!(reopened.today, case.today);
+        assert_eq!(rules.assess(&reopened.today).unwrap().class(), rules.assess(&case.today).unwrap().class());
+    }
+
+    #[test]
+    fn de_novo_points_follow_the_papers_worked_examples() {
+        use Strength::*;
+        let none = (0, 0);
+        // NIPBL: one patient with confirmed parents (2 points) and two without (1 + 1) = 4, Very Strong.
+        assert_eq!(de_novo([(1, 2), none, none, none], false), (4.0, Some(VeryStrong), false));
+        // SIK1: a patient who fits but not specifically, confirmed: 1 point, Moderate.
+        assert_eq!(de_novo([none, (1, 0), none, none], false), (1.0, Some(Moderate), false));
+        // Two more such patients: 3 points, Strong (not yet Very Strong).
+        assert_eq!(de_novo([none, (3, 0), none, none], false), (3.0, Some(Strong), false));
+        // ASH1L: many genes can cause it. One patient 0.5 points, Supporting; two give 1, Moderate.
+        assert_eq!(de_novo([none, none, (1, 0), none], false), (0.5, Some(Supporting), false));
+        assert_eq!(de_novo([none, none, (2, 0), none], false), (1.0, Some(Moderate), false));
+        // NIPBL with a phenotype that does not fit: no points, no evidence.
+        assert_eq!(de_novo([none, none, none, (0, 1)], false), (0.0, None, false));
+    }
+
+    #[test]
+    fn de_novo_strength_changes_exactly_at_the_table_2_limits() {
+        use Strength::*;
+        let none = (0, 0);
+        // Each patient whose phenotype fits the gene but not specifically, with parents
+        // not confirmed, earns 0.5 points.
+        let edge = |count_half: u32| de_novo([none, (0, count_half), none, none], false);
+        assert_eq!(edge(0).1, None);
+        assert_eq!(edge(1), (0.5, Some(Supporting), false));
+        assert_eq!(edge(2), (1.0, Some(Moderate), false));
+        assert_eq!(edge(3), (1.5, Some(Moderate), false));
+        assert_eq!(edge(4), (2.0, Some(Strong), false));
+        assert_eq!(edge(7), (3.5, Some(Strong), false));
+        assert_eq!(edge(8), (4.0, Some(VeryStrong), false));
+        // A quarter point (many genes, parents not confirmed) adds up exactly: 3 x 0.25 is below Supporting.
+        assert_eq!(de_novo([none, none, (0, 3), none], false), (0.75, Some(Supporting), false));
+    }
+
+    #[test]
+    fn the_many_genes_row_adds_at_most_one_point() {
+        use Strength::*;
+        let none = (0, 0);
+        // Four confirmed patients would be 2 points; the table's note limits the row to 1.
+        assert_eq!(de_novo([none, none, (4, 0), none], false), (1.0, Some(Moderate), false));
+        // The limit is for that row only; other rows still add to it.
+        assert_eq!(de_novo([(1, 0), none, (4, 0), none], false), (3.0, Some(Strong), false));
+    }
+
+    #[test]
+    fn a_recessive_gene_without_a_second_variant_lowers_the_strength_one_level() {
+        use Strength::*;
+        let none = (0, 0);
+        assert_eq!(de_novo([(1, 2), none, none, none], true), (4.0, Some(Strong), true));
+        assert_eq!(de_novo([(1, 0), none, none, none], true), (2.0, Some(Moderate), true));
+        assert_eq!(de_novo([none, (1, 0), none, none], true), (1.0, Some(Supporting), true));
+        // Supporting has no lower level: no evidence, and the screen is told why.
+        assert_eq!(de_novo([none, none, (1, 0), none], true), (0.5, None, true));
+        // Nothing to lower when the points reach no level.
+        assert_eq!(de_novo([none, none, none, (3, 0)], true), (0.0, None, false));
+    }
+
+    #[test]
+    fn de_novo_evidence_is_counted_as_ps2_and_can_reach_very_strong() {
+        let rules = RuleSet::builtin().unwrap();
+        let reading = rules.read_de_novo(&[(2, 0), (0, 0), (0, 0), (0, 0)], false).unwrap().evidence.unwrap();
+        assert_eq!(
+            (reading.code, reading.published, reading.strength),
+            ("PS2", Strength::VeryStrong, Strength::VeryStrong)
+        );
+    }
+
+    #[test]
+    fn de_novo_counts_that_do_not_match_the_table_give_nothing() {
+        let rules = RuleSet::builtin().unwrap();
+        assert!(rules.read_de_novo(&[(1, 0)], false).is_none());
+        assert!(rules.read_de_novo(&[], false).is_none());
+    }
+
+    #[test]
+    fn a_de_novo_table_that_could_overstate_the_evidence_is_refused() {
+        let is_bad = |result: Result<RuleSet, RuleError>| matches!(result, Err(RuleError::BadDeNovo(_)));
+        // Less for confirmed parents than for unconfirmed ones makes no sense.
+        assert!(is_bad(edited("confirmed = 2.0, unconfirmed = 1.0", "confirmed = 1.0, unconfirmed = 2.0")));
+        // Negative points.
+        assert!(is_bad(edited("confirmed = 2.0, unconfirmed = 1.0", "confirmed = 2.0, unconfirmed = -1.0")));
+        // A repeated row id, and an empty label.
+        assert!(is_bad(edited("id = \"consistent\"", "id = \"highly-specific\"")));
+        assert!(is_bad(edited("label = \"Phenotype not consistent with the gene\"", "label = \"\"")));
+        // A limit that is not above zero.
+        assert!(is_bad(edited("max_points = 1.0", "max_points = 0.0")));
+        // Thresholds out of order, repeated or not rising.
+        assert!(is_bad(edited("{ at = 2.0, strength = \"strong\" }", "{ at = 0.7, strength = \"strong\" }")));
+        assert!(is_bad(edited("{ at = 1.0, strength = \"moderate\" }", "{ at = 0.5, strength = \"moderate\" }")));
+        assert!(is_bad(edited("{ at = 4.0, strength = \"very_strong\" }", "{ at = 4.0, strength = \"strong\" }")));
+        // A strength that is not a pathogenic level.
+        assert!(is_bad(edited("{ at = 4.0, strength = \"very_strong\" }", "{ at = 4.0, strength = \"stand_alone\" }")));
+        // An unknown source.
+        assert!(matches!(
+            edited("source = \"clingen-svi-de-novo\"\nrecessive_text", "source = \"nowhere\"\nrecessive_text"),
+            Err(RuleError::UnknownSource { .. })
+        ));
+    }
+
+    #[test]
+    fn a_rule_file_without_the_de_novo_table_still_loads_and_gives_nothing() {
+        let start = BUILTIN.find("\n[de_novo]\n").unwrap();
+        let end = BUILTIN[start..].find("\n[[criteria]]").unwrap() + start;
+        let rules = RuleSet::parse(&format!("{}{}", &BUILTIN[..start], &BUILTIN[end..])).unwrap();
+        assert!(rules.read_de_novo(&[(1, 0), (0, 0), (0, 0), (0, 0)], false).is_none());
     }
 
     #[test]

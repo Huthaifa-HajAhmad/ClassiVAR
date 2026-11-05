@@ -7,8 +7,8 @@
 #
 # Controls are found by accessible name, so renaming these means updating the
 # script: "Theme: light. Switch to dark.", "PVS1:*not applied*", "PVS1 Very
-# strong:*", "PVS1 strength: Very strong*", "BRCA1". Clicking "Check gene" calls
-# the live sources, so the test needs network access.
+# strong:*", "PVS1 strength: Very strong*", "BRCA1". The script never calls the
+# live sources, so it runs offline; the live source tests cover the network.
 #
 # Usage (Windows):
 #   powershell -ExecutionPolicy Bypass -File scripts/gui-smoke.ps1
@@ -294,6 +294,7 @@ try {
     $after = Capture "05-pvs1-supporting"
 
     # The predictor helper turns a REVEL score into PP3 at the published strength.
+    Scroll-List-To-Top
     Click-Button "Open the predictor score helper"
     Set-BoxText "Score, e.g. 0.85" "0.95"
     Click-Button-Like "Apply PP3 Strong*"
@@ -382,6 +383,76 @@ try {
     Click-Button-Like "Apply BS4 Strong*"
     Find-Button-Like "BS4 strength: Strong*" | Out-Null
     Click-Button "Close the non-segregation helper"
+
+    # The de novo helper: two patients with a highly specific phenotype and confirmed
+    # parents earn 2 + 2 = 4 points, Very Strong (ClinGen SVI v1.1, Table 2). A
+    # recessive condition with no second variant lowers it one level, to Strong.
+    # Every count box has the same name; the first is "highly specific, confirmed".
+    $patientsBox = "Patients, e.g. 1"
+    Scroll-To-Button "Open the de novo helper"
+    Click-Button "Open the de novo helper"
+    Set-BoxText $patientsBox "2"
+    Find-Button-Like "Apply PS2 Very*" | Out-Null
+    Scroll-To-Button "Recessive condition, no second variant found"
+    $deNovo = Capture "05g-de-novo"
+    Click-Button "Recessive condition, no second variant found"
+    Find-Button-Like "Apply PS2 Strong*" | Out-Null
+    if (@(Names | Where-Object { $_ -like "Apply PS2 Very*" }).Count -ne 0) {
+        throw "the recessive rule did not lower the de novo strength"
+    }
+    Scroll-To-Button "Apply PS2 Strong*"
+    Click-Button-Like "Apply PS2 Strong*"
+    Find-Button-Like "PS2 strength: Strong*" | Out-Null
+    # No patients: nothing to apply.
+    Set-BoxText $patientsBox ""
+    if (@(Names | Where-Object { $_ -like "Apply PS2*" }).Count -ne 0) {
+        throw "the de novo helper offered a strength with no patients"
+    }
+    Scroll-To-Button "Close the de novo helper"
+    Click-Button "Close the de novo helper"
+    Scroll-List-To-Top
+
+    # PM3: the source's PAH example gives two points, Strong. Four reaches Very Strong.
+    Scroll-To-Button "Open the PM3 patients helper"
+    Click-Button "Open the PM3 patients helper"
+    Set-BoxText "PM3 patients: confirmed" "2"
+    if (@(Names | Where-Object { $_ -like "Apply PM3*" }).Count -ne 0) {
+        throw "PM3 offered evidence before its conditions were confirmed"
+    }
+    Scroll-To-Button "I checked the PM3 conditions"
+    Click-Button "I checked the PM3 conditions"
+    Find-Button-Like "Apply PM3 Strong*" | Out-Null
+    Set-BoxText "PM3 patients: confirmed" "4"
+    Scroll-To-Button "Apply PM3 Very*"
+    $pm3 = Capture "05h-pm3"
+    Click-Button-Like "Apply PM3 Very*"
+    Find-Button-Like "PM3 strength: Very*" | Out-Null
+    Set-BoxText "PM3 patients: confirmed" ""
+    if (@(Names | Where-Object { $_ -like "Apply PM3*" }).Count -ne 0) {
+        throw "PM3 offered evidence without patients"
+    }
+    Set-BoxText "PM3 patients: homozygous" "20"
+    Find-Button-Like "Apply PM3 Moderate*" | Out-Null
+    Set-BoxText "PM3 patients: homozygous" ""
+    Set-BoxText "PM3 patients: uncertain" "20"
+    Find-Button-Like "Apply PM3 Supporting*" | Out-Null
+    # A negative count must poison an otherwise valid reading, not count as 0:
+    # two confirmed patients alone would earn Strong, so Apply must vanish.
+    Set-BoxText "PM3 patients: confirmed" "2"
+    Find-Button-Like "Apply PM3 Strong*" | Out-Null
+    Set-BoxText "PM3 patients: uncertain" "-1"
+    if (@(Names | Where-Object { $_ -like "Apply PM3*" }).Count -ne 0) {
+        throw "PM3 accepted a negative count"
+    }
+    Scroll-To-Button "Close the PM3 patients helper"
+    Click-Button "Close the PM3 patients helper"
+    Scroll-To-Button "Open the BA1 exceptions reference"
+    Click-Button "Open the BA1 exceptions reference"
+    # Plain text is not exposed to automation, so the entries themselves are
+    # only a capture (05i); the engine test pins the nine published ids.
+    Scroll-To-Button "Close the BA1 exceptions reference"
+    $ba1 = Capture "05i-ba1-exceptions"
+    Click-Button "Close the BA1 exceptions reference"
     Scroll-List-To-Top
 
     # Raising a strength above its default asks for a reason first.

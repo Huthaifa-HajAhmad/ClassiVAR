@@ -15,7 +15,7 @@ pub use case::{CASE_FORMAT, CaseError, CaseFile, GeneDecision, SavedRecord};
 pub use model::{Category, Class, Direction, Strength};
 pub use reevaluate::{Consistency, Reason, Reevaluation, Rescored, Row, Submission, Verdict};
 pub use rules::{
-    Criterion, Cutoff, EvidenceReading, FunctionalRules, LocusBand, LocusChoice, LocusReading, LocusRules,
-    NonSegregationRules, NonSegregationSituation, Predictor, RuleError, RuleSet, RuleSetRef, SegregationKind,
-    YieldStep,
+    BA1_SOURCE, Ba1Exception, Criterion, Cutoff, DeNovoPhenotype, DeNovoReading, DeNovoRules, EvidenceReading,
+    FunctionalRules, LocusBand, LocusChoice, LocusReading, LocusRules, NonSegregationRules, NonSegregationSituation,
+    Pm3Reading, Pm3Row, Pm3Rules, Predictor, RuleError, RuleSet, RuleSetRef, SegregationKind, YieldStep,
 };

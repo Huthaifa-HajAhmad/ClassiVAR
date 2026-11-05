@@ -1,10 +1,11 @@
 //! The small helpers that sit inside the criteria list: the predictor score
 //! (PP3/BP4), the functional assay (PS3/BS3), family and phenotype points
-//! (PP1/PP4), non-segregation (BS4) and the reason prompt for a raised strength.
-//! Each one only fills in a criterion; the curator still decides.
+//! (PP1/PP4), non-segregation (BS4), de novo patients (PS2), recessive patients
+//! (PM3), the dated BA1 exceptions reference, and the reason prompt for a raised
+//! strength. Each one only fills in a criterion; the curator still decides.
 
 use super::*;
-use classivar_core::LocusRules;
+use classivar_core::{BA1_SOURCE, LocusRules};
 
 /// What the boxes of the PP1/PP4 helper hold, read as points.
 struct LocusInputs {
@@ -240,14 +241,13 @@ impl Workbench {
                             .child(div().text_xs().text_color(muted).child("Validation controls"))
                             .child(div().w(px(120.)).child(Input::new(&self.controls_input))),
                     );
-                match self.typed_number(&self.controls_input, cx) {
+                match self.typed_count(&self.controls_input, cx) {
                     None => (
                         "Type how many validation controls the assay used (pathogenic and benign variants together)."
                             .to_string(),
                         None,
                     ),
-                    Some(Ok(n)) if n >= 0.0 && n.fract() == 0.0 && n <= f64::from(u32::MAX) => {
-                        let controls = n as u32;
+                    Some(Ok(controls)) => {
                         match self.rules.read_functional_controls(self.functional_damaging, controls) {
                             Some(reading) => (
                                 format!(
@@ -338,7 +338,7 @@ impl Workbench {
     }
 
     /// The frame of a helper panel: its title and the button that opens and closes it.
-    /// The two newest helpers share it; `toggle` flips the helper's open flag.
+    /// The newer helper panels share it; `toggle` flips the helper's open flag.
     fn helper_start(
         &self,
         ids: (&'static str, &'static str),
@@ -613,6 +613,292 @@ impl Workbench {
                         })),
                 ),
             );
+        }
+        let citation = self.rules.source(&rules.source).map(|s| s.citation.clone());
+        panel
+            .when_some(citation, |d, citation| {
+                d.child(div().text_xs().text_color(muted).child(format!("Source: {citation}")))
+            })
+            .into_any_element()
+    }
+
+    /// Shows the dated source list for the curator to check manually.
+    pub(super) fn ba1_reference(&self, cx: &mut Context<Self>) -> AnyElement {
+        let mut panel = self.helper_start(
+            ("ba1-reference-toggle", "BA1 exceptions (July 2018)"),
+            "View list",
+            "BA1 exceptions reference",
+            self.ba1_open,
+            |this| this.ba1_open = !this.ba1_open,
+            cx,
+        );
+        if self.ba1_open {
+            let muted = cx.theme().muted_foreground;
+            panel = panel.child(div().text_xs().text_color(muted).child(
+                "Manual reference, not a variant lookup. Check these exceptions before using BA1. Absence from this dated list does not establish eligibility. The list includes uncertain variants; HFE entries have reduced penetrance. It does not set a class or change your evidence."));
+            for row in &self.rules.ba1_exceptions {
+                panel =
+                    panel.child(div().text_xs().child(format!(
+                        "{}: {} | ClinVar {} | {}",
+                        row.gene, row.variant, row.clinvar_id, row.allele_id
+                    )));
+            }
+            if let Some(source) = self.rules.source(BA1_SOURCE) {
+                panel = panel.child(div().text_xs().text_color(muted).child(format!("Source: {}", source.citation)));
+            }
+        }
+        panel.into_any_element()
+    }
+
+    pub(super) fn pm3_helper(&self, cx: &mut Context<Self>) -> AnyElement {
+        let mut panel = self.helper_start(
+            ("pm3-toggle", "Recessive patients: PM3"),
+            "Count patients",
+            "PM3 patients helper",
+            self.pm3_open,
+            |this| this.pm3_open = !this.pm3_open,
+            cx,
+        );
+        let Some(table) = self.rules.pm3.as_ref().filter(|_| self.pm3_open) else {
+            return panel.into_any_element();
+        };
+        let muted = cx.theme().muted_foreground;
+        for note in &table.notes {
+            panel = panel.child(div().text_xs().text_color(muted).child(note.clone()));
+        }
+        let mut counts = Vec::new();
+        let mut parts = Vec::new();
+        let mut invalid = false;
+        for (row, input) in table.rows.iter().zip(&self.pm3_inputs) {
+            let count = match self.typed_count(input, cx) {
+                None => 0,
+                Some(Ok(count)) => count,
+                Some(Err(())) => {
+                    invalid = true;
+                    0
+                }
+            };
+            counts.push(count);
+            if count > 0 {
+                parts.push(format!("{count} x {}", row.id));
+            }
+            let limit = row.max_points.map(|n| format!("; row limit {n}")).unwrap_or_default();
+            panel = panel.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .child(div().text_xs().child(format!("{} ({} per patient{})", row.label, row.points, limit)))
+                    .child(div().w(px(210.)).child(Input::new(input))),
+            );
+        }
+        panel = panel.child(
+            div().child(
+                Button::new("pm3-eligible")
+                    .label("I checked the PM3 conditions")
+                    .small()
+                    .selected(self.pm3_eligible)
+                    .toggled(self.pm3_eligible)
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.pm3_eligible = !this.pm3_eligible;
+                        cx.notify();
+                    })),
+            ),
+        );
+        let reading = if !invalid && self.pm3_eligible { self.rules.read_pm3(&counts) } else { None };
+        let message = if invalid {
+            "Use whole numbers of patients, for example 2.".to_string()
+        } else if !self.pm3_eligible {
+            "Confirm the conditions above before applying PM3.".to_string()
+        } else if let Some(r) = &reading {
+            format!(
+                "{} patient points: {}.",
+                r.points,
+                r.evidence
+                    .as_ref()
+                    .map(|e| format!("PM3 {}", e.strength.label()))
+                    .unwrap_or_else(|| "below Supporting; no evidence".to_string())
+            )
+        } else {
+            "No patient total reached a PM3 level, so there is no evidence to apply.".to_string()
+        };
+        panel = panel.child(div().text_sm().child(message));
+        if let Some((points, evidence)) = reading.and_then(|r| r.evidence.map(|e| (r.points, e))) {
+            let label = format!("Apply PM3 {}", evidence.strength.label());
+            let reason = format!(
+                "PM3: {} = {points} patient points after row limits; conditions checked ({})",
+                parts.join(" + "),
+                table.source
+            );
+            panel = panel.child(
+                div().child(
+                    Button::new("pm3-apply")
+                        .label(label.clone())
+                        .accessibility_label(format!("{label} to today's evidence"))
+                        .small()
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.apply_reading(&evidence, reason.clone());
+                            cx.notify();
+                        })),
+                ),
+            );
+        }
+        if let Some(source) = self.rules.source(&table.source) {
+            panel = panel.child(div().text_xs().text_color(muted).child(format!("Source: {}", source.citation)));
+        }
+        panel.into_any_element()
+    }
+
+    pub(super) fn de_novo_helper(&self, cx: &mut Context<Self>) -> AnyElement {
+        let muted = cx.theme().muted_foreground;
+        let panel = self.helper_start(
+            ("de-novo-toggle", "De novo patients → PS2"),
+            "Count patients",
+            "de novo helper",
+            self.de_novo_open,
+            |this| this.de_novo_open = !this.de_novo_open,
+            cx,
+        );
+        let Some(rules) = self.rules.de_novo.as_ref().filter(|_| self.de_novo_open) else {
+            return panel.into_any_element();
+        };
+
+        let mut panel = panel.child(div().text_xs().text_color(muted).child(
+            "How many patients had this variant new (de novo)? Sort them by how well the phenotype fits the gene, and by whether the parental relationships were confirmed.",
+        ));
+        let mut counts = Vec::new();
+        let mut parts = Vec::new();
+        let mut unusable = false;
+        let points_text = |points: f64| format!("{points} {}", if points == 1.0 { "point" } else { "points" });
+        for (i, row) in rules.phenotypes.iter().enumerate() {
+            if row.confirmed == 0.0 && row.unconfirmed == 0.0 {
+                panel = panel.child(
+                    div()
+                        .text_xs()
+                        .text_color(muted)
+                        .child(format!("{}: 0 points. Do not count these patients.", row.label)),
+                );
+                counts.push((0, 0));
+                continue;
+            }
+            let mut pair = [0u32; 2];
+            for (slot, input) in pair.iter_mut().zip(&self.de_novo_inputs[i]) {
+                match self.typed_count(input, cx) {
+                    None => {}
+                    Some(Ok(count)) => *slot = count,
+                    Some(Err(())) => unusable = true,
+                }
+            }
+            let [confirmed, unconfirmed] = pair;
+            for (count, kind) in [(confirmed, "parents confirmed"), (unconfirmed, "parents not confirmed")] {
+                if count > 0 {
+                    parts.push(format!("{count} x {} ({kind})", row.id));
+                }
+            }
+            let limit =
+                row.max_points.map(|max| format!(" This row adds at most {max} points in total.")).unwrap_or_default();
+            panel = panel.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .child(div().text_sm().child(row.label.clone()))
+                    .child(
+                        div()
+                            .flex()
+                            .flex_wrap()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(muted)
+                                    .child(format!("Parents confirmed ({} each)", points_text(row.confirmed))),
+                            )
+                            .child(div().w(px(110.)).child(Input::new(&self.de_novo_inputs[i][0])))
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(muted)
+                                    .child(format!("Not confirmed ({} each)", points_text(row.unconfirmed))),
+                            )
+                            .child(div().w(px(110.)).child(Input::new(&self.de_novo_inputs[i][1]))),
+                    )
+                    .when(!limit.is_empty(), |d| {
+                        d.child(div().text_xs().text_color(muted).child(limit.trim().to_string()))
+                    }),
+            );
+            counts.push((confirmed, unconfirmed));
+        }
+        panel = panel.child(
+            div()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap_2()
+                .child(
+                    Button::new("de-novo-recessive")
+                        .label("Recessive condition, no second variant found")
+                        .small()
+                        .selected(self.de_novo_recessive)
+                        .toggled(self.de_novo_recessive)
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.de_novo_recessive = !this.de_novo_recessive;
+                            cx.notify();
+                        })),
+                )
+                .child(div().text_xs().text_color(muted).child(rules.recessive_text.clone())),
+        );
+
+        let reading = (!unusable).then(|| self.rules.read_de_novo(&counts, self.de_novo_recessive)).flatten();
+        let message = match &reading {
+            _ if unusable => "Use whole numbers of patients, for example 2.".to_string(),
+            None => "The rules have no de novo table that fits.".to_string(),
+            Some(_) if parts.is_empty() => "Type how many patients you found.".to_string(),
+            Some(reading) => match &reading.evidence {
+                Some(evidence) => format!(
+                    "{} points: {} for {}.{}",
+                    reading.points,
+                    evidence.strength.label(),
+                    evidence.code,
+                    if reading.lowered_for_recessive { " Lowered one level for the recessive condition." } else { "" }
+                ),
+                None if reading.lowered_for_recessive => format!(
+                    "{} points: Supporting, lowered one level for the recessive condition, leaves no evidence.",
+                    reading.points
+                ),
+                None => format!(
+                    "{} points: below the lowest level ({}), so no evidence.",
+                    reading.points,
+                    rules.thresholds.first().map_or(0.0, |c| c.at)
+                ),
+            },
+        };
+        panel = panel.child(div().text_sm().child(message));
+        if let Some((reading, evidence)) = reading.and_then(|r| r.evidence.clone().map(|e| (r, e))) {
+            let label = format!("Apply {} {}", evidence.code, evidence.strength.label());
+            let reason = format!(
+                "De novo: {} = {} points{} ({})",
+                parts.join(" + "),
+                reading.points,
+                if reading.lowered_for_recessive { ", lowered one level for a recessive condition" } else { "" },
+                rules.source
+            );
+            panel = panel.child(
+                div().child(
+                    Button::new("de-novo-apply")
+                        .label(label.clone())
+                        .accessibility_label(format!("{label} to today's evidence"))
+                        .small()
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.apply_reading(&evidence, reason.clone());
+                            cx.notify();
+                        })),
+                ),
+            );
+        }
+        for note in &rules.notes {
+            panel = panel.child(div().text_xs().text_color(muted).child(note.clone()));
         }
         let citation = self.rules.source(&rules.source).map(|s| s.citation.clone());
         panel
