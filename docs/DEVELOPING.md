@@ -66,6 +66,8 @@ powershell -ExecutionPolicy Bypass -File scripts/gui-smoke.ps1
 
 It finds controls by their accessible names (for example `PVS1:*not applied*`, `PVS1 Very strong:*`, `Theme:*Switch to dark*`), so renaming a button means updating the script.
 
+A click on a button that is outside the visible part of the criteria list does nothing, and the helper panels at the top of the list push criteria rows down. So the script scrolls first: `Scroll-To-Button` (for rows of the list, which can also hide under the pane header) and `Bring-Into-View` (a safety net for buttons below the window). When you add a panel above the list, expect to add `Scroll-To-Button` calls before the clicks that follow it. Plain text on screen is not visible to the script; check it in the screenshots.
+
 It is Windows-only because it drives UI Automation. The paths it does **not** cover and that need a human click: Save/Open dialogs, keyboard-only use, macOS.
 
 ## Where things live
@@ -80,7 +82,7 @@ It is Windows-only because it drives UI Automation. The paths it does **not** co
 | ClinGen/G2P/PanelApp access | `crates/classivar-sources/src/` |
 | screen state and actions | `crates/classivar/src/view.rs` |
 | drawing (top bar, panels, criteria, result) | `crates/classivar/src/view/panels.rs` |
-| criteria helpers (predictor score, functional assay, reason prompt) | `crates/classivar/src/view/panels/helpers.rs` |
+| criteria helpers (predictor score, functional assay, family and phenotype points, non-segregation, reason prompt) | `crates/classivar/src/view/panels/helpers.rs` |
 | gene suggestions | `crates/classivar/src/genes.rs` |
 | theme preference | `crates/classivar/src/settings.rs` |
 
