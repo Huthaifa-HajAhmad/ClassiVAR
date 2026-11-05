@@ -149,6 +149,59 @@ mod tests {
     }
 
     #[test]
+    fn reopening_preserves_assessments_for_today_and_earlier_records() {
+        let case = sample();
+        let back = CaseFile::from_json(&case.to_json(), rules()).unwrap();
+        assert_eq!(rules().assess(&case.today).unwrap(), rules().assess(&back.today).unwrap());
+        for (before, after) in case.records.iter().zip(&back.records) {
+            assert_eq!(
+                rules().assess_as(&before.criteria, Counting::AsRecorded).unwrap(),
+                rules().assess_as(&after.criteria, Counting::AsRecorded).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn reasons_use_a_character_limit_in_today_and_earlier_records() {
+        for earlier_record in [false, true] {
+            for length in [crate::MAX_REASON_CHARS, crate::MAX_REASON_CHARS + 1] {
+                let mut case = sample();
+                let item = Applied::new("PM2", Moderate).with_reason("é".repeat(length));
+                if earlier_record {
+                    case.records[0].criteria = vec![item];
+                } else {
+                    case.today = vec![item];
+                }
+                let result = CaseFile::from_json(&case.to_json(), rules());
+                if length == crate::MAX_REASON_CHARS {
+                    assert_eq!(result.unwrap(), case);
+                } else {
+                    let expected_place = if earlier_record { "The record 'Lab A'" } else { "Today's evidence" };
+                    assert!(matches!(result,
+                        Err(CaseError::BadEvidence { place, error: AssessError::BadReason { code } })
+                        if place == expected_place && code == "PM2"
+                    ));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn files_saved_before_reasons_existed_still_open() {
+        let case = sample();
+        let mut json = serde_json::to_value(&case).unwrap();
+        for item in json["today"].as_array_mut().unwrap() {
+            item.as_object_mut().unwrap().remove("reason");
+        }
+        for record in json["records"].as_array_mut().unwrap() {
+            for item in record["criteria"].as_array_mut().unwrap() {
+                item.as_object_mut().unwrap().remove("reason");
+            }
+        }
+        assert_eq!(CaseFile::from_json(&json.to_string(), rules()).unwrap(), case);
+    }
+
+    #[test]
     fn the_reason_for_a_strength_is_saved_and_an_empty_one_is_refused() {
         let mut case = sample();
         case.today[0] = Applied::new("PM2", Moderate).with_reason("Absent from 40,000 controls in this population");
