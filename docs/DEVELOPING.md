@@ -5,7 +5,7 @@ This is the practical guide: how to build, test, change and review the app. The 
 ## Prerequisites
 
 - Rust **1.98.1** (pinned by `rust-toolchain.toml`; `rustup` installs it on the first `cargo` command).
-- Windows: Visual Studio C++ build tools, Windows SDK, CMake. macOS: Xcode command-line tools (the app has not been built on macOS yet).
+- Windows: Visual Studio C++ build tools, Windows SDK, CMake. macOS: Xcode command-line tools (CI has since compiled there on a `macos-15-intel` runner; a local developer setup has not been tried).
 - Network access for a first build (crates); the UI smoke test clicks "Check gene", which also calls the live gene sources.
 
 ## First run
@@ -151,4 +151,4 @@ Before asking for review:
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs fmt, clippy, tests and build on Windows (blocking) and macOS (non-blocking until the first green run), plus `cargo audit`. `.github/workflows/live-sources.yml` runs the live source tests weekly. First run 2026-11-05 on `github.com/Huthaifa-HajAhmad/ClassiVAR`: audit and Windows green; the macOS job has not run yet (GitHub runner capacity, twice; the workflow now targets `macos-15-intel`). The first green runs are recorded in `docs/ROADMAP.md` under D3.
+`.github/workflows/ci.yml` runs fmt, clippy, tests and build on Windows (blocking) and macOS (currently non-blocking out of caution — see below), plus `cargo audit`. `.github/workflows/live-sources.yml` runs the live source tests weekly. Run [42086149175](https://github.com/Huthaifa-HajAhmad/ClassiVAR/actions/runs/42086149175) on 2026-11-05 is fully green, including the first macOS build of the app (`macos-15-intel`; the earlier arm64 pool was twice exhausted — "Repository status" in ROADMAP has the story). Put the newest green run URL in `docs/ROADMAP.md` under D3.
