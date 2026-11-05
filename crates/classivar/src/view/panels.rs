@@ -603,6 +603,12 @@ impl Workbench {
         if self.editing == Editing::Today && self.rules.functional.is_some() {
             list = list.child(self.functional_helper(cx));
         }
+        if self.editing == Editing::Today && self.rules.locus_evidence.is_some() {
+            list = list.child(self.locus_helper(cx));
+        }
+        if self.editing == Editing::Today && self.rules.non_segregation.is_some() {
+            list = list.child(self.non_segregation_helper(cx));
+        }
         for (direction, title, points) in [
             (Direction::Pathogenic, "For disease (pathogenic)", format!("+{}", result.pathogenic_points)),
             (Direction::Benign, "Against disease (benign)", format!("−{}", result.benign_points.abs())),
@@ -986,7 +992,7 @@ impl Workbench {
                     hero = hero.child(self.vus_note(result.total_points, cx));
                 }
                 hero = hero.child(div().text_xs().text_color(muted).child(
-                    "Default strengths follow 2015, except PVS1 (guide), PM2 (Supporting, ClinGen 2020) and PP5/BP6 (listed, not counted). Gene-specific rules and later ClinGen refinements (PS3/BS3, splicing, PP1/BS4) can change them and are not built in yet. PP3/BP4 strengths for four tools come from the predictor score helper.",
+                    "Default strengths follow 2015, except PVS1 (guide), PM2 (Supporting, ClinGen 2020) and PP5/BP6 (listed, not counted). Gene-specific rules and later ClinGen refinements (splicing, PS2/PM6, PM3) can change them and are not built in yet. Four helpers in the criteria list apply published tables: predictor scores (PP3/BP4), functional assays (PS3/BS3), family and phenotype points (PP1/PP4) and non-segregation (BS4).",
                 ));
             }
             None if !result.conflicts.is_empty() => {

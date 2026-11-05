@@ -1,8 +1,26 @@
 //! The small helpers that sit inside the criteria list: the predictor score
-//! (PP3/BP4), the functional assay (PS3/BS3) and the reason prompt for a raised
-//! strength. Each one only fills in a criterion; the curator still decides.
+//! (PP3/BP4), the functional assay (PS3/BS3), family and phenotype points
+//! (PP1/PP4), non-segregation (BS4) and the reason prompt for a raised strength.
+//! Each one only fills in a criterion; the curator still decides.
 
 use super::*;
+use classivar_core::LocusRules;
+
+/// What the boxes of the PP1/PP4 helper hold, read as points.
+struct LocusInputs {
+    pp1: f64,
+    pp1_note: String,
+    pp4: f64,
+    pp4_note: String,
+    /// What each box added, in words, for the reason that is saved with the case.
+    parts: Vec<String>,
+    /// The yield box or the family count box has something typed in it.
+    typed_any: bool,
+    /// A box holds something that cannot be used. No reading is made then.
+    unusable: bool,
+    /// PP1 counts only when several genes can cause the phenotype.
+    pp1_allowed: bool,
+}
 
 impl Workbench {
     /// Turns a prediction tool's score into PP3 or BP4 with the strength the
@@ -317,6 +335,387 @@ impl Workbench {
                 d.child(div().text_xs().text_color(muted).child(format!("Source: {citation}")))
             })
             .into_any_element()
+    }
+
+    /// The frame of a helper panel: its title and the button that opens and closes it.
+    /// The two newest helpers share it; `toggle` flips the helper's open flag.
+    fn helper_start(
+        &self,
+        ids: (&'static str, &'static str),
+        label: &'static str,
+        what: &'static str,
+        open: bool,
+        toggle: fn(&mut Self),
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let (border, background) = (cx.theme().border, cx.theme().background);
+        let (button_id, title) = ids;
+        div().p_3().rounded_md().border_1().border_color(border).bg(background).flex().flex_col().gap_2().child(
+            div()
+                .flex()
+                .items_center()
+                .gap_2()
+                .child(div().flex_1().text_sm().font_weight(FontWeight::SEMIBOLD).child(title))
+                .child(
+                    Button::new(button_id)
+                        .label(if open { "Close" } else { label })
+                        .accessibility_label(if open {
+                            format!("Close the {what}")
+                        } else {
+                            format!("Open the {what}")
+                        })
+                        .small()
+                        .outline()
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            toggle(this);
+                            cx.notify();
+                        })),
+                ),
+        )
+    }
+
+    /// Turns family and phenotype facts into PP1 and PP4 strengths with the
+    /// arithmetic of ClinGen 2024. It lists the choices the paper allows for the
+    /// total; the curator picks one. Like the other helpers, it only fills in criteria.
+    pub(super) fn locus_helper(&self, cx: &mut Context<Self>) -> AnyElement {
+        let panel = self.helper_start(
+            ("locus-toggle", "Family and phenotype → PP1 and PP4"),
+            "Use points",
+            "co-segregation and phenotype helper",
+            self.locus_open,
+            |this| this.locus_open = !this.locus_open,
+            cx,
+        );
+        let Some(rules) = self.rules.locus_evidence.as_ref().filter(|_| self.locus_open) else {
+            return panel.into_any_element();
+        };
+        let inputs = self.read_locus_inputs(rules, cx);
+        panel
+            .child(self.locus_phenotype_part(rules, &inputs, cx))
+            .child(self.locus_family_part(rules, &inputs, cx))
+            .child(self.locus_result(rules, &inputs, cx))
+            .into_any_element()
+    }
+
+    /// The PP4 half: the diagnostic yield, how many variants share the allele, and the paper's cautions.
+    fn locus_phenotype_part(&self, rules: &LocusRules, inputs: &LocusInputs, cx: &mut Context<Self>) -> Div {
+        let muted = cx.theme().muted_foreground;
+        let row = |label: &'static str, input: &Entity<InputState>| {
+            div()
+                .flex()
+                .items_center()
+                .gap_2()
+                .child(div().text_xs().text_color(muted).child(label))
+                .child(div().w(px(120.)).child(Input::new(input)))
+        };
+        let mut part = div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(
+                div().text_xs().text_color(muted).child(
+                    "Fill in one or both parts. An empty box counts as 0 points. The paper divides the yield, never the points, when several variants share an allele.",
+                ),
+            )
+            .child(row("Diagnostic yield of testing for the phenotype (%)", &self.yield_input))
+            .child(row("Variants on the same allele (1 if alone)", &self.variants_input))
+            .child(div().text_sm().child(inputs.pp4_note.clone()));
+        for note in &rules.notes {
+            part = part.child(div().text_xs().text_color(muted).child(note.clone()));
+        }
+        part
+    }
+
+    /// The PP1 half: how many genes can cause the phenotype (it decides whether PP1 counts),
+    /// the kind of family, and how many informative members there are.
+    fn locus_family_part(&self, rules: &LocusRules, inputs: &LocusInputs, cx: &mut Context<Self>) -> Div {
+        let muted = cx.theme().muted_foreground;
+        let genes_button = |id: &'static str, label: &'static str, genes: PhenotypeGenes, cx: &mut Context<Self>| {
+            Button::new(id)
+                .label(label)
+                .small()
+                .selected(self.locus_genes == genes)
+                .toggled(self.locus_genes == genes)
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.locus_genes = genes;
+                    cx.notify();
+                }))
+        };
+        let mut kinds =
+            div().flex().flex_wrap().items_center().gap_2().child(div().text_xs().text_color(muted).child("Family"));
+        for (i, kind) in rules.segregation.iter().enumerate() {
+            kinds = kinds.child(
+                Button::new(SharedString::from(format!("locus-kind-{}", kind.id)))
+                    .label(kind.label.clone())
+                    .small()
+                    .selected(self.locus_kind == i)
+                    .toggled(self.locus_kind == i)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.locus_kind = i;
+                        cx.notify();
+                    })),
+            );
+        }
+        div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap_2()
+                    .child(div().text_xs().text_color(muted).child("Can other genes cause this phenotype?"))
+                    .child(genes_button(
+                        "locus-genes-several",
+                        "Several genes can cause it",
+                        PhenotypeGenes::Several,
+                        cx,
+                    ))
+                    .child(genes_button("locus-genes-one", "Only this gene causes it", PhenotypeGenes::One, cx)),
+            )
+            .when(self.locus_genes == PhenotypeGenes::One, |d| {
+                d.child(div().text_xs().text_color(muted).child(rules.homogeneity_text.clone()))
+            })
+            .child(kinds)
+            .when_some(rules.segregation[self.locus_kind].note.clone(), |d, note| {
+                d.child(div().text_xs().text_color(muted).child(note))
+            })
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(div().text_xs().text_color(muted).child("Informative family members (see the note)"))
+                    .child(div().w(px(120.)).child(Input::new(&self.segregations_input))),
+            )
+            .child(div().text_sm().child(inputs.pp1_note.clone()))
+    }
+
+    /// The total, the choices the paper allows for it, and the source.
+    fn locus_result(&self, rules: &LocusRules, inputs: &LocusInputs, cx: &mut Context<Self>) -> Div {
+        let muted = cx.theme().muted_foreground;
+        let mut result = div().flex().flex_col().gap_2();
+        let reading = (!inputs.unusable && inputs.typed_any)
+            .then(|| self.rules.read_locus(inputs.pp1, inputs.pp4, inputs.pp1_allowed))
+            .flatten();
+        if let Some(reading) = reading {
+            let mut summary = format!("Total {} points for PP1 and PP4 together.", reading.total);
+            let mut counted = format!("total {} points", reading.total);
+            if reading.capped {
+                summary.push_str(&format!(
+                    " The sum, {}, is above the limit of {} points, so it counts as {}.",
+                    reading.sum, rules.cap_points, rules.cap_points
+                ));
+                counted = format!("sum {} points, counted as {} (the limit)", reading.sum, rules.cap_points);
+            }
+            if !inputs.pp1_allowed {
+                summary.push_str(" PP1 is not counted, so only PP4 choices are listed.");
+            }
+            if reading.choices.is_empty() {
+                let first = rules.bands.first().map_or(1.0, |band| band.min_points);
+                summary.push_str(&format!(" The paper gives no evidence below {first} point."));
+            } else {
+                summary.push_str(
+                    " Pick one of the choices the paper allows. A criterion a choice does not name is left as it is.",
+                );
+            }
+            result = result.child(div().text_sm().child(summary));
+            let reason = format!("{}; {counted} ({}, Tables 2 to 4)", inputs.parts.join("; "), rules.source);
+            let mut choices = div().flex().flex_wrap().gap_2();
+            for choice in reading.choices {
+                let slug = |strength: Option<Strength>| {
+                    strength.map_or("none".to_string(), |s| s.label().to_lowercase().replace(' ', "-"))
+                };
+                let label = [("PP1", choice.pp1), ("PP4", choice.pp4)]
+                    .into_iter()
+                    .filter_map(|(code, strength)| strength.map(|s| format!("{code} {}", s.label())))
+                    .collect::<Vec<_>>()
+                    .join(" + ");
+                let reason = reason.clone();
+                choices = choices.child(
+                    Button::new(SharedString::from(format!("locus-choice-{}-{}", slug(choice.pp1), slug(choice.pp4))))
+                        .label(format!("Apply {label}"))
+                        .accessibility_label(format!("Apply {label} to today's evidence"))
+                        .small()
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.apply_locus_choice(choice, reason.clone());
+                            cx.notify();
+                        })),
+                );
+            }
+            result = result.child(choices);
+        } else if !inputs.unusable {
+            result = result.child(div().text_sm().child("Fill in at least one box to see the points."));
+        }
+        let citation = self.rules.source(&rules.source).map(|s| s.citation.clone());
+        result.when_some(citation, |d, citation| {
+            d.child(div().text_xs().text_color(muted).child(format!("Source: {citation}")))
+        })
+    }
+
+    /// Asks which situation fits and applies BS4 only where ClinGen 2024 supports
+    /// it. Where it does not, the panel says why. Like the other helpers, it only
+    /// fills in the criterion.
+    pub(super) fn non_segregation_helper(&self, cx: &mut Context<Self>) -> AnyElement {
+        let muted = cx.theme().muted_foreground;
+        let panel = self.helper_start(
+            ("segregation-toggle", "Non-segregation → BS4"),
+            "Check the situation",
+            "non-segregation helper",
+            self.segregation_open,
+            |this| this.segregation_open = !this.segregation_open,
+            cx,
+        );
+        let Some(rules) = self.rules.non_segregation.as_ref().filter(|_| self.segregation_open) else {
+            return panel.into_any_element();
+        };
+
+        let mut situations = div()
+            .flex()
+            .flex_wrap()
+            .items_center()
+            .gap_2()
+            .child(div().text_xs().text_color(muted).child("What fits the family"));
+        for (i, situation) in rules.situations.iter().enumerate() {
+            situations = situations.child(
+                Button::new(SharedString::from(format!("segregation-situation-{}", situation.id)))
+                    .label(situation.label.clone())
+                    .small()
+                    .selected(self.segregation_situation == i)
+                    .toggled(self.segregation_situation == i)
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.segregation_situation = i;
+                        cx.notify();
+                    })),
+            );
+        }
+        let situation = &rules.situations[self.segregation_situation];
+        let mut panel = panel.child(situations).child(div().text_sm().child(situation.text.clone()));
+        if let Some(reading) = self.rules.read_non_segregation(&situation.id) {
+            let label = format!("Apply {} {}", reading.code, reading.strength.label());
+            let reason = format!(
+                "Non-segregation: {} ({}, −{} points)",
+                situation.label,
+                rules.source,
+                self.rules.magnitude(reading.strength)
+            );
+            panel = panel.child(
+                div().child(
+                    Button::new("segregation-apply")
+                        .label(label.clone())
+                        .accessibility_label(format!("{label} to today's evidence"))
+                        .small()
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.apply_reading(&reading, reason.clone());
+                            cx.notify();
+                        })),
+                ),
+            );
+        }
+        let citation = self.rules.source(&rules.source).map(|s| s.citation.clone());
+        panel
+            .when_some(citation, |d, citation| {
+                d.child(div().text_xs().text_color(muted).child(format!("Source: {citation}")))
+            })
+            .into_any_element()
+    }
+
+    /// Reads the number boxes of the PP1/PP4 helper as points. A box with something
+    /// unusable in it stops the reading; an empty box counts as zero. PP1 counts
+    /// only when the curator said several genes can cause the phenotype, and not
+    /// when several variants share the allele (the paper's sharing worksheet is not built in).
+    fn read_locus_inputs(&self, rules: &LocusRules, cx: &App) -> LocusInputs {
+        let mut out = LocusInputs {
+            pp1: 0.0,
+            pp1_note: String::new(),
+            pp4: 0.0,
+            pp4_note: String::new(),
+            parts: Vec::new(),
+            typed_any: false,
+            unusable: false,
+            pp1_allowed: self.locus_genes == PhenotypeGenes::Several,
+        };
+        let typed_yield = self.typed_number(&self.yield_input, cx);
+        let typed_count = self.typed_number(&self.segregations_input, cx);
+        out.typed_any = typed_yield.is_some() || typed_count.is_some();
+
+        // Variants on the allele: an empty box means one.
+        let variants = match self.typed_number(&self.variants_input, cx) {
+            None => Some(1),
+            Some(Ok(n)) if n >= 1.0 && n.fract() == 0.0 && n <= f64::from(u32::MAX) => Some(n as u32),
+            Some(_) => None,
+        };
+        out.pp4_note = match (typed_yield, variants) {
+            (_, None) => {
+                out.unusable = true;
+                "Variants on the same allele: use a whole number, 1 or more.".to_string()
+            }
+            (None, Some(_)) => "Leave the yield empty if there is no phenotype evidence.".to_string(),
+            (Some(Ok(percent)), Some(variants)) if (0.0..=100.0).contains(&percent) => {
+                let shared = percent / f64::from(variants);
+                let sharing = if variants > 1 {
+                    format!(" shared by {variants} variants ({shared:.1}% each)")
+                } else {
+                    String::new()
+                };
+                match self.rules.pp4_points(percent, variants) {
+                    Some(points) => {
+                        out.pp4 = points;
+                        out.parts.push(format!("diagnostic yield {percent}%{sharing} = {points} points for PP4"));
+                        let mut note = format!(
+                            "A yield of {percent}%{sharing} earns {points} points for PP4 (a yield between two rows of the table takes the lower row)."
+                        );
+                        if shared < rules.yield_text_minimum {
+                            note.push_str(&format!(
+                                " Careful: the paper's text asks for a yield over {}%; its table starts lower.",
+                                rules.yield_text_minimum
+                            ));
+                        }
+                        note
+                    }
+                    None => format!(
+                        "A yield of {percent}%{sharing} is below the first row of the table ({}%): no PP4 points.",
+                        rules.pp4_yield.first().map_or(0.0, |step| step.at)
+                    ),
+                }
+            }
+            (Some(_), Some(_)) => {
+                out.unusable = true;
+                "Type a percentage between 0 and 100, for example 60.".to_string()
+            }
+        };
+
+        let kind = &rules.segregation[self.locus_kind];
+        out.pp1_note = match typed_count {
+            None => "Leave the count empty if there is no family evidence.".to_string(),
+            Some(Ok(n)) if n >= 0.0 && n.fract() == 0.0 && n <= f64::from(u32::MAX) => {
+                let count = n as u32;
+                if count == 0 {
+                    "0 family members: no PP1 points.".to_string()
+                } else if self.locus_genes == PhenotypeGenes::Unanswered {
+                    out.unusable = true;
+                    "Answer the question about other genes first: the paper does not allow PP1 when only one gene can cause the phenotype.".to_string()
+                } else if !out.pp1_allowed {
+                    "PP1 is not counted: only this gene causes the phenotype (see the paper's rule above).".to_string()
+                } else if variants.is_some_and(|v| v > 1) {
+                    out.unusable = true;
+                    "The paper shares PP1 points among variants on one allele with a worksheet (its Table S1) that this program does not have. Do not divide the points yourself. Set the variants to 1 or leave the family count empty.".to_string()
+                } else {
+                    // The kind comes from the same rules, so it always has points.
+                    let points = self.rules.pp1_points(&kind.id, count).unwrap_or_default();
+                    out.pp1 = points;
+                    out.parts.push(format!("{count} co-segregations ({}) = {points} points for PP1", kind.label));
+                    format!("{count} co-segregations, {}: {points} points for PP1.", kind.label)
+                }
+            }
+            Some(_) => {
+                out.unusable = true;
+                "Use a whole number of family members, for example 3.".to_string()
+            }
+        };
+        out
     }
 
     /// Asks why a strength is raised above its default. The raise is only made

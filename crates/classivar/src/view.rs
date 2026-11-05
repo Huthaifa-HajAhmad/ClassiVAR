@@ -355,6 +355,15 @@ enum AssayRoute {
     OddsPath,
 }
 
+/// What the curator said about how many genes can cause the phenotype. PP1 counts
+/// only when several can: with a single gene the paper allows no segregation evidence.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PhenotypeGenes {
+    Unanswered,
+    One,
+    Several,
+}
+
 /// A step that throws work away. It waits for a click on "Yes" first.
 #[derive(Clone, PartialEq, Eq)]
 enum Confirm {
@@ -486,6 +495,18 @@ pub struct Workbench {
     functional_damaging: bool,
     controls_input: Entity<InputState>,
     oddspath_input: Entity<InputState>,
+    /// The co-segregation and phenotype helper (PP1 and PP4): open or closed.
+    locus_open: bool,
+    /// Which kind of `rules.locus_evidence.segregation` the PP1 count belongs to.
+    locus_kind: usize,
+    yield_input: Entity<InputState>,
+    segregations_input: Entity<InputState>,
+    /// How many variants share the allele (the paper divides the yield among them).
+    variants_input: Entity<InputState>,
+    locus_genes: PhenotypeGenes,
+    /// The non-segregation helper (BS4): open or closed, and the situation chosen.
+    segregation_open: bool,
+    segregation_situation: usize,
     gene: GeneChecks,
     /// Why the gene box was not checked (empty or not a symbol), shown under the row.
     gene_error: Option<String>,
@@ -584,6 +605,27 @@ impl Workbench {
                     cx.notify();
                 }
             });
+        let yield_input = cx.new(|cx| InputState::new(window, cx).placeholder("Diagnostic yield %, e.g. 60"));
+        let segregations_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("Informative family members, e.g. 3"));
+        let variants_input = cx.new(|cx| InputState::new(window, cx).placeholder("Variants on the allele, e.g. 1"));
+        let on_variants_input =
+            cx.subscribe_in(&variants_input, window, |_this, _, event: &InputEvent, _window, cx| {
+                if matches!(event, InputEvent::Change) {
+                    cx.notify();
+                }
+            });
+        let on_yield_input = cx.subscribe_in(&yield_input, window, |_this, _, event: &InputEvent, _window, cx| {
+            if matches!(event, InputEvent::Change) {
+                cx.notify();
+            }
+        });
+        let on_segregations_input =
+            cx.subscribe_in(&segregations_input, window, |_this, _, event: &InputEvent, _window, cx| {
+                if matches!(event, InputEvent::Change) {
+                    cx.notify();
+                }
+            });
         Self {
             rules,
             mode: Mode::NewVariant,
@@ -606,6 +648,14 @@ impl Workbench {
             functional_damaging: true,
             controls_input,
             oddspath_input,
+            locus_open: false,
+            locus_kind: 0,
+            yield_input,
+            segregations_input,
+            variants_input,
+            locus_genes: PhenotypeGenes::Unanswered,
+            segregation_open: false,
+            segregation_situation: 0,
             gene: GeneChecks::idle(),
             gene_error: None,
             case_gene: String::new(),
@@ -627,6 +677,9 @@ impl Workbench {
                 on_predictor_input,
                 on_controls_input,
                 on_oddspath_input,
+                on_yield_input,
+                on_segregations_input,
+                on_variants_input,
                 on_reason_input,
                 on_escape,
             ],
@@ -672,6 +725,9 @@ impl Workbench {
                 &self.predictor_input,
                 &self.controls_input,
                 &self.oddspath_input,
+                &self.yield_input,
+                &self.segregations_input,
+                &self.variants_input,
                 &self.reason_input,
             ];
             if inputs.iter().any(|input| input.read(cx).focus_handle(cx).is_focused(window)) {
@@ -931,6 +987,17 @@ impl Workbench {
         self.today.insert(reading.code.to_string(), Choice::with_reason(reading.strength, reason));
     }
 
+    /// Put the PP1 and PP4 strengths of one paper-allowed choice onto today's
+    /// evidence. A criterion the choice leaves out is not touched. The reason
+    /// records the points behind the strengths, so it is saved with the case.
+    fn apply_locus_choice(&mut self, choice: classivar_core::LocusChoice, reason: String) {
+        for (code, strength) in [("PP1", choice.pp1), ("PP4", choice.pp4)] {
+            if let Some(strength) = strength {
+                self.today.insert(code.to_string(), Choice::with_reason(strength, reason.clone()));
+            }
+        }
+    }
+
     /// Forget the score and close the helper. It belongs to the variant on screen.
     fn reset_helpers(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.raising = None;
@@ -942,6 +1009,14 @@ impl Workbench {
         self.functional_damaging = true;
         self.controls_input.update(cx, |input, cx| input.set_value("", window, cx));
         self.oddspath_input.update(cx, |input, cx| input.set_value("", window, cx));
+        self.locus_open = false;
+        self.locus_kind = 0;
+        self.yield_input.update(cx, |input, cx| input.set_value("", window, cx));
+        self.segregations_input.update(cx, |input, cx| input.set_value("", window, cx));
+        self.variants_input.update(cx, |input, cx| input.set_value("", window, cx));
+        self.locus_genes = PhenotypeGenes::Unanswered;
+        self.segregation_open = false;
+        self.segregation_situation = 0;
     }
 
     fn set_mode(&mut self, mode: Mode) {
