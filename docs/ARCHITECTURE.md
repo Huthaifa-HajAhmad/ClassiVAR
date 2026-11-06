@@ -132,7 +132,8 @@ Full instructions, recipes and debugging: `docs/DEVELOPING.md`.
 
 First build compiles GPUI and takes a few minutes. Windows needs the Visual Studio C++ tools, a Windows SDK and CMake (all present on this machine). macOS has compiled on CI (2026-11-05, `macos-15-intel`) but has never run locally.
 Case files are ignored by git (`*.classivar.json`), and the save dialog starts in Documents, so a saved case cannot be committed by accident.
-Optional speed-up for dev runs: set `opt-level = 3` for the GPUI crates in `[profile.dev.package]` (see the GPUI Kit installation guide). Not applied yet.
+Build output is kept small on purpose: `[profile.dev.package."*"] debug = false` in `Cargo.toml` gives dependencies no debug info and our own crates all of it, measured at 2.1 GB against 5.0 GB for the same workspace (2026-11-06; the 2.1 GB figure also held the test binaries, so the real saving is larger). A backtrace in our code keeps file and line, one inside a dependency keeps only the symbol; `docs/DEVELOPING.md` says how to get the line back. A package rule of that shape beats `CARGO_PROFILE_DEV_DEBUG`, so the variable cannot undo it.
+Still not applied: `opt-level = 3` for the GPUI crates in `[profile.dev.package]` (see the GPUI Kit installation guide). A named-crate rule merges with the wildcard above, so the two do not conflict.
 
 ## Distribution (later, M8)
 

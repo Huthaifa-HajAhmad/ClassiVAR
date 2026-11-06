@@ -133,6 +133,7 @@ Add `guide_source` and one or more `[[criteria.guide]]` entries. Each needs a st
 ## Debugging
 
 - **App closes when a screen opens**: stack overflow. Check the function that draws it; `build.rs` already asks for 16 MB, but keep render functions small. Reproduce by clicking, not by tests.
+- **A backtrace stops at a dependency**: dependencies build without debug info (`[profile.dev.package."*"]` in `Cargo.toml`, which is what keeps `target/` near 2 GB instead of 5). You still get the crate and the function, not the file and line. To step into one, comment that block out or narrow it to the crate name; `CARGO_PROFILE_DEV_DEBUG` cannot override a package rule.
 - **Theme resets**: the preference is `%APPDATA%\ClassiVAR\settings.txt`. Delete it to force light.
 - **A saved case will not open**: the file may be from a newer layout or use a criterion the current rules reject. The message names the reason; `case.rs` has the format and version.
 - **A gene answer looks stale**: each lookup is generation-counted; starting a new check drops late answers. Answers are not saved with a case (the curator re-checks after opening).
