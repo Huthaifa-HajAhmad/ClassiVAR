@@ -481,6 +481,8 @@ pub struct Workbench {
     predictor_open: bool,
     /// Which tool of `rules.predictors` the helper reads.
     predictor_tool: usize,
+    /// True when the curator confirmed the selected tool's extra condition.
+    predictor_eligible: bool,
     /// Scroll state of the criteria list and of the result pane, so the keyboard can scroll them.
     criteria_scroll: ScrollHandle,
     result_scroll: ScrollHandle,
@@ -681,6 +683,7 @@ impl Workbench {
             predictor_input,
             predictor_open: false,
             predictor_tool: 0,
+            predictor_eligible: false,
             criteria_scroll: ScrollHandle::new(),
             result_scroll: ScrollHandle::new(),
             raising: None,
@@ -1072,6 +1075,7 @@ impl Workbench {
         self.raising = None;
         self.predictor_open = false;
         self.predictor_tool = 0;
+        self.predictor_eligible = false;
         self.predictor_input.update(cx, |input, cx| input.set_value("", window, cx));
         self.functional_open = false;
         self.functional_route = AssayRoute::Controls;

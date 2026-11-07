@@ -19,3 +19,18 @@ publish = false
 # name a single crate here) when a dependency needs a line table.
 [profile.dev.package."*"]
 debug = false
+
+# The drawing and layout code runs on every frame. Unoptimised, it makes the dev
+# window feel slow. These are the eight crates the GPUI Kit installation guide lists
+# for optimisation; it says to leave proc-macro crates such as gpui-pre-macros out,
+# because they only run inside the compiler. Our own crates stay unoptimised so
+# rebuilds stay quick.
+[profile.dev.package]
+gpui-pre = { opt-level = 3 }
+gpui-component = { opt-level = 3 }
+gpui-kit = { opt-level = 3 }
+gpui-kit-assets = { opt-level = 3 }
+gpui-pre-platform = { opt-level = 3 }
+rustybuzz = { opt-level = 3 }
+taffy = { opt-level = 3 }
+ttf-parser = { opt-level = 3 }

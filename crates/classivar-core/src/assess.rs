@@ -264,6 +264,15 @@ impl RuleSet {
                 reason: "If PVS1 describes a splice variant, its effect is already counted; do not also count PP3 for the same prediction.".to_string(),
             });
         }
+        // PS2 and PM6 are alternative codes for the same de novo evidence: ClinGen
+        // SVI v1.1, Table 2 offers either code for one total, not both.
+        if counted("PS2") && counted("PM6") {
+            warnings.push(Warning::DoubleCounted {
+                a: "PS2".to_string(),
+                b: "PM6".to_string(),
+                reason: "ClinGen Table 2 lets either code carry the total, not both. Remove one, or count only one observation.".to_string(),
+            });
+        }
         if pathogenic_points > 0 && benign_points < 0 {
             warnings.push(Warning::ConflictingEvidence);
         }
@@ -596,6 +605,14 @@ mod tests {
         let a = apply(&[("PVS1", VeryStrong), ("PP3", Strong)]);
         assert!(
             a.warnings.iter().any(|w| matches!(w, Warning::DoubleCounted { a, b, .. } if a == "PVS1" && b == "PP3"))
+        );
+    }
+
+    #[test]
+    fn ps2_and_pm6_together_are_flagged_as_double_counting() {
+        let a = apply(&[("PS2", VeryStrong), ("PM6", Strong)]);
+        assert!(
+            a.warnings.iter().any(|w| matches!(w, Warning::DoubleCounted { a, b, .. } if a == "PS2" && b == "PM6"))
         );
     }
 

@@ -309,6 +309,29 @@ try {
     Set-BoxText "Score, e.g. 0.85" "0.01"
     Find-Button-Like "Apply BP4 Moderate*" | Out-Null
     $predictor = Capture "05b-predictor"
+    # SpliceAI is applied at Supporting only; 0.1 to 0.2 gives nothing (Walker 2023).
+    # The paper's table is only for variants outside donor/acceptor +/-1,2, so the
+    # helper withholds Apply until the curator confirms that, and it accepts 0 to 1.
+    Click-Button "SpliceAI"
+    Set-BoxText "Score, e.g. 0.85" "0.9"
+    if (@(Names | Where-Object { $_ -like "Apply PP3*" -or $_ -like "Apply BP4*" }).Count -ne 0) {
+        throw "SpliceAI offered Apply before its scope was confirmed"
+    }
+    Scroll-To-Button "Confirm the variant is outside*"
+    Click-Button-Like "Confirm the variant is outside*"
+    Set-BoxText "Score, e.g. 0.85" "0.9"
+    Find-Button-Like "Apply PP3 Supporting*" | Out-Null
+    Set-BoxText "Score, e.g. 0.85" "0.15"
+    if (@(Names | Where-Object { $_ -like "Apply PP3*" -or $_ -like "Apply BP4*" }).Count -ne 0) {
+        throw "a SpliceAI score between 0.1 and 0.2 still offered to apply a criterion"
+    }
+    Set-BoxText "Score, e.g. 0.85" "1.5"
+    if (@(Names | Where-Object { $_ -like "Apply PP3*" -or $_ -like "Apply BP4*" }).Count -ne 0) {
+        throw "a SpliceAI score outside 0 to 1 still offered to apply a criterion"
+    }
+    Set-BoxText "Score, e.g. 0.85" "0.05"
+    Find-Button-Like "Apply BP4 Supporting*" | Out-Null
+    Capture "05b2-spliceai" | Out-Null
     Click-Button "Close the predictor score helper"
 
     # The functional helper: controls route, then the OddsPath route.
@@ -393,6 +416,8 @@ try {
     Click-Button "Open the de novo helper"
     Set-BoxText $patientsBox "2"
     Find-Button-Like "Apply PS2 Very*" | Out-Null
+    # The same total can be applied as PM6, which this program stops at Strong.
+    Find-Button-Like "Apply PM6 Strong*" | Out-Null
     Scroll-To-Button "Recessive condition, no second variant found"
     $deNovo = Capture "05g-de-novo"
     Click-Button "Recessive condition, no second variant found"
@@ -400,12 +425,12 @@ try {
     if (@(Names | Where-Object { $_ -like "Apply PS2 Very*" }).Count -ne 0) {
         throw "the recessive rule did not lower the de novo strength"
     }
-    Scroll-To-Button "Apply PS2 Strong*"
-    Click-Button-Like "Apply PS2 Strong*"
-    Find-Button-Like "PS2 strength: Strong*" | Out-Null
+    Scroll-To-Button "Apply PM6 Strong*"
+    Click-Button-Like "Apply PM6 Strong*"
+    Find-Button-Like "PM6 strength: Strong*" | Out-Null
     # No patients: nothing to apply.
     Set-BoxText $patientsBox ""
-    if (@(Names | Where-Object { $_ -like "Apply PS2*" }).Count -ne 0) {
+    if (@(Names | Where-Object { $_ -like "Apply PS2*" -or $_ -like "Apply PM6*" }).Count -ne 0) {
         throw "the de novo helper offered a strength with no patients"
     }
     Scroll-To-Button "Close the de novo helper"

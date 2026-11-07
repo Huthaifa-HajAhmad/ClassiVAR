@@ -1004,7 +1004,7 @@ impl Workbench {
                     hero = hero.child(self.vus_note(result.total_points, cx));
                 }
                 hero = hero.child(div().text_xs().text_color(muted).child(
-                    "Default strengths follow 2015, except PVS1 (guide), PM2 (Supporting, ClinGen 2020) and PP5/BP6 (listed, not counted). Gene-specific rules and later ClinGen refinements (splicing, PM6) can change them and are not built in yet. Six helpers in the criteria list apply published tables: predictor scores (PP3/BP4), functional assays (PS3/BS3), family and phenotype points (PP1/PP4), non-segregation (BS4), de novo patients (PS2) and recessive patients (PM3). A dated BA1 exceptions reference is also available.",
+                    "Default strengths follow 2015, except PVS1 (guide), PM2 (Supporting, ClinGen 2020) and PP5/BP6 (listed, not counted). Gene-specific rules and later ClinGen refinements (splicing assays) can change them and are not built in yet. Six helpers in the criteria list apply published tables: predictor scores (PP3/BP4), functional assays (PS3/BS3), family and phenotype points (PP1/PP4), non-segregation (BS4), de novo patients (PS2 or PM6) and recessive patients (PM3). A dated BA1 exceptions reference is also available.",
                 ));
             }
             None if !result.conflicts.is_empty() => {

@@ -1,6 +1,6 @@
 //! The small helpers that sit inside the criteria list: the predictor score
 //! (PP3/BP4), the functional assay (PS3/BS3), family and phenotype points
-//! (PP1/PP4), non-segregation (BS4), de novo patients (PS2), recessive patients
+//! (PP1/PP4), non-segregation (BS4), de novo patients (PS2 or PM6), recessive patients
 //! (PM3), the dated BA1 exceptions reference, and the reason prompt for a raised
 //! strength. Each one only fills in a criterion; the curator still decides.
 
@@ -50,6 +50,9 @@ impl Workbench {
                         .outline()
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.predictor_open = !this.predictor_open;
+                            if !this.predictor_open {
+                                this.predictor_eligible = false;
+                            }
                             cx.notify();
                         })),
                 ),
@@ -68,7 +71,10 @@ impl Workbench {
                     .selected(self.predictor_tool == i)
                     .toggled(self.predictor_tool == i)
                     .on_click(cx.listener(move |this, _, _, cx| {
-                        this.predictor_tool = i;
+                        if this.predictor_tool != i {
+                            this.predictor_tool = i;
+                            this.predictor_eligible = false;
+                        }
                         cx.notify();
                     })),
             );
@@ -84,56 +90,124 @@ impl Workbench {
                 .child(div().text_xs().text_color(muted).child("Score"))
                 .child(div().w(px(140.)).child(Input::new(&self.predictor_input))),
         );
+        if let Some(eligibility) = &tool.eligibility {
+            panel = panel.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .child(div().text_xs().text_color(muted).child(format!("Before applying, confirm {eligibility}.")))
+                    .child(
+                        Button::new("predictor-eligible")
+                            .label("I checked this condition")
+                            .accessibility_label(format!("Confirm {eligibility}"))
+                            .small()
+                            .selected(self.predictor_eligible)
+                            .toggled(self.predictor_eligible)
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.predictor_eligible = !this.predictor_eligible;
+                                cx.notify();
+                            })),
+                    ),
+            );
+        }
 
         let (message, reading) = match self.typed_score(cx) {
             None => ("Type the score the tool gave.".to_string(), None),
             Some(Err(())) => ("That is not a number. Use digits and a point, for example 0.85.".to_string(), None),
-            Some(Ok(score)) => match self.rules.read_predictor(&tool.id, score) {
-                None => (
-                    format!("{} {score} lies between the limits: this tool gives neither PP3 nor BP4.", tool.name),
-                    None,
-                ),
-                Some(reading) => {
-                    let mut text = format!(
-                        "{} {score}: the paper rates this {} for {}.",
-                        tool.name,
-                        reading.published.label(),
-                        reading.code
-                    );
-                    if reading.published != reading.strength {
-                        text.push_str(&format!(
-                            " This program stops {} at {}, so it applies {}.",
-                            reading.code,
-                            reading.strength.label(),
-                            reading.strength.label()
-                        ));
-                    }
-                    (text, Some(reading))
+            Some(Ok(score)) => match (tool.min_score, tool.max_score) {
+                (Some(min), Some(max)) if !(min..=max).contains(&score) => {
+                    (format!("That score is outside this tool's range ({min} to {max})."), None)
                 }
+                _ => match self.rules.read_predictor(&tool.id, score) {
+                    None => (
+                        format!("{} {score} lies between the limits: this tool gives neither PP3 nor BP4.", tool.name),
+                        None,
+                    ),
+                    Some(reading) => {
+                        let mut text = if let Some(calibrated) = tool.calibrated {
+                            format!(
+                                "{} {score}: the paper's table rates the evidence {}, and advises applying {} at {}.",
+                                tool.name,
+                                calibrated.label(),
+                                reading.code,
+                                reading.published.label()
+                            )
+                        } else {
+                            format!(
+                                "{} {score}: the paper rates this {} for {}.",
+                                tool.name,
+                                reading.published.label(),
+                                reading.code
+                            )
+                        };
+                        if reading.published != reading.strength {
+                            text.push_str(&format!(
+                                " This program stops {} at {}, so it applies {}.",
+                                reading.code,
+                                reading.strength.label(),
+                                reading.strength.label()
+                            ));
+                        }
+                        (text, Some(reading))
+                    }
+                },
             },
         };
         panel = panel.child(div().text_sm().child(message));
+        let eligible = tool.eligibility.is_none() || self.predictor_eligible;
         if let Some(reading) = reading {
-            let label = format!("Apply {} {}", reading.code, reading.strength.label());
-            let score = self.predictor_input.read(cx).value().trim().to_string();
-            let reason = format!(
-                "{} score {score}: {} for {} (Pejaver 2022, Table 2)",
-                tool.name,
-                reading.published.label(),
-                reading.code
-            );
-            panel = panel.child(
-                div().child(
-                    Button::new("predictor-apply")
-                        .label(label.clone())
-                        .accessibility_label(format!("{label} to today's evidence"))
-                        .small()
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.apply_reading(&reading, reason.clone());
-                            cx.notify();
-                        })),
-                ),
-            );
+            if !eligible {
+                panel = panel
+                    .child(div().text_xs().text_color(muted).child("Confirm the condition above before applying."));
+            } else {
+                let label = format!("Apply {} {}", reading.code, reading.strength.label());
+                let score = self.predictor_input.read(cx).value().trim().to_string();
+                let confirmation =
+                    tool.eligibility.as_deref().map(|text| format!("; confirmed {text}")).unwrap_or_default();
+                let reason = match tool.calibrated {
+                    Some(calibrated) => format!(
+                        "{} score {score}: {} for {} (paper evidence: {}{}; {})",
+                        tool.name,
+                        reading.strength.label(),
+                        reading.code,
+                        calibrated.label(),
+                        confirmation,
+                        tool.reference
+                    ),
+                    None if reading.published != reading.strength => format!(
+                        "{} score {score}: {} for {} (the paper rates this {}; this program caps {} at {}; {}{})",
+                        tool.name,
+                        reading.strength.label(),
+                        reading.code,
+                        reading.published.label(),
+                        reading.code,
+                        reading.strength.label(),
+                        tool.reference,
+                        confirmation
+                    ),
+                    None => format!(
+                        "{} score {score}: {} for {} ({}{})",
+                        tool.name,
+                        reading.published.label(),
+                        reading.code,
+                        tool.reference,
+                        confirmation
+                    ),
+                };
+                panel = panel.child(
+                    div().child(
+                        Button::new("predictor-apply")
+                            .label(label.clone())
+                            .accessibility_label(format!("{label} to today's evidence"))
+                            .small()
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.apply_reading(&reading, reason.clone());
+                                cx.notify();
+                            })),
+                    ),
+                );
+            }
         }
         let citation = self.rules.source(&tool.source).map(|s| s.citation.clone());
         panel
@@ -752,7 +826,7 @@ impl Workbench {
     pub(super) fn de_novo_helper(&self, cx: &mut Context<Self>) -> AnyElement {
         let muted = cx.theme().muted_foreground;
         let panel = self.helper_start(
-            ("de-novo-toggle", "De novo patients → PS2"),
+            ("de-novo-toggle", "De novo patients → PS2 or PM6"),
             "Count patients",
             "de novo helper",
             self.de_novo_open,
@@ -857,11 +931,20 @@ impl Workbench {
             Some(_) if parts.is_empty() => "Type how many patients you found.".to_string(),
             Some(reading) => match &reading.evidence {
                 Some(evidence) => format!(
-                    "{} points: {} for {}.{}",
+                    "{} points: {} for PS2, or for PM6 (Table 2 allows either code, not both).{}{}",
                     reading.points,
                     evidence.strength.label(),
-                    evidence.code,
-                    if reading.lowered_for_recessive { " Lowered one level for the recessive condition." } else { "" }
+                    if reading.lowered_for_recessive { " Lowered one level for the recessive condition." } else { "" },
+                    match &reading.pm6 {
+                        Some(pm6) if pm6.strength != evidence.strength => {
+                            format!(
+                                " This program stops PM6 at {}; use PS2 for {}.",
+                                pm6.strength.label(),
+                                evidence.strength.label()
+                            )
+                        }
+                        _ => String::new(),
+                    }
                 ),
                 None if reading.lowered_for_recessive => format!(
                     "{} points: Supporting, lowered one level for the recessive condition, leaves no evidence.",
@@ -875,8 +958,7 @@ impl Workbench {
             },
         };
         panel = panel.child(div().text_sm().child(message));
-        if let Some((reading, evidence)) = reading.and_then(|r| r.evidence.clone().map(|e| (r, e))) {
-            let label = format!("Apply {} {}", evidence.code, evidence.strength.label());
+        if let Some(reading) = reading.filter(|r| r.evidence.is_some()) {
             let reason = format!(
                 "De novo: {} = {} points{} ({})",
                 parts.join(" + "),
@@ -884,9 +966,13 @@ impl Workbench {
                 if reading.lowered_for_recessive { ", lowered one level for a recessive condition" } else { "" },
                 rules.source
             );
-            panel = panel.child(
-                div().child(
-                    Button::new("de-novo-apply")
+            let mut buttons = div().flex().flex_wrap().gap_2();
+            for (id, evidence) in [("de-novo-apply", reading.evidence), ("de-novo-apply-pm6", reading.pm6)] {
+                let Some(evidence) = evidence else { continue };
+                let label = format!("Apply {} {}", evidence.code, evidence.strength.label());
+                let reason = reason.clone();
+                buttons = buttons.child(
+                    Button::new(id)
                         .label(label.clone())
                         .accessibility_label(format!("{label} to today's evidence"))
                         .small()
@@ -894,8 +980,9 @@ impl Workbench {
                             this.apply_reading(&evidence, reason.clone());
                             cx.notify();
                         })),
-                ),
-            );
+                );
+            }
+            panel = panel.child(buttons);
         }
         for note in &rules.notes {
             panel = panel.child(div().text_xs().text_color(muted).child(note.clone()));

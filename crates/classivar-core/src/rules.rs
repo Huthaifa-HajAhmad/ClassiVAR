@@ -120,8 +120,26 @@ pub struct Predictor {
     pub id: String,
     pub name: String,
     pub source: String,
+    /// The paper and table the limits come from, as it is written in a saved reason.
+    /// A file without it is refused by the loader with a clear message, not by serde.
+    #[serde(default)]
+    pub reference: String,
     /// What to know before using the tool, for example which version was calibrated.
     pub note: Option<String>,
+    /// The evidence strength the source calibrated its limits to, when it advises
+    /// applying the codes at a lower strength (Walker 2023). `None` when the two agree.
+    #[serde(default)]
+    pub calibrated: Option<Strength>,
+    /// The score range the tool reports. Set both or neither; a score outside it
+    /// gives no evidence. `None` when the rule file does not state a range.
+    #[serde(default)]
+    pub min_score: Option<f64>,
+    #[serde(default)]
+    pub max_score: Option<f64>,
+    /// A condition the curator must confirm before a score is applied, in the
+    /// source's words. `None` when the tool has no extra condition.
+    #[serde(default)]
+    pub eligibility: Option<String>,
     /// Weakest first. Each stronger limit lies further from the middle of the scale.
     pub pathogenic: Vec<Cutoff>,
     pub benign: Vec<Cutoff>,
@@ -250,8 +268,8 @@ pub struct DeNovoPhenotype {
     pub max_points: Option<f64>,
 }
 
-/// De novo evidence for PS2 (ClinGen SVI v1.1): points per patient, and the
-/// strength each total reaches.
+/// De novo evidence for PS2 and PM6 (ClinGen SVI v1.1): points per patient, and
+/// the strength each total reaches.
 #[derive(Debug, Clone, Deserialize)]
 pub struct DeNovoRules {
     pub source: String,
@@ -271,6 +289,9 @@ pub struct DeNovoReading {
     /// `None` when the points are below the lowest threshold, or the recessive
     /// rule lowered the strength below the lowest level.
     pub evidence: Option<EvidenceReading>,
+    /// The same level read as PM6, which Table 2 allows instead of PS2. Lowered to
+    /// PM6's own limit, so it can be weaker than `evidence`.
+    pub pm6: Option<EvidenceReading>,
     /// True when the recessive rule lowered the strength by one level.
     pub lowered_for_recessive: bool,
 }
@@ -322,7 +343,8 @@ fn round_points(points: f64) -> f64 {
 pub struct EvidenceReading {
     /// The criterion the evidence supports, for example `PP3`, `BP4`, `PS3`, `BS3`.
     pub code: &'static str,
-    /// The strength the source gives this score.
+    /// The strength the source assigns to the code for this score. When the source
+    /// calibrated the evidence to a different strength, `Predictor::calibrated` holds it.
     pub published: Strength,
     /// The strength this program lets the curator apply: `published`, lowered to
     /// the criterion's limit when the source goes higher.
@@ -584,10 +606,16 @@ impl RuleSet {
     }
 
     /// What a tool's score means for the evidence, or `None` when the score lies
-    /// between the limits, is not a finite number, or the tool id is unknown.
+    /// between the limits, is outside the tool's stated range, is not a finite
+    /// number, or the tool id is unknown.
     pub fn read_predictor(&self, id: &str, score: f64) -> Option<EvidenceReading> {
         let tool = self.predictor(id)?;
         if !score.is_finite() {
+            return None;
+        }
+        if let (Some(min), Some(max)) = (tool.min_score, tool.max_score)
+            && !(min..=max).contains(&score)
+        {
             return None;
         }
         // Limits run weakest first, so the last one a score reaches is the strongest.
@@ -688,10 +716,10 @@ impl RuleSet {
     }
 
     /// Adds the de novo points of the patients and reads the total as a PS2
-    /// strength. `counts` has one `(confirmed, unconfirmed)` pair of patient
-    /// numbers for each row of the table, in the table's order. With
-    /// `recessive_without_second_variant` true the strength is lowered one level.
-    /// `None` when the rules have no table or `counts` does not match its rows.
+    /// strength and as a PM6 strength. `counts` has one `(confirmed, unconfirmed)`
+    /// pair of patient numbers for each row of the table, in the table's order.
+    /// With `recessive_without_second_variant` true the strength is lowered one
+    /// level. `None` when the rules have no table or `counts` does not match its rows.
     pub fn read_de_novo(&self, counts: &[(u32, u32)], recessive_without_second_variant: bool) -> Option<DeNovoReading> {
         let rules = self.de_novo.as_ref()?;
         if counts.len() != rules.phenotypes.len() {
@@ -710,10 +738,11 @@ impl RuleSet {
         // Thresholds run weakest first; the last one the total reaches is the strength.
         let reached = rules.thresholds.iter().rposition(|cut| points >= cut.at);
         let level = if recessive_without_second_variant { reached.and_then(|i| i.checked_sub(1)) } else { reached };
-        let evidence = level.and_then(|i| self.reading("PS2", rules.thresholds[i].strength));
+        let strength = level.map(|i| rules.thresholds[i].strength);
         Some(DeNovoReading {
             points,
-            evidence,
+            evidence: strength.and_then(|s| self.reading("PS2", s)),
+            pm6: strength.and_then(|s| self.reading("PM6", s)),
             lowered_for_recessive: recessive_without_second_variant && reached.is_some(),
         })
     }
@@ -1248,8 +1277,12 @@ impl RuleSet {
             if self.criterion("PP3").is_none() || self.criterion("BP4").is_none() {
                 return bad("predictors need the criteria PP3 and BP4");
             }
-            if tool.id.trim().is_empty() || tool.name.trim().is_empty() || !ids.insert(tool.id.as_str()) {
-                return bad("the id and name must be filled in, and the id must be unique");
+            if tool.id.trim().is_empty()
+                || tool.name.trim().is_empty()
+                || tool.reference.trim().is_empty()
+                || !ids.insert(tool.id.as_str())
+            {
+                return bad("the id, name and reference must be filled in, and the id must be unique");
             }
             if !known_sources.contains(tool.source.as_str()) {
                 return Err(RuleError::UnknownSource {
@@ -1260,7 +1293,32 @@ impl RuleSet {
             if tool.pathogenic.is_empty() && tool.benign.is_empty() {
                 return bad("it has no score limits");
             }
+            if tool.eligibility.as_deref().is_some_and(|text| text.trim().is_empty()) {
+                return bad("the eligibility text is empty");
+            }
+            match (tool.min_score, tool.max_score) {
+                (None, None) => {}
+                (Some(min), Some(max)) if min.is_finite() && max.is_finite() && min < max => {}
+                _ => {
+                    return bad(
+                        "min_score and max_score must be set together, be finite, and put min_score below max_score",
+                    );
+                }
+            }
             let order = [Strength::Supporting, Strength::Moderate, Strength::Strong, Strength::VeryStrong];
+            if let Some(calibrated) = tool.calibrated {
+                let Some(calibrated_rank) = order.iter().position(|o| *o == calibrated) else {
+                    return bad("the calibrated strength must be supporting, moderate, strong or very_strong");
+                };
+                if tool
+                    .pathogenic
+                    .iter()
+                    .chain(&tool.benign)
+                    .any(|cut| order.iter().position(|o| *o == cut.strength).is_some_and(|rank| rank > calibrated_rank))
+                {
+                    return bad("a limit is stronger than the calibrated evidence it describes");
+                }
+            }
             for (limits, rising) in [(&tool.pathogenic, true), (&tool.benign, false)] {
                 let ranks: Option<Vec<usize>> =
                     limits.iter().map(|cut| order.iter().position(|o| *o == cut.strength)).collect();
@@ -1368,6 +1426,36 @@ mod tests {
         assert_eq!(reading("mutpred2", 0.01), Some(("BP4", Strong, Moderate)));
         assert_eq!(reading("vest4", 0.965), Some(("PP3", Strong, Strong)));
         assert_eq!(reading("vest4", 0.302), Some(("BP4", Moderate, Moderate)));
+    }
+
+    #[test]
+    fn spliceai_follows_walker_2023_and_never_goes_above_supporting() {
+        use Strength::*;
+        let rules = RuleSet::builtin().unwrap();
+        // PP3 at 0.2 or more, BP4 at 0.1 or less; both are applied at Supporting
+        // although the paper calibrated them to Moderate.
+        assert_eq!(reading("spliceai", 0.2), Some(("PP3", Supporting, Supporting)));
+        assert_eq!(reading("spliceai", 0.99), Some(("PP3", Supporting, Supporting)));
+        assert_eq!(reading("spliceai", 0.1), Some(("BP4", Supporting, Supporting)));
+        assert_eq!(reading("spliceai", 0.0), Some(("BP4", Supporting, Supporting)));
+        // Between 0.1 and 0.2 the paper gives no evidence either way.
+        assert_eq!(reading("spliceai", 0.11), None);
+        assert_eq!(reading("spliceai", 0.19), None);
+        // SpliceAI delta scores run from 0 to 1; a typo outside that gives nothing.
+        assert_eq!(reading("spliceai", -0.01), None);
+        assert_eq!(reading("spliceai", 1.01), None);
+        let tool = rules.predictor("spliceai").unwrap();
+        assert_eq!(tool.calibrated, Some(Moderate));
+        assert_eq!((tool.min_score, tool.max_score), (Some(0.0), Some(1.0)));
+        assert!(tool.eligibility.as_deref().is_some_and(|text| text.contains("donor")));
+    }
+
+    #[test]
+    fn every_predictor_names_the_table_its_numbers_come_from() {
+        let rules = RuleSet::builtin().unwrap();
+        assert!(rules.predictors.iter().all(|p| !p.reference.trim().is_empty()));
+        assert_eq!(rules.predictor("spliceai").unwrap().reference, "Walker 2023, Table 1");
+        assert_eq!(rules.predictor("revel").unwrap().reference, "Pejaver 2022, Table 2");
     }
 
     fn oddspath(value: f64) -> Option<(&'static str, Strength)> {
@@ -1924,6 +2012,26 @@ mod tests {
     }
 
     #[test]
+    fn a_de_novo_total_can_also_be_applied_as_pm6_at_the_most_this_program_allows() {
+        use Strength::*;
+        let rules = RuleSet::builtin().unwrap();
+        let pm6 = |counts: [(u32, u32); 4], recessive: bool| {
+            let reading = rules.read_de_novo(&counts, recessive).unwrap();
+            reading.pm6.map(|r| (r.code, r.published, r.strength))
+        };
+        let none = (0, 0);
+        // Table 2 lets PS2 or PM6 carry the same level: 1 point is Moderate for both.
+        assert_eq!(pm6([none, (1, 0), none, none], false), Some(("PM6", Moderate, Moderate)));
+        assert_eq!(pm6([none, (3, 0), none, none], false), Some(("PM6", Strong, Strong)));
+        // Table 2 also lists PM6 at Very Strong, but this program stops PM6 at Strong.
+        assert_eq!(pm6([(1, 2), none, none, none], false), Some(("PM6", VeryStrong, Strong)));
+        // The recessive rule lowers PM6 exactly as it lowers PS2; no points, no PM6.
+        assert_eq!(pm6([(1, 2), none, none, none], true), Some(("PM6", Strong, Strong)));
+        assert_eq!(pm6([none, none, (1, 0), none], true), None);
+        assert_eq!(pm6([none, none, none, (3, 0)], false), None);
+    }
+
+    #[test]
     fn de_novo_counts_that_do_not_match_the_table_give_nothing() {
         let rules = RuleSet::builtin().unwrap();
         assert!(rules.read_de_novo(&[(1, 0)], false).is_none());
@@ -2016,6 +2124,46 @@ benign = [{ strength = "supporting", at = 0.290 }"#
             ),
             Err(RuleError::UnknownSource { .. })
         ));
+    }
+
+    #[test]
+    fn a_predictor_must_name_the_table_its_limits_come_from() {
+        // The reference is saved with the reason, so an empty one is refused.
+        assert!(matches!(
+            edited(r#"reference = "Pejaver 2022, Table 2""#, r#"reference = """#),
+            Err(RuleError::BadPredictor { .. })
+        ));
+        // A file written before the field existed gets the loader's message, not a serde error.
+        assert!(matches!(edited("reference = \"Pejaver 2022, Table 2\"\n", ""), Err(RuleError::BadPredictor { .. })));
+    }
+
+    #[test]
+    fn predictor_metadata_that_would_mislead_is_refused() {
+        // The range must be a pair with min below max.
+        assert!(matches!(
+            edited("min_score = 0.0\nmax_score = 1.0", "min_score = 1.0\nmax_score = 0.0"),
+            Err(RuleError::BadPredictor { .. })
+        ));
+        assert!(matches!(
+            edited("min_score = 0.0\nmax_score = 1.0", "min_score = 0.0"),
+            Err(RuleError::BadPredictor { .. })
+        ));
+        // An empty confirmation text would render an empty condition.
+        assert!(matches!(
+            edited(
+                r#"eligibility = "the variant is outside the donor and acceptor +/-1,2 positions""#,
+                r#"eligibility = """#
+            ),
+            Err(RuleError::BadPredictor { .. })
+        ));
+        // The applied code cannot be stronger than the evidence the paper calibrated.
+        let stronger_than_calibrated =
+            BUILTIN.replacen(r#"calibrated = "moderate""#, r#"calibrated = "supporting""#, 1).replacen(
+                r#"pathogenic = [{ strength = "supporting", at = 0.2 }]"#,
+                r#"pathogenic = [{ strength = "moderate", at = 0.2 }]"#,
+                1,
+            );
+        assert!(matches!(RuleSet::parse(&stronger_than_calibrated), Err(RuleError::BadPredictor { .. })));
     }
 
     #[test]
