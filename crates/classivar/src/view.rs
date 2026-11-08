@@ -8,8 +8,8 @@
 use std::collections::{BTreeMap, HashSet};
 
 use classivar_core::{
-    Applied, Assessment, CaseFile, Category, Class, Consistency, Criterion, Direction, GeneDecision, Reason,
-    Reevaluation, RuleSet, SavedRecord, Strength, Submission, Verdict, Warning, rules::ReviewStatus,
+    Applied, Assessment, CaseFile, Category, Class, Consistency, Criterion, Direction, GeneDecision, MAX_RECORDS,
+    Reason, Reevaluation, RuleSet, SavedRecord, Strength, Submission, Verdict, Warning, rules::ReviewStatus,
 };
 use std::path::PathBuf;
 
@@ -27,6 +27,12 @@ use gpui_kit::component::{
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::*;
 
+use crate::design::{
+    CLASSES, caption, class_fill, class_ink, confirm_fill, confirm_ink, direction_colour, direction_ink, scrim,
+    warning_fill, warning_ink,
+};
+use crate::status::{Status, Tone};
+
 mod panels;
 
 /// Width of one point in the evidence lanes.
@@ -37,64 +43,13 @@ const SCALE_UNIT: f32 = 20.0;
 
 /// The largest a case file may be before it is refused without reading it.
 const MAX_CASE_BYTES: u64 = 4 * 1024 * 1024;
-/// The most earlier records one case can hold. The history table gets unreadable
-/// long before this; the cap also keeps a damaged file from filling the screen.
-const MAX_RECORDS: usize = 30;
 /// The longest lab name the box accepts (in characters).
 const MAX_LAB_NAME: usize = 60;
+/// The longest variant name the box accepts (in characters). A saved case is
+/// held to the same cap in `case.rs`, so opening what this app wrote always fits.
+const MAX_VARIANT_NAME: usize = 300;
 /// What a record is called when its name box is empty.
 const UNNAMED_RECORD: &str = "Unnamed record";
-
-// The fills are chosen so that the ink on them (white or near-black) reaches the
-// WCAG AA contrast of 4.5:1. A test below checks every pair.
-fn pathogenic_colour() -> Rgba {
-    rgb(0xc62828)
-}
-
-fn benign_colour() -> Rgba {
-    rgb(0x1f5fb5)
-}
-
-fn direction_colour(direction: Direction) -> Rgba {
-    match direction {
-        Direction::Pathogenic => pathogenic_colour(),
-        Direction::Benign => benign_colour(),
-    }
-}
-
-fn class_fill(class: Class, dark: bool) -> Rgba {
-    if dark {
-        return match class {
-            Class::Pathogenic => pathogenic_colour(),
-            Class::LikelyPathogenic => rgb(0x5f1b1b),
-            Class::Vus => rgb(0x33332f),
-            Class::LikelyBenign => rgb(0x173a5e),
-            Class::Benign => benign_colour(),
-        };
-    }
-    match class {
-        Class::Pathogenic => pathogenic_colour(),
-        Class::LikelyPathogenic => rgb(0xf6c9c8),
-        Class::Vus => rgb(0xe6e5e0),
-        Class::LikelyBenign => rgb(0xcde2fb),
-        Class::Benign => benign_colour(),
-    }
-}
-
-fn class_ink(class: Class, dark: bool) -> Rgba {
-    if dark {
-        return match class {
-            Class::Pathogenic | Class::Benign => rgb(0xffffff),
-            Class::LikelyPathogenic => rgb(0xffd9d5),
-            Class::Vus => rgb(0xe8e7e1),
-            Class::LikelyBenign => rgb(0xd6e8ff),
-        };
-    }
-    if matches!(class, Class::Pathogenic | Class::Benign) { rgb(0xffffff) } else { rgb(0x0b0b0b) }
-}
-
-const CLASSES: [Class; 5] =
-    [Class::Benign, Class::LikelyBenign, Class::Vus, Class::LikelyPathogenic, Class::Pathogenic];
 
 fn plural(n: i32) -> &'static str {
     if n == 1 { "" } else { "s" }
@@ -128,7 +83,7 @@ fn scale_for(rules: &RuleSet) -> Scale {
 }
 
 /// How many detail lines a source card shows before "Show all".
-const CARD_LINES: usize = 3;
+const CARD_LINES: usize = 2;
 
 fn describe_panelapp(found: &Fetched<PanelAppGene>) -> (String, Vec<String>) {
     let gene = &found.value;
@@ -257,7 +212,7 @@ fn normalize_today(rules: &RuleSet, list: &[Applied]) -> (Vec<(String, Choice)>,
             applied.strength
         } else {
             let highest = *allowed.last().unwrap_or(&criterion.strength);
-            changed.push(format!("{} to {}", applied.code, highest.label()));
+            changed.push(format!("{} lowered to {}.", applied.code, highest.label()));
             highest
         };
         let situation = if criterion.guide.is_empty() {
@@ -267,24 +222,22 @@ fn normalize_today(rules: &RuleSet, list: &[Applied]) -> (Vec<(String, Choice)>,
                 .situation
                 .as_deref()
                 .filter(|s| criterion.guide.iter().any(|g| g.id == *s && g.strength == Some(strength)));
-            saved.map(str::to_string).or_else(|| criterion.situation_for(strength).map(str::to_string))
+            // Only a unique guide answer may stand in for a missing one. When
+            // several answers set the same strength, picking one would invent a
+            // reason the save never recorded, so the criterion asks instead.
+            match saved.map(str::to_string).or_else(|| criterion.unique_situation_for(strength).map(str::to_string)) {
+                Some(situation) => Some(situation),
+                None => {
+                    changed.push(format!("{} needs its strength guide answered again.", applied.code));
+                    continue;
+                }
+            }
         };
         // A reason explains one strength, so it is dropped when the strength was lowered.
         let reason = applied.reason.clone().filter(|_| strength == applied.strength);
         out.push((applied.code.clone(), Choice { strength, situation, reason }));
     }
     (out, changed)
-}
-
-/// The colours of every warning and notice. The kit's own warning pair is hard
-/// to read (about 1.8:1 in the light theme), so the app uses its own pair, which
-/// reads the same in both themes. A test checks the contrast.
-fn warning_fill() -> Rgba {
-    rgb(0xffe9a8)
-}
-
-fn warning_ink() -> Rgba {
-    rgb(0x2b2100)
 }
 
 /// A short banner text on the warning colours.
@@ -304,6 +257,38 @@ fn rules_tag(rules: &RuleSet) -> String {
             meta.reviewed_on.as_deref().unwrap_or("?")
         ),
     }
+}
+
+/// Does the loaded rule file give official point ranges to every VUS sub-tier?
+/// Only then may the screen name one for new evidence (`Assessment::vus_tier`
+/// follows the same rule).
+fn tiers_are_ranged(rules: &RuleSet) -> bool {
+    !rules.vus_tiers.is_empty() && rules.vus_tiers.iter().all(|t| t.min_points.is_some())
+}
+
+/// A one-paragraph description of the loaded rule file. It must stay true for
+/// any file loaded with `--rules`, so it names only what the loader guarantees.
+fn rules_about_text(rules: &RuleSet) -> String {
+    let meta = &rules.meta;
+    let status = match meta.status {
+        ReviewStatus::Unverified => "UNVERIFIED draft".to_string(),
+        ReviewStatus::Reviewed => format!(
+            "reviewed by {} on {}",
+            meta.reviewed_by.as_deref().unwrap_or("?"),
+            meta.reviewed_on.as_deref().unwrap_or("?")
+        ),
+    };
+    format!(
+        "The loaded rules are {} v{} ({}). Criteria whose default differs from the 2015 paper say so in their notes, and criteria the experts no longer recommend are listed but not counted. The evidence helpers above the criteria apply published tables: predictor scores (PP3/BP4), functional assays (PS3/BS3), family and phenotype points (PP1/PP4), non-segregation (BS4), de novo patients (PS2 or PM6) and recessive patients (PM3). A dated BA1 exceptions reference is also available.",
+        meta.id, meta.version, status
+    )
+}
+
+/// Does a discouraged criterion get its "not counted" row label? A new
+/// assessment lists it without counting, but an earlier record is scored with
+/// it, so the same row label there would contradict the notes.
+fn discouraged_row_note(discouraged: bool, editing: Editing) -> Option<&'static str> {
+    (discouraged && editing == Editing::Today).then_some("not counted")
 }
 
 /// A class with its review status and rule version, so a screenshot of the
@@ -425,6 +410,27 @@ fn suggested_file_name(variant: &str) -> String {
     format!("{stem}.classivar.json")
 }
 
+fn write_case(path: &PathBuf, json: &str) -> Result<(), String> {
+    // A temp file next to the target first, then a rename over it: a failed
+    // write or a crash leaves the old case intact instead of truncating it.
+    let temp = path.with_file_name(match path.file_name() {
+        Some(name) => format!("{}.tmp", name.to_string_lossy()),
+        None => "case.tmp".to_string(),
+    });
+    let remove = |p: &PathBuf| {
+        let _ = std::fs::remove_file(p);
+    };
+    if let Err(error) = std::fs::write(&temp, json) {
+        remove(&temp);
+        return Err(error.to_string());
+    }
+    if let Err(error) = std::fs::rename(&temp, path) {
+        remove(&temp);
+        return Err(format!("the file was written, but the old copy could not be replaced: {error}"));
+    }
+    Ok(())
+}
+
 /// Where the save dialog starts: the user's Documents folder. Saving into the
 /// program's working directory (often the repository) is how case files end up
 /// committed by accident.
@@ -524,6 +530,9 @@ pub struct Workbench {
     gene_error: Option<String>,
     /// The gene this case is about: the last one checked.
     case_gene: String,
+    /// True while the fictional example is on screen. A gene checked on it
+    /// would start a real case, so the curator is asked first (see `check_gene`).
+    example: bool,
     /// Whether the four source cards are shown. They are tall, so the curator can hide them.
     gene_cards_open: bool,
     /// Cards that show all their lines instead of the first few.
@@ -533,9 +542,13 @@ pub struct Workbench {
     /// The criterion whose strength guide is waiting for an answer.
     guide_open: Option<String>,
     gene_link: GeneDecision,
+    /// Confirm modal state: `None` when no question is waiting.
     confirm: Option<Confirm>,
+    /// The confirmation window holds the keyboard focus while it is open, so a
+    /// stray Tab or Enter cannot reach the controls behind the question.
+    confirm_focus: FocusHandle,
     /// The result of the last save or open, shown until the curator dismisses it.
-    file_status: Option<String>,
+    file_status: Option<Status>,
     /// The next number for a new record, so removing one cannot create two "Record 2"s.
     next_record: u32,
     /// Counts lookups, so a slow old answer cannot replace a newer one.
@@ -711,12 +724,14 @@ impl Workbench {
             gene: GeneChecks::idle(),
             gene_error: None,
             case_gene: String::new(),
+            example: false,
             gene_cards_open: false,
             expanded_cards: HashSet::new(),
             open_details: HashSet::new(),
             guide_open: None,
             gene_link: GeneDecision::NotDecided,
             confirm: None,
+            confirm_focus: cx.focus_handle(),
             file_status: None,
             next_record: 1,
             lookup_id: 0,
@@ -742,10 +757,11 @@ impl Workbench {
         }
     }
 
-    /// The variant name the curator typed, if any.
+    /// The variant name the curator typed, if any. Long pastes are cut to the
+    /// same cap the saved case uses, so a display or a file cannot balloon.
     fn variant_name(&self, cx: &App) -> Option<String> {
         let typed = self.variant_input.read(cx).value();
-        let typed = typed.trim();
+        let typed = typed.trim().chars().take(MAX_VARIANT_NAME).collect::<String>();
         (!typed.is_empty()).then(|| typed.to_string())
     }
 
@@ -753,6 +769,7 @@ impl Workbench {
         !self.today.is_empty()
             || !self.records.is_empty()
             || self.variant_name(cx).is_some()
+            || self.gene_link != GeneDecision::NotDecided
             || !self.gene_input.read(cx).value().trim().is_empty()
     }
 
@@ -839,6 +856,13 @@ impl Workbench {
         }
         self.gene_error = None;
         if !self.case_gene.is_empty() && symbol != self.case_gene && self.has_case_data(cx) {
+            self.ask(Confirm::NewGene(symbol));
+            cx.notify();
+            return;
+        }
+        // The fictional example is deliberately not attributed to any gene.
+        // Checking a gene puts it on a real case, so that asks first.
+        if self.example && self.has_case_data(cx) {
             self.ask(Confirm::NewGene(symbol));
             cx.notify();
             return;
@@ -1129,7 +1153,7 @@ impl Workbench {
 
     fn add_record(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.records.len() >= MAX_RECORDS {
-            self.file_status = Some(format!("A case holds at most {MAX_RECORDS} earlier records."));
+            self.file_status = Some(Status::attention(format!("A case holds at most {MAX_RECORDS} earlier records.")));
             return;
         }
         let label = format!("Record {}", self.next_record);
@@ -1175,10 +1199,9 @@ impl Workbench {
             EXAMPLE_RECORDS.iter().all(|(_, _, _, list)| self.rules.assess(&to_applied(&evidence_of(list))).is_ok())
                 && self.rules.assess(&to_applied(&evidence_of(EXAMPLE_TODAY))).is_ok();
         if !accepted {
-            self.file_status = Some(
-                "The example does not fit the current rule file, so it was not loaded. Load the default rules to try it."
-                    .to_string(),
-            );
+            self.file_status = Some(Status::attention(
+                "The example does not fit the current rule file, so it was not loaded. Load the default rules to try it.",
+            ));
             return;
         }
         self.records = EXAMPLE_RECORDS
@@ -1193,6 +1216,12 @@ impl Workbench {
             .collect();
         self.today = evidence_of(EXAMPLE_TODAY);
         self.editing = Editing::Today;
+        // Flag the case as fictional: a checked gene starts a real case, so the
+        // curator is asked first, and Save refuses until the example is cleared.
+        self.example = true;
+        self.file_status = Some(Status::attention(
+            "Loaded the fictional example. The criteria here are the demo's, not a real variant: checking a gene asks to start a real case, and Save refuses until the example is cleared.",
+        ));
         // The example is fictional: it must not inherit the gene or variant that
         // happened to be on screen, or the class would be attributed to them.
         self.case_gene.clear();
@@ -1232,15 +1261,21 @@ impl Workbench {
             let situation = if criterion.guide.is_empty() {
                 None
             } else {
-                guided.push(code.clone());
-                let saved = choice
+                // Only a unique guide answer may stand in for one the record
+                // never saved (records do not store a guide answer).
+                let carried = choice
                     .situation
                     .as_deref()
-                    .filter(|s| criterion.guide.iter().any(|g| g.id == *s && g.strength == Some(strength)));
-                match saved.map(str::to_string).or_else(|| criterion.situation_for(strength).map(str::to_string)) {
-                    Some(situation) => Some(situation),
+                    .filter(|s| criterion.guide.iter().any(|g| g.id == *s && g.strength == Some(strength)))
+                    .map(str::to_string)
+                    .or_else(|| criterion.unique_situation_for(strength).map(str::to_string));
+                match carried {
+                    Some(situation) => {
+                        guided.push(code.clone());
+                        Some(situation)
+                    }
                     None => {
-                        dropped.push(format!("{code} (no guide answer for {})", strength.label()));
+                        dropped.push(format!("{code} needs the guide answered again"));
                         continue;
                     }
                 }
@@ -1263,7 +1298,7 @@ impl Workbench {
             ));
         }
         if !notes.is_empty() {
-            self.file_status = Some(notes.join(" "));
+            self.file_status = Some(Status::attention(notes.join(" ")));
         }
     }
 
@@ -1274,6 +1309,8 @@ impl Workbench {
         self.editing = Editing::Today;
         self.gene_link = GeneDecision::NotDecided;
         self.gene_error = None;
+        self.example = false;
+        self.file_status = None;
         self.guide_open = None;
         self.confirm = None;
         self.open_details.clear();
@@ -1310,19 +1347,28 @@ impl Workbench {
 
     /// Ask where to save, then write the case file there.
     fn save_case(&mut self, cx: &mut Context<Self>) {
+        // A case file names a variant and a gene; the example is a demo, so it
+        // is never written. Checking a gene on the example already asks first.
+        if self.example {
+            self.file_status = Some(Status::attention(
+                "The fictional example is not saved. Clear it (checking a gene asks first) and build a real case, then Save.",
+            ));
+            cx.notify();
+            return;
+        }
         let case = self.case_file(cx);
         let folder = default_save_folder();
         let chosen = cx.prompt_for_new_path(&folder, Some(&suggested_file_name(&case.variant)));
         self._file_task = Some(cx.spawn(async move |this, cx| {
             let message = match chosen.await {
-                Ok(Ok(Some(path))) => Some(match std::fs::write(&path, case.to_json()) {
-                    Ok(()) => format!("Saved to {}.", path.display()),
-                    Err(error) => format!("Could not save to {}: {error}", path.display()),
+                Ok(Ok(Some(path))) => Some(match write_case(&path, &case.to_json()) {
+                    Ok(()) => Status::done(format!("Saved to {}.", path.display())),
+                    Err(error) => Status::attention(format!("Could not save to {}: {error}", path.display())),
                 }),
                 // The curator closed the dialog on purpose; nothing to report.
                 Ok(Ok(None)) => None,
-                Ok(Err(error)) => Some(format!("Could not open the save dialog: {error}")),
-                Err(_) => Some("The save dialog closed without an answer.".to_string()),
+                Ok(Err(error)) => Some(Status::attention(format!("Could not open the save dialog: {error}"))),
+                Err(_) => Some(Status::attention("The save dialog closed without an answer.")),
             };
             this.update(cx, |this, cx| {
                 if message.is_some() {
@@ -1348,7 +1394,7 @@ impl Workbench {
                 Ok(Ok(Some(paths))) => paths.into_iter().next(),
                 Ok(Ok(None)) => None,
                 Ok(Err(error)) => {
-                    let message = format!("Could not open the file dialog: {error}");
+                    let message = Status::attention(format!("Could not open the file dialog: {error}"));
                     this.update(cx, |this, cx| this.set_file_status(message, cx)).ok();
                     return;
                 }
@@ -1369,17 +1415,13 @@ impl Workbench {
                     }
                     let text = std::fs::read_to_string(&path).map_err(|error| error.to_string())?;
                     let case = CaseFile::from_json(&text, rules).map_err(|error| error.to_string())?;
-                    if case.records.len() > MAX_RECORDS {
-                        return Err(format!(
-                            "it holds {} earlier records and this program opens at most {MAX_RECORDS}",
-                            case.records.len()
-                        ));
-                    }
                     Ok(case)
                 })
                 .await;
             this.update_in(cx, |this, window, cx| match loaded {
-                Err(error) => this.set_file_status(format!("Could not open {shown_path}: {error}"), cx),
+                Err(error) => {
+                    this.set_file_status(Status::attention(format!("Could not open {shown_path}: {error}")), cx)
+                }
                 Ok(case) if this.has_case_data(cx) => {
                     this.ask(Confirm::OpenCase(Box::new(case)));
                     cx.notify();
@@ -1390,7 +1432,7 @@ impl Workbench {
         }));
     }
 
-    fn set_file_status(&mut self, message: String, cx: &mut Context<Self>) {
+    fn set_file_status(&mut self, message: Status, cx: &mut Context<Self>) {
         self.file_status = Some(message);
         cx.notify();
     }
@@ -1425,6 +1467,7 @@ impl Workbench {
         self.gene_link = case.gene_decision;
         self.case_gene = case.gene.clone();
         self.gene_error = None;
+        self.example = false;
         // A question or an open guide belongs to the case that was on screen.
         self.confirm = None;
         self.guide_open = None;
@@ -1439,7 +1482,8 @@ impl Workbench {
         self.reset_helpers(window, cx);
 
         let mut notes = vec!["Opened.".to_string()];
-        if case.saved_with_other_rules(self.rules) {
+        let other_rules = case.saved_with_other_rules(self.rules);
+        if other_rules {
             let now = self.rules.reference();
             notes.push(format!(
                 "It was saved with rules {} v{} and the program now uses v{}, so classes may differ from what you saw.",
@@ -1450,11 +1494,18 @@ impl Workbench {
             notes.push(format!("Adjusted to today's limits: {}.", adjusted.join(", ")));
         }
         notes.push("Check the gene again to refresh the gene sources.".to_string());
-        self.set_file_status(notes.join(" "), cx);
+        // Only a case that needed a change or was saved under other rules asks for attention.
+        let text = notes.join(" ");
+        let status = if other_rules || !adjusted.is_empty() { Status::attention(text) } else { Status::done(text) };
+        self.set_file_status(status, cx);
     }
 
     fn file_status_banner(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let message = self.file_status.as_ref()?;
+        let status = self.file_status.as_ref()?;
+        let (fill, ink) = match status.tone {
+            Tone::Done => (confirm_fill(), confirm_ink()),
+            Tone::Attention => (warning_fill(), warning_ink()),
+        };
         Some(
             div()
                 .flex()
@@ -1463,7 +1514,7 @@ impl Workbench {
                 .gap_3()
                 .px_4()
                 .py_1()
-                .child(notice(message.clone(), warning_fill(), warning_ink()))
+                .child(notice(status.text.clone(), fill, ink))
                 .child(Button::new("file-status-dismiss").label("Dismiss").small().outline().on_click(cx.listener(
                     |this, _, _, cx| {
                         this.file_status = None;
@@ -1509,8 +1560,10 @@ impl Workbench {
 
     // ---------- confirmation window ----------
 
-    /// The question as a window over the screen. The dim layer takes every click,
-    /// so nothing behind it can be used until the curator answers.
+    /// The question as a window over the screen. The dim layer takes every mouse
+    /// click, the window takes the keyboard focus (see `render`), and Tab is
+    /// blocked at the page root, so nothing behind it can be used until the
+    /// curator answers.
     fn confirm_modal(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let confirm = self.confirm.as_ref()?;
         let (background, foreground, border) = (cx.theme().background, cx.theme().foreground, cx.theme().border);
@@ -1523,16 +1576,25 @@ impl Workbench {
                     .to_string()
             }
             Confirm::LoadExample => {
-                "Load the fictional example? It replaces today's evidence and all records.".to_string()
+                "Load the fictional example? It replaces the variant and gene, today's evidence and all records."
+                    .to_string()
             }
             Confirm::OpenCase(case) => format!(
                 "Open the case for {}? It replaces today's evidence, the records and the gene decision on screen.",
                 if case.variant.is_empty() { "an unnamed variant" } else { case.variant.as_str() }
             ),
-            Confirm::NewGene(symbol) => format!(
-                "You are switching from {} to {}. The evidence, records, gene decision and variant name belong to {}. Start a new case for {}? This clears them.",
-                self.case_gene, symbol, self.case_gene, symbol
-            ),
+            Confirm::NewGene(symbol) => {
+                if self.example {
+                    format!(
+                        "This is the fictional example: the criteria and records on screen are the demo's, not a real variant. Start a real case for {symbol}? This clears them."
+                    )
+                } else {
+                    format!(
+                        "You are switching from {} to {}. The evidence, records, gene decision and variant name belong to {}. Start a new case for {}? This clears them.",
+                        self.case_gene, symbol, self.case_gene, symbol
+                    )
+                }
+            }
             Confirm::RemoveRecord(_, label) => {
                 format!("Remove {label} and every criterion it reported? This cannot be undone.")
             }
@@ -1570,11 +1632,14 @@ impl Workbench {
                 .absolute()
                 .inset_0()
                 .occlude()
+                // The keyboard focus target of the question (set in `render`),
+                // so keystrokes act inside it, not behind it.
+                .track_focus(&self.confirm_focus)
                 .flex()
                 .items_center()
                 .justify_center()
                 .p_4()
-                .bg(hsla(0., 0., 0., 0.45))
+                .bg(scrim())
                 .child(card)
                 .into_any_element(),
         )
@@ -1585,43 +1650,15 @@ impl Workbench {
 mod tests {
     // Explicit imports on purpose: `use super::*` would also bring in GPUI's own
     // `#[test]` macro (through `gpui_kit::*`), which replaces Rust's.
-    use classivar_core::{Applied, Class, Direction, RuleSet, Strength};
-    use gpui_kit::{Rgba, rgb};
+    use classivar_core::{Applied, Class, RuleSet, Strength};
 
     use super::{
-        CLASSES, EXAMPLE_RECORDS, EXAMPLE_TODAY, class_fill, class_ink, direction_colour, evidence_of, normalize_today,
-        scale_for, suggested_file_name, to_applied, warning_fill, warning_ink,
+        EXAMPLE_RECORDS, EXAMPLE_TODAY, Editing, discouraged_row_note, evidence_of, normalize_today, rules_about_text,
+        scale_for, suggested_file_name, to_applied,
     };
 
     fn rules() -> &'static RuleSet {
         RuleSet::builtin().expect("the built-in rules are valid")
-    }
-
-    /// WCAG relative luminance of a colour.
-    fn luminance(c: Rgba) -> f32 {
-        let linear = |v: f32| if v <= 0.03928 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) };
-        0.2126 * linear(c.r) + 0.7152 * linear(c.g) + 0.0722 * linear(c.b)
-    }
-
-    fn contrast(a: Rgba, b: Rgba) -> f32 {
-        let (x, y) = (luminance(a), luminance(b));
-        (x.max(y) + 0.05) / (x.min(y) + 0.05)
-    }
-
-    #[test]
-    fn class_colours_reach_wcag_aa_contrast_for_their_text() {
-        for dark in [false, true] {
-            for class in CLASSES {
-                let ratio = contrast(class_fill(class, dark), class_ink(class, dark));
-                assert!(ratio >= 4.5, "{class:?} (dark={dark}): {ratio:.2}:1");
-            }
-        }
-        for direction in [Direction::Pathogenic, Direction::Benign] {
-            let ratio = contrast(direction_colour(direction), rgb(0xffffff));
-            assert!(ratio >= 4.5, "{direction:?} chip text: {ratio:.2}:1");
-        }
-        let ratio = contrast(warning_fill(), warning_ink());
-        assert!(ratio >= 4.5, "warning text: {ratio:.2}:1");
     }
 
     #[test]
@@ -1655,15 +1692,35 @@ mod tests {
     #[test]
     fn old_evidence_is_brought_onto_todays_rules_not_rejected() {
         let rules = rules();
+        // PP3 VeryStrong is above today's cap; PVS1 VeryStrong without an answer
+        // has two guide answers, so the criterion asks again instead of guessing.
         let (today, changed) = normalize_today(
             rules,
             &[Applied::new("PP3", Strength::VeryStrong), Applied::new("PVS1", Strength::VeryStrong)],
         );
         let today: std::collections::BTreeMap<_, _> = today.into_iter().collect();
         assert_eq!(today["PP3"].strength, Strength::Strong, "today's cap lowers the saved strength");
-        assert!(today["PVS1"].situation.is_some(), "the guide answer is reconstructed");
-        assert_eq!(changed.len(), 1);
-        assert!(changed[0].starts_with("PP3 to Strong"));
+        assert!(!today.contains_key("PVS1"), "an ambiguous guide answer is not guessed");
+        assert_eq!(changed.len(), 2);
+        assert!(changed.contains(&"PP3 lowered to Strong.".to_string()));
+        assert_eq!(changed[1], "PVS1 needs its strength guide answered again.");
+    }
+
+    #[test]
+    fn a_saved_guide_answer_that_the_rules_accept_is_kept() {
+        // The Supporting answer is unique, so a case saved with it restores it
+        // exactly; a missing answer falls back to the same unique answer.
+        let rules = rules();
+        let situation = rules.criterion("PVS1").unwrap().situation_for(Strength::Supporting).unwrap().to_string();
+        let (today, changed) = normalize_today(
+            rules,
+            &[Applied::new("PVS1", Strength::Supporting), Applied::guided("PVS1", Strength::Supporting, situation)],
+        );
+        assert!(changed.is_empty(), "{changed:?}");
+        let today: Vec<_> = today;
+        assert_eq!(today.len(), 2);
+        assert!(today.iter().all(|(code, _)| code == "PVS1"), "PVS1 is the criterion in both entries");
+        assert!(today.iter().all(|(_, choice)| choice.situation.is_some()));
     }
 
     #[test]
@@ -1691,5 +1748,23 @@ mod tests {
             assert!(rules().assess(&to_applied(&evidence_of(list))).is_ok());
         }
         assert!(rules().assess(&to_applied(&evidence_of(EXAMPLE_TODAY))).is_ok());
+    }
+
+    #[test]
+    fn a_discouraged_row_says_not_counted_only_for_todays_evidence() {
+        assert_eq!(discouraged_row_note(true, Editing::Today), Some("not counted"));
+        // An earlier record counts it; the notes say so, the row must not deny it.
+        assert_eq!(discouraged_row_note(true, Editing::Record(0)), None);
+        assert_eq!(discouraged_row_note(false, Editing::Today), None);
+    }
+
+    #[test]
+    fn the_about_text_names_the_loaded_rules_itself() {
+        let text = rules_about_text(rules());
+        assert!(text.contains("acmg-amp-points"), "{text}");
+        assert!(text.contains("UNVERIFIED draft"), "{text}");
+        // True for any rule file, so it must not name this file's own deviations.
+        assert!(!text.contains("PVS1"), "{text}");
+        assert!(!text.contains("PM2"), "{text}");
     }
 }

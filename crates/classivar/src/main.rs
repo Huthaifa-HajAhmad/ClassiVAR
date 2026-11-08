@@ -1,16 +1,18 @@
+mod design;
 mod genes;
 mod settings;
+mod status;
+mod theme;
 mod view;
 
 use classivar_core::RuleSet;
-use gpui_kit::component::Theme;
 use gpui_kit::*;
 
 use view::Workbench;
 
 const USAGE: &str = "usage: classivar [--rules <rule-file.toml>]";
 
-/// The largest rule file that can still be one: the built-in file is about 12 kB.
+/// The largest rule file that can still be one: the built-in file is about 54 kB.
 const MAX_RULE_BYTES: u64 = 1024 * 1024;
 
 /// The rules to use: the ones built into the program, or a file given with
@@ -49,7 +51,7 @@ fn main() {
     application().with_assets(assets::Assets).run(move |cx| {
         init(cx);
         // Start in the theme last chosen on this machine (light if there is no choice).
-        Theme::change(settings::load_theme(), None, cx);
+        theme::install(settings::load_theme(), cx);
         let bounds = Bounds::centered(None, size(px(1240.), px(900.)), cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),

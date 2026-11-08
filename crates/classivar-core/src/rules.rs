@@ -323,6 +323,12 @@ pub struct Pm3Reading {
 /// published list of common pathogenic-variant exceptions (July 2018).
 pub const BA1_SOURCE: &str = "clingen-ba1-2018";
 
+/// The criteria this program's helpers fill in from published tables. The
+/// helpers cannot answer a strength guide (that is what the PVS1-style guide
+/// screen is for), so a guide on one of these would produce evidence the
+/// engine refuses; the loader rejects it instead.
+pub const HELPER_CODES: [&str; 10] = ["PP3", "BP4", "PS3", "BS3", "PP1", "PP4", "BS4", "PS2", "PM6", "PM3"];
+
 /// A dated reference entry, not an automatic variant match.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Ba1Exception {
@@ -428,6 +434,15 @@ impl Criterion {
         self.guide.iter().find(|g| g.strength == Some(strength)).map(|g| g.id.as_str())
     }
 
+    /// Like `situation_for`, but only when exactly one guide answer sets this
+    /// strength. Reconstructing a saved answer needs a unique answer: picking
+    /// the first of several would invent a reason the save never gave.
+    pub fn unique_situation_for(&self, strength: Strength) -> Option<&str> {
+        let mut matches = self.guide.iter().filter(|g| g.strength == Some(strength));
+        let first = matches.next()?;
+        matches.next().is_none().then_some(first.id.as_str())
+    }
+
     /// The guide option with this id, for display and validation.
     pub fn guide_option(&self, id: &str) -> Option<&StrengthGuide> {
         self.guide.iter().find(|g| g.id == id)
@@ -446,7 +461,6 @@ struct RuleSetFile {
     sources: Vec<Source>,
     points: Points,
     class_min_points: ClassMinPoints,
-    vus_tiers: Vec<VusTier>,
     exclusive_pairs: Vec<ExclusivePair>,
     #[serde(default)]
     combination_caps: Vec<CombinationCap>,
@@ -457,6 +471,9 @@ struct RuleSetFile {
     non_segregation: Option<NonSegregationRules>,
     de_novo: Option<DeNovoRules>,
     pm3: Option<Pm3Rules>,
+    // A file may have no tier table at all (the engine treats that as "no tiers").
+    #[serde(default)]
+    vus_tiers: Vec<VusTier>,
     #[serde(default)]
     ba1_exceptions: Vec<Ba1Exception>,
     criteria: Vec<Criterion>,
@@ -532,6 +549,12 @@ pub enum RuleError {
     GuideWithoutAnswer(String),
     #[error("criterion {0}: guide_source is set but the criterion has no guide")]
     GuideSourceWithoutGuide(String),
+    #[error("source {0} appears twice under [[sources]]")]
+    DuplicateSource(String),
+    #[error(
+        "criterion {0} has a strength guide, but the helper that sets {0} cannot answer a guide; remove the guide from {0}"
+    )]
+    GuideOnHelperCriterion(String),
     #[error("criterion {0}: original_strength must be a recorded strength different from today's default")]
     BadOriginalStrength(String),
     #[error("exclusive pair {0}: the two criteria must differ and the pair must appear once")]
@@ -845,10 +868,12 @@ impl RuleSet {
 
         if self.meta.status == ReviewStatus::Reviewed {
             let filled = |v: &Option<String>| v.as_deref().is_some_and(|s| !s.trim().is_empty());
-            // The date must look like YYYY-MM-DD.
+            // The date must look like YYYY-MM-DD with a possible month and day.
             let is_date = |s: &str| {
                 s.len() == 10
                     && s.char_indices().all(|(i, c)| if i == 4 || i == 7 { c == '-' } else { c.is_ascii_digit() })
+                    && (1..=12).contains(&s[5..7].parse::<u32>().unwrap_or(0))
+                    && (1..=31).contains(&s[8..10].parse::<u32>().unwrap_or(0))
             };
             if !filled(&self.meta.reviewed_by) || !self.meta.reviewed_on.as_deref().is_some_and(is_date) {
                 return Err(RuleError::ReviewIncomplete);
@@ -856,6 +881,14 @@ impl RuleSet {
         }
 
         let known_sources: HashSet<&str> = self.sources.iter().map(|s| s.id.as_str()).collect();
+        // A repeated source id would make `source()` ambiguous, so the file
+        // says which one it means instead.
+        let mut source_ids = HashSet::new();
+        for source in &self.sources {
+            if source.id.trim().is_empty() || !source_ids.insert(source.id.as_str()) {
+                return Err(RuleError::DuplicateSource(source.id.clone()));
+            }
+        }
         let needs_source = |item: String, source_id: &str| {
             if known_sources.contains(source_id) {
                 Ok(())
@@ -913,6 +946,11 @@ impl RuleSet {
                 }
             } else if c.guide_source.is_some() {
                 return Err(RuleError::GuideSourceWithoutGuide(c.code.clone()));
+            }
+            // The helpers set their criteria from tables and cannot answer a
+            // guide, so a guide on one of them could never be scored.
+            if !c.guide.is_empty() && HELPER_CODES.contains(&c.code.as_str()) {
+                return Err(RuleError::GuideOnHelperCriterion(c.code.clone()));
             }
             if let Some(original) = c.original_strength
                 && (original == c.strength || !c.recorded_strengths().contains(&original))
@@ -983,8 +1021,17 @@ impl RuleSet {
                 source_id: rules.source.clone(),
             });
         }
-        if self.criterion("PS3").is_none() || self.criterion("BS3").is_none() {
+        // `read_functional_controls` and `read_oddspath` read the damage as PS3
+        // and the absence of damage as BS3, so the codes must sit that way.
+        let (Some(ps3), Some(bs3)) = (self.criterion("PS3"), self.criterion("BS3")) else {
             return bad("it needs the criteria PS3 and BS3");
+        };
+        if ps3.direction != Direction::Pathogenic
+            || ps3.discouraged
+            || bs3.direction != Direction::Benign
+            || bs3.discouraged
+        {
+            return bad("PS3 must be a counted pathogenic criterion and BS3 a counted benign one");
         }
         if rules.controls_supporting_min == 0 || rules.controls_supporting_min >= rules.controls_moderate_min {
             return bad("controls_supporting_min must be at least 1 and below controls_moderate_min");
@@ -1270,13 +1317,31 @@ impl RuleSet {
         if self.predictors.is_empty() {
             return Ok(());
         }
+        // `read_predictor` maps a high score to PP3 and a low one to BP4, so the
+        // codes must sit that way, and PP3/BP4 cannot be discouraged pair members.
+        match (self.criterion("PP3"), self.criterion("BP4")) {
+            (Some(pp3), Some(bp4))
+                if pp3.direction == Direction::Pathogenic
+                    && !pp3.discouraged
+                    && bp4.direction == Direction::Benign
+                    && !bp4.discouraged => {}
+            (Some(_), Some(_)) => {
+                return Err(RuleError::BadPredictor {
+                    id: "<predictors>".to_string(),
+                    problem: "PP3 must be a counted pathogenic criterion and BP4 a counted benign one".to_string(),
+                });
+            }
+            _ => {
+                return Err(RuleError::BadPredictor {
+                    id: "<predictors>".to_string(),
+                    problem: "predictors need the criteria PP3 and BP4".to_string(),
+                });
+            }
+        }
         let mut ids = HashSet::new();
         for tool in &self.predictors {
             let bad =
                 |problem: &str| Err(RuleError::BadPredictor { id: tool.id.clone(), problem: problem.to_string() });
-            if self.criterion("PP3").is_none() || self.criterion("BP4").is_none() {
-                return bad("predictors need the criteria PP3 and BP4");
-            }
             if tool.id.trim().is_empty()
                 || tool.name.trim().is_empty()
                 || tool.reference.trim().is_empty()
@@ -1349,11 +1414,19 @@ impl RuleSet {
     /// with different minimums, the lowest starting where the VUS range starts,
     /// and every minimum inside the VUS range.
     fn check_tiers(&self) -> Result<(), RuleError> {
+        let bad = |message: &str| Err(RuleError::BadTiers(message.to_string()));
+        // Both unranged and ranged tiers need distinct names: the record screens
+        // use the name as the id of the tier buttons and to compare answers.
+        let mut names = HashSet::new();
+        for tier in &self.vus_tiers {
+            if tier.name.trim().is_empty() || !names.insert(tier.name.as_str()) {
+                return bad("tier names must be filled in and unique");
+            }
+        }
         let ranged = self.vus_tiers.iter().filter(|t| t.min_points.is_some()).count();
         if ranged == 0 {
             return Ok(());
         }
-        let bad = |message: &str| Err(RuleError::BadTiers(message.to_string()));
         if ranged != self.vus_tiers.len() {
             return bad("either every tier has min_points or none does");
         }
@@ -2216,6 +2289,62 @@ benign = [{ strength = "supporting", at = 0.290 }"#
             1,
         );
         assert!(matches!(RuleSet::parse(&bad), Err(RuleError::BadGuide { .. })));
+    }
+
+    #[test]
+    fn the_answer_a_saved_case_can_get_back_is_unique() {
+        let pvs1 = RuleSet::builtin().unwrap().criterion("PVS1").unwrap();
+        // Two guide answers set Very Strong, so the loader must not pick one
+        // silently; a saved case with that strength and no answer asks again.
+        assert_eq!(pvs1.unique_situation_for(Strength::VeryStrong), None);
+        assert!(pvs1.situation_for(Strength::VeryStrong).is_some());
+        // One answer sets Supporting, so a saved Supporting strength is
+        // reconstructable without inventing anything.
+        let unique = pvs1.unique_situation_for(Strength::Supporting).unwrap();
+        assert_eq!(pvs1.guide_option(unique).unwrap().strength, Some(Strength::Supporting));
+    }
+
+    #[test]
+    fn a_source_id_or_a_tier_name_cannot_appear_twice() {
+        let source_twice = BUILTIN.replacen("id = \"richards2015\"", "id = \"clingen-svi-pm2\"", 1);
+        assert!(matches!(RuleSet::parse(&source_twice), Err(RuleError::DuplicateSource(_))));
+        let empty_id = BUILTIN.replacen("id = \"richards2015\"", "id = \"\"", 1);
+        assert!(matches!(RuleSet::parse(&empty_id), Err(RuleError::DuplicateSource(_))));
+        let tier_twice = BUILTIN.replacen("name = \"VUS-mid\"", "name = \"VUS-low\"", 1);
+        assert!(matches!(RuleSet::parse(&tier_twice), Err(RuleError::BadTiers(_))));
+    }
+
+    #[test]
+    fn a_helper_criterion_may_not_carry_a_strength_guide() {
+        // The predictor helper applies PP3 from its tables; a guide on PP3
+        // would make every Apply produce an assessment error, so the loader
+        // refuses the file. (PP3 appears before BP4, so the first occurrence
+        // of the marker line ends PP3's block.)
+        let pp3_with_guide = BUILTIN.replacen(
+            "Choose one tool before you see its result.\"\n\n[[criteria]]\ncode = \"PP4\"",
+            "Choose one tool before you see its result.\"\nguide_source = \"pejaver2022\"\n\n[[criteria.guide]]\nid = \"calibrated\"\nshort = \"Calibrated table\"\nsituation = \"The score comes from the tool this case is using.\"\nstrength = \"supporting\"\n\n[[criteria]]\ncode = \"PP4\"",
+            1,
+        );
+        assert!(matches!(RuleSet::parse(&pp3_with_guide), Err(RuleError::GuideOnHelperCriterion(_))));
+    }
+
+    #[test]
+    fn a_review_date_must_name_a_possible_day() {
+        let ok = edited(
+            "status = \"unverified\"",
+            "status = \"reviewed\"\nreviewed_by = \"A. Curator\"\nreviewed_on = \"2026-11-08\"",
+        );
+        assert!(ok.is_ok());
+        let month = edited(
+            "status = \"unverified\"",
+            "status = \"reviewed\"\nreviewed_by = \"A. Curator\"\nreviewed_on = \"2026-99-08\"",
+        );
+        assert!(matches!(month, Err(RuleError::ReviewIncomplete)));
+        let day = edited(
+            "status = \"unverified\"",
+            "status = \"reviewed\"\nreviewed_by = \"A. Curator\"\nreviewed_on = \"2026-11-39\"",
+        );
+        assert!(matches!(day, Err(RuleError::ReviewIncomplete)));
     }
 
     #[test]

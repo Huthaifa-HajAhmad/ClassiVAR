@@ -1,9 +1,8 @@
 # Checks that must pass before a change is merged. First run on GitHub
-# 2026-11-05 (run 42080890167): windows and audit green; the macos job was
-# cancelled twice for runner capacity (macos-latest = macos-26, arm64 pool
-# saturated), so it moved to the macos-15-intel pool, which runs until
-# August 2027. A macos failure does not block a merge until the first
-# macOS build is green (audit finding D4).
+# 2026-11-05 (run 42080890167); run 42086149175 was the first fully green run
+# including the macOS build, so the macOS job now blocks a merge like the
+# Windows one (the app still needs its first run and install on macOS, see
+# ROADMAP D4).
 name: ci
 
 on:
@@ -30,9 +29,6 @@ jobs:
         os: [windows-latest, macos-15-intel]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
-    # No macOS build of the app has ever been made. Until the first one is green,
-    # a macOS failure is shown but does not block a merge (audit finding D4).
-    continue-on-error: ${{ matrix.os == 'macos-15-intel' }}
     steps:
       - uses: actions/checkout@v4
       # Shows the toolchain pinned in rust-toolchain.toml; the first cargo command installs it if missing.
@@ -41,7 +37,6 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - run: cargo test --workspace --locked
       - run: cargo build --workspace --locked
-
   audit:
     runs-on: ubuntu-latest
     timeout-minutes: 20

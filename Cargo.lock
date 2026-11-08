@@ -836,6 +836,7 @@ dependencies = [
  "classivar-core",
  "classivar-sources",
  "gpui-kit",
+ "serde_json",
 ]
 
 [[package]]

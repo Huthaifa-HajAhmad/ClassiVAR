@@ -39,10 +39,11 @@ pub struct Curation {
 }
 
 impl Curation {
-    /// Higher is stronger evidence. Used for sorting.
+    /// Higher is stronger evidence. Used for sorting. The checked parser only
+    /// writes classifications from the list; if one outside it appears anyway,
+    /// it sorts last (as the weakest) instead of failing the lookup.
     fn rank(&self) -> usize {
-        let at = CLASSIFICATIONS.iter().position(|c| *c == self.classification);
-        CLASSIFICATIONS.len() - at.expect("the rating was checked against the list when the file was read")
+        CLASSIFICATIONS.iter().position(|c| c == &self.classification).map_or(0, |at| CLASSIFICATIONS.len() - at)
     }
 }
 
@@ -111,7 +112,9 @@ const COLUMNS: [&str; 8] = [
 fn date_part(text: &str, gene: &str) -> Result<String, SourceError> {
     let day = text.get(..10).unwrap_or("");
     let is_date = day.len() == 10
-        && day.char_indices().all(|(i, c)| if i == 4 || i == 7 { c == '-' } else { c.is_ascii_digit() });
+        && day.char_indices().all(|(i, c)| if i == 4 || i == 7 { c == '-' } else { c.is_ascii_digit() })
+        && (1..=12).contains(&day[5..7].parse::<u32>().unwrap_or(0))
+        && (1..=31).contains(&day[8..10].parse::<u32>().unwrap_or(0));
     if is_date {
         Ok(day.to_string())
     } else {
@@ -271,6 +274,14 @@ mod tests {
     fn a_date_that_is_not_a_date_is_an_error() {
         let bad = SAMPLE.replace("2020-05-14T00:31:37.538Z", "unknown");
         assert!(matches!(parse_file(&bad), Err(SourceError::Unexpected(m)) if m.contains("not a date")));
+    }
+
+    #[test]
+    fn a_date_with_an_impossible_month_or_day_is_an_error_not_a_display_value() {
+        let month = SAMPLE.replace("2020-05-14T00:31:37.538Z", "2020-99-14T00:31:37.538Z");
+        assert!(matches!(parse_file(&month), Err(SourceError::Unexpected(_))));
+        let day = SAMPLE.replace("2020-05-14T00:31:37.538Z", "2020-05-39T00:31:37.538Z");
+        assert!(matches!(parse_file(&day), Err(SourceError::Unexpected(_))));
     }
 
     #[test]

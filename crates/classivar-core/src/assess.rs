@@ -230,7 +230,9 @@ impl RuleSet {
                 Direction::Pathogenic => magnitude,
                 Direction::Benign => -magnitude,
             };
-            if a.strength != c.strength && counting == Counting::Current {
+            // A guide answer explains the strength (the criterion row shows
+            // which answer was chosen); this warning is for a manual change.
+            if a.strength != c.strength && counting == Counting::Current && a.situation.is_none() {
                 warnings.push(Warning::StrengthChanged {
                     code: a.code.clone(),
                     from: c.strength,
@@ -271,6 +273,16 @@ impl RuleSet {
                 a: "PS2".to_string(),
                 b: "PM6".to_string(),
                 reason: "ClinGen Table 2 lets either code carry the total, not both. Remove one, or count only one observation.".to_string(),
+            });
+        }
+        // The same family observation read as both phenotype specificity (PP4)
+        // and prevalence (PS4): the ClinGen 2024 PP1/PP4 guidance counts a
+        // family seen before as one or the other, not both.
+        if counted("PP4") && counted("PS4") {
+            warnings.push(Warning::DoubleCounted {
+                a: "PP4".to_string(),
+                b: "PS4".to_string(),
+                reason: "One family observation is PP4 or PS4, not both (ClinGen 2024). Remove one, or count the family once.".to_string(),
             });
         }
         if pathogenic_points > 0 && benign_points < 0 {
@@ -757,6 +769,26 @@ mod tests {
         assert!(rules().assess(&pp3).is_err());
         let old = rules().assess_as(&pp3, Counting::AsRecorded).unwrap();
         assert_eq!(old.total_points, 8);
+    }
+
+    #[test]
+    fn pp4_and_ps4_together_are_flagged_as_double_counting() {
+        let a = apply(&[("PP4", Strong), ("PS4", Strong)]);
+        assert!(
+            a.warnings.iter().any(|w| matches!(w, Warning::DoubleCounted { a, b, .. } if a == "PP4" && b == "PS4"))
+        );
+        assert!(!apply(&[("PP4", Strong)]).warnings.iter().any(|w| matches!(w, Warning::DoubleCounted { .. })));
+    }
+
+    #[test]
+    fn a_guide_answer_is_not_reported_as_a_manual_strength_change() {
+        // The PVS1 Supporting answer explains the strength; it must not look
+        // like the curator raised or lowered the criterion by hand.
+        let pvs1 = rules().criterion("PVS1").unwrap();
+        let situation = pvs1.situation_for(Supporting).unwrap().to_string();
+        let a = rules().assess(&[Applied::guided("PVS1", Supporting, situation)]).unwrap();
+        assert!(a.warnings.iter().all(|w| !matches!(w, Warning::StrengthChanged { .. })), "{a:?}");
+        assert_eq!(a.total_points, 1);
     }
 
     #[test]

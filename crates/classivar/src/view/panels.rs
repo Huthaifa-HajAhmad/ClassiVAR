@@ -12,6 +12,7 @@
 
 use super::*;
 
+mod helper_bar;
 mod helpers;
 
 /// A section heading in the results pane.
@@ -39,13 +40,19 @@ impl Workbench {
             .flex()
             .flex_wrap()
             .items_center()
-            .gap_4()
+            .gap_3()
             .px_5()
             .py_3()
             .border_b_1()
             .border_color(border)
             .bg(background)
-            .child(div().text_lg().font_weight(FontWeight::BOLD).child("ClassiVAR"))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .child(div().text_lg().font_weight(FontWeight::BOLD).child("ClassiVAR"))
+                    .child(caption(muted).child("Research and learning only")),
+            )
             .child(
                 div()
                     .flex()
@@ -63,21 +70,21 @@ impl Workbench {
                     .border_color(border)
                     .text_xs()
                     .text_color(muted)
-                    .child(format!("{} · research and learning only", rules_tag(self.rules))),
+                    .child(rules_tag(self.rules)),
             )
-            .child(Button::new("save-case").label("Save case…").small().outline().on_click(cx.listener(
-                |this, _, _, cx| {
+            .child(Button::new("save-case").label("Save").accessibility_label("Save case…").small().outline().on_click(
+                cx.listener(|this, _, _, cx| {
                     this.save_case(cx);
-                },
-            )))
-            .child(Button::new("open-case").label("Open case…").small().outline().on_click(cx.listener(
-                |this, _, window, cx| {
+                }),
+            ))
+            .child(Button::new("open-case").label("Open").accessibility_label("Open case…").small().outline().on_click(
+                cx.listener(|this, _, window, cx| {
                     this.open_case(window, cx);
-                },
-            )))
+                }),
+            ))
             .child(
                 Button::new("theme-toggle")
-                    .label(if dark { "Light theme" } else { "Dark theme" })
+                    .label(if dark { "Light" } else { "Dark" })
                     .accessibility_label(if dark {
                         "Theme: dark. Switch to light."
                     } else {
@@ -130,24 +137,39 @@ impl Workbench {
         }
 
         let lookups_started = !matches!(self.gene.clingen, Lookup::Idle);
-        let mut panel = div().flex().flex_col().gap_3().px_5().py_3().bg(band).border_b_1().border_color(border).child(
-            div()
-                .flex()
-                .flex_wrap()
-                .items_center()
-                .gap_3()
-                .child(label("Variant"))
-                .child(div().w(px(300.)).child(Input::new(&self.variant_input)))
-                .child(label("Gene"))
-                .child(div().w(px(200.)).child(Input::new(&self.gene_input)))
-                .child(Button::new("gene-check").label("Check gene").small().on_click(cx.listener(
-                    |this, _, window, cx| {
-                        this.check_gene(window, cx);
-                    },
-                )))
-                .child(div().flex_1())
-                .child(decision),
-        );
+        // The panel can hold four source cards (up to 360 px) and thirty record
+        // chips. A cap with its own scroll keeps a short window from pushing
+        // the criteria and the result out of reach.
+        let mut panel = div()
+            .id("case-panel")
+            .max_h(relative(0.42))
+            .overflow_y_scroll()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .px_5()
+            .py_3()
+            .bg(band)
+            .border_b_1()
+            .border_color(border)
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap_3()
+                    .child(label("Variant"))
+                    .child(div().w(px(300.)).child(Input::new(&self.variant_input).aria_label("Variant name")))
+                    .child(label("Gene"))
+                    .child(div().w(px(200.)).child(Input::new(&self.gene_input).aria_label("Gene symbol")))
+                    .child(Button::new("gene-check").label("Check gene").small().on_click(cx.listener(
+                        |this, _, window, cx| {
+                            this.check_gene(window, cx);
+                        },
+                    )))
+                    .child(div().flex_1())
+                    .child(decision),
+            );
 
         panel = panel.children(self.gene_suggestions(cx));
         if let Some(error) = &self.gene_error {
@@ -167,7 +189,8 @@ impl Workbench {
     }
 
     /// Symbols that start with what is in the gene box, so the curator can fill
-    /// the field with one click. A typing aid only; it is not a gene check.
+    /// the field with one click. A typing aid only: it fills the box, and
+    /// "Check gene" (or Enter) starts the lookups.
     fn gene_suggestions(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let typed = self.gene_input.read(cx).value();
         let matches = crate::genes::suggestions_for(&typed, 6);
@@ -175,12 +198,8 @@ impl Workbench {
             return None;
         }
         let muted = cx.theme().muted_foreground;
-        let mut row = div()
-            .flex()
-            .flex_wrap()
-            .items_center()
-            .gap_2()
-            .child(div().text_xs().text_color(muted).child("Fill in the gene box:"));
+        let mut row =
+            div().flex().flex_wrap().items_center().gap_2().child(caption(muted).child("Fill in the gene box:"));
         for symbol in matches {
             row = row.child(
                 Button::new(SharedString::from(format!("gene-suggestion-{symbol}")))
@@ -189,16 +208,10 @@ impl Workbench {
                     .outline()
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.gene_input.update(cx, |input, cx| input.set_value(symbol, window, cx));
-                        this.check_gene(window, cx);
                     })),
             );
         }
-        row = row.child(
-            div()
-                .text_xs()
-                .text_color(muted)
-                .child("A short list for typing only, not a check that the gene is right."),
-        );
+        row = row.child(caption(muted).child("A short list for typing only, not a check that the gene is right."));
         Some(row.into_any_element())
     }
 
@@ -248,9 +261,7 @@ impl Workbench {
                     })),
             )
             .child(
-                div()
-                    .text_xs()
-                    .text_color(muted)
+                caption(muted)
                     .child("Sources are expert opinion about the gene, not your variant, and they can disagree."),
             )
             .into_any_element()
@@ -265,7 +276,7 @@ impl Workbench {
             .gap_2()
             // Four cards can be taller than the window; keep them in a short
             // scrolling strip so the criteria list and the result stay reachable.
-            .max_h(px(260.))
+            .max_h(px(360.))
             .overflow_y_scroll()
             .child(self.source_card("ClinGen gene-disease validity", &g.clingen, describe_clingen, cx))
             .child(self.source_card("Gene2Phenotype (G2P)", &g.g2p, describe_g2p, cx))
@@ -300,20 +311,21 @@ impl Workbench {
                     .flex()
                     .flex_col()
                     .gap_1()
-                    .child(div().text_xs().text_color(muted).child(format!("fetched {}", found.fetched_on)))
+                    .child(caption(muted).child(format!("fetched {}", found.fetched_on)))
                     .child(div().text_sm().child(headline));
                 let shown = if expanded { total } else { CARD_LINES };
                 for line in lines.into_iter().take(shown) {
-                    col = col.child(div().text_xs().text_color(muted).child(line));
+                    col = col.child(caption(muted).child(line));
                 }
                 if total > CARD_LINES {
                     let label = if expanded { "Show fewer".to_string() } else { format!("Show all {total}") };
                     col = col.child(
                         div().child(
                             Button::new(SharedString::from(format!("card-more-{title}")))
-                                .label(label)
+                                .label(label.clone())
+                                .accessibility_label(format!("{label} {title}"))
                                 .small()
-                                .ghost()
+                                .outline()
                                 .on_click(cx.listener(move |this, _, _, cx| {
                                     if !this.expanded_cards.remove(title) {
                                         this.expanded_cards.insert(title);
@@ -328,7 +340,8 @@ impl Workbench {
         };
         div()
             .flex_1()
-            .min_w(px(300.))
+            // Narrow enough that all four cards share one row, even at the 960 px minimum window.
+            .min_w(px(220.))
             .max_w(px(590.))
             .p_3()
             .rounded_md()
@@ -387,11 +400,12 @@ impl Workbench {
         if self.records.is_empty() {
             chips = chips.child(Button::new("record-example").label("Load example").small().ghost().on_click(
                 cx.listener(|this, _, window, cx| {
-                    // Loading replaces today's evidence, so ask first when there is some.
-                    if this.today.is_empty() {
-                        this.load_example(window, cx);
-                    } else {
+                    // Loading replaces the whole case, including a typed variant
+                    // or gene, so ask first whenever anything can be lost.
+                    if this.has_case_data(cx) {
                         this.ask(Confirm::LoadExample);
+                    } else {
+                        this.load_example(window, cx);
                     }
                     cx.notify();
                 }),
@@ -418,7 +432,7 @@ impl Workbench {
                             })),
                     );
                 }
-                row.child(div().text_xs().text_color(muted).child(if self.records.is_empty() {
+                row.child(caption(muted).child(if self.records.is_empty() {
                     "Add what earlier labs reported and used, then apply your own evidence to compare."
                 } else {
                     "Editing your own evidence. The verdict compares it with the latest record."
@@ -443,14 +457,14 @@ impl Workbench {
         let muted = cx.theme().muted_foreground;
         let record = &self.records[i];
         let remove_label = record.label.clone();
-        let label = |text: &'static str| div().text_xs().text_color(muted).child(text);
+        let label = |text: &'static str| caption(muted).child(text);
 
         let name_row = div()
             .flex()
             .items_center()
             .gap_2()
             .child(label("Lab or source"))
-            .child(div().w(px(260.)).child(Input::new(&self.record_name_input)));
+            .child(div().w(px(260.)).child(Input::new(&self.record_name_input).aria_label("Lab or source name")));
         let mut row = div().flex().flex_wrap().items_center().gap_2().child(label("This record reported"));
         for class in CLASSES {
             row = row.child(
@@ -571,7 +585,7 @@ impl Workbench {
                             .font_weight(FontWeight::SEMIBOLD)
                             .child(format!("Criteria · {}", self.editing_label())),
                     )
-                    .child(div().text_xs().text_color(muted).child(if applied == 0 {
+                    .child(caption(muted).child(if applied == 0 {
                         "Click a code to apply it. You decide which criteria apply.".to_string()
                     } else {
                         format!("{applied} applied")
@@ -597,30 +611,7 @@ impl Workbench {
             .flex()
             .flex_col()
             .gap_4();
-        if self.editing == Editing::Today && !self.rules.predictors.is_empty() {
-            list = list.child(self.predictor_helper(cx));
-        }
-        if self.editing == Editing::Today && self.rules.functional.is_some() {
-            list = list.child(self.functional_helper(cx));
-        }
-        if self.editing == Editing::Today && self.rules.locus_evidence.is_some() {
-            list = list.child(self.locus_helper(cx));
-        }
-        if self.editing == Editing::Today && self.rules.non_segregation.is_some() {
-            list = list.child(self.non_segregation_helper(cx));
-        }
-        if self.editing == Editing::Today && self.rules.pm3.is_some() {
-            list = list.child(self.pm3_helper(cx));
-        }
-        // Deliberate, not an omission: the BA1 list is a dated static reference,
-        // not an evidence helper. It shows for earlier records too and cannot
-        // insert evidence, so the `Editing::Today` gates above do not apply to it.
-        if !self.rules.ba1_exceptions.is_empty() {
-            list = list.child(self.ba1_reference(cx));
-        }
-        if self.editing == Editing::Today && self.rules.de_novo.is_some() {
-            list = list.child(self.de_novo_helper(cx));
-        }
+        list = list.children(self.helper_section(cx));
         for (direction, title, points) in [
             (Direction::Pathogenic, "For disease (pathogenic)", format!("+{}", result.pathogenic_points)),
             (Direction::Benign, "Against disease (benign)", format!("−{}", result.benign_points.abs())),
@@ -635,7 +626,7 @@ impl Workbench {
                     .child(div().w(px(10.)).h(px(10.)).rounded_sm().bg(direction_colour(direction)))
                     .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child(title))
                     .child(div().flex_1())
-                    .child(div().text_xs().text_color(muted).child(format!("{points} points"))),
+                    .child(caption(muted).child(format!("{points} points"))),
             );
             for category in Category::ALL {
                 let in_category: Vec<&Criterion> =
@@ -711,7 +702,9 @@ impl Workbench {
                         ),
                     )
                     .child(div().flex_1().min_w_0().text_sm().child(c.title.clone()))
-                    .when(c.discouraged, |row| row.child(div().text_xs().text_color(muted).child("not counted")))
+                    .when_some(discouraged_row_note(c.discouraged, self.editing), |row, note| {
+                        row.child(caption(muted).child(note))
+                    })
                     .when_some(strength, |row, strength| {
                         row.child(
                             Button::new(SharedString::from(format!("strength-{}", c.code)))
@@ -741,6 +734,12 @@ impl Workbench {
                     .child(
                         Button::new(SharedString::from(format!("detail-{}", c.code)))
                             .label(if open { "Less" } else { "More" })
+                            .accessibility_label(format!(
+                                "{} about {}: {}",
+                                if open { "Less" } else { "More" },
+                                c.code,
+                                c.title
+                            ))
                             .small()
                             .ghost()
                             .on_click(cx.listener(move |this, _, _, cx| {
@@ -886,9 +885,7 @@ impl Workbench {
             );
         }
         panel
-            .when_some(citation, |d, citation| {
-                d.child(div().text_xs().text_color(muted).child(format!("Source: {citation}")))
-            })
+            .when_some(citation, |d, citation| d.child(caption(muted).child(format!("Source: {citation}"))))
             .into_any_element()
     }
 
@@ -916,7 +913,7 @@ impl Workbench {
                     .px_1()
                     .rounded_sm()
                     .bg(direction_colour(direction))
-                    .text_color(rgb(0xffffff))
+                    .text_color(direction_ink())
                     .text_xs()
                     .font_weight(FontWeight::BOLD)
                     .child(format!("{sign}{points}")),
@@ -996,16 +993,13 @@ impl Workbench {
                     .iter()
                     .any(|i| i.counted && i.direction == Direction::Benign && i.strength == Strength::StandAlone)
                 {
-                    hero = hero.child(div().text_xs().text_color(muted).child(
+                    hero = hero.child(caption(muted).child(
                         "Stand-alone benign evidence (BA1) fixes the class at Benign, whatever else is applied. The points total is shown for transparency.",
                     ));
                 }
                 if class == Class::Vus {
-                    hero = hero.child(self.vus_note(result.total_points, cx));
+                    hero = hero.child(self.vus_note(result.total_points, result.vus_tier.as_deref(), cx));
                 }
-                hero = hero.child(div().text_xs().text_color(muted).child(
-                    "Default strengths follow 2015, except PVS1 (guide), PM2 (Supporting, ClinGen 2020) and PP5/BP6 (listed, not counted). Gene-specific rules and later ClinGen refinements (splicing assays) can change them and are not built in yet. Six helpers in the criteria list apply published tables: predictor scores (PP3/BP4), functional assays (PS3/BS3), family and phenotype points (PP1/PP4), non-segregation (BS4), de novo patients (PS2 or PM6) and recessive patients (PM3). A dated BA1 exceptions reference is also available.",
-                ));
             }
             None if !result.conflicts.is_empty() => {
                 hero = hero
@@ -1018,10 +1012,7 @@ impl Workbench {
                         div().text_sm().child(format!("• {} and {} cannot both apply. {}", c.a, c.b, c.reason))
                     }))
                     .child(
-                        div()
-                            .text_xs()
-                            .text_color(muted)
-                            .child(format!("Points so far: {} (not a classification).", result.total_points)),
+                        caption(muted).child(format!("Points so far: {} (not a classification).", result.total_points)),
                     );
             }
             None if result.both_sides_met => {
@@ -1083,16 +1074,25 @@ impl Workbench {
     }
 
     /// Where in the VUS range the points are. The range comes from the rule set.
-    fn vus_note(&self, total: i32, cx: &mut Context<Self>) -> AnyElement {
+    fn vus_note(&self, total: i32, tier: Option<&str>, cx: &mut Context<Self>) -> AnyElement {
         let muted = cx.theme().muted_foreground;
         let low = self.rules.class_min_points.vus;
         let high = self.rules.class_min_points.likely_pathogenic - 1;
         let tiers = self.rules.vus_tiers.iter().map(|t| t.name.as_str()).collect::<Vec<_>>().join(", ");
+        let tier_note = if let Some(tier) = tier {
+            format!("The loaded rule file gives official point ranges for the sub-tiers; this variant falls in {tier}.")
+        } else if self.rules.vus_tiers.is_empty() {
+            "The loaded rule file defines no VUS sub-tiers.".to_string()
+        } else {
+            format!(
+                "Sub-tiers ({tiers}) have no official point ranges yet, so ClassiVAR does not name one for new evidence."
+            )
+        };
         div()
             .text_sm()
             .text_color(muted)
             .child(format!(
-                "VUS covers {low} to {high} points. This variant is at {total}: {} above the bottom and {} below Likely pathogenic. Sub-tiers ({tiers}) have no official point ranges yet, so ClassiVAR does not name one for new evidence.",
+                "VUS covers {low} to {high} points. This variant is at {total}: {} above the bottom and {} below Likely pathogenic. {tier_note}",
                 total - low,
                 self.rules.class_min_points.likely_pathogenic - total,
             ))
@@ -1171,11 +1171,11 @@ impl Workbench {
                 .collect();
             let mut track = div().flex().flex_wrap().items_center().gap_1().min_h(px(30.)).flex_1();
             if items.is_empty() {
-                track = track.child(div().text_xs().text_color(muted).child("none"));
+                track = track.child(caption(muted).child("none"));
             }
             for item in items {
                 if !item.counted {
-                    track = track.child(div().text_xs().text_color(muted).pr_2().child(format!(
+                    track = track.child(caption(muted).pr_2().child(format!(
                         "{} {}: listed, not counted",
                         item.code,
                         item.strength.label()
@@ -1194,12 +1194,12 @@ impl Workbench {
                             .justify_center()
                             .rounded_r_md()
                             .bg(direction_colour(item.direction))
-                            .text_color(rgb(0xffffff))
+                            .text_color(direction_ink())
                             .text_xs()
                             .font_weight(FontWeight::BOLD)
                             .child(item.code.clone()),
                     )
-                    .child(div().text_xs().text_color(muted).pr_2().child(format!(
+                    .child(caption(muted).pr_2().child(format!(
                         "{sign}{} {}",
                         item.points.unsigned_abs(),
                         item.strength.label()
@@ -1224,24 +1224,24 @@ impl Workbench {
         let mut list = div().flex().flex_col().gap_1().text_sm();
         if let Some(next) = result.to_upgrade {
             list = list.child(format!(
-                "Up: {} more point{} of pathogenic evidence reaches {}.",
+                "Up: {} more point{} of pathogenic evidence {} {}.",
                 next.points_needed,
                 plural(next.points_needed),
+                if next.points_needed == 1 { "reaches" } else { "reach" },
                 next.class.label()
             ));
         }
         if let Some(next) = result.to_downgrade {
             list = list.child(format!(
-                "Down: {} more point{} of benign evidence reaches {}.",
+                "Down: {} more point{} of benign evidence {} {}.",
                 next.points_needed,
                 plural(next.points_needed),
+                if next.points_needed == 1 { "reaches" } else { "reach" },
                 next.class.label()
             ));
         }
-        list.child(
-            div().text_xs().text_color(muted).child("The evidence that could move it is in the lanes marked none."),
-        )
-        .into_any_element()
+        list.child(caption(muted).child("The evidence that could move it is in the lanes marked none."))
+            .into_any_element()
     }
 
     /// Notes about the result. They are information, so they are quiet, not yellow.
@@ -1421,16 +1421,17 @@ impl Workbench {
             latest.reported_tier.as_deref().and_then(|name| self.rules.vus_tiers.iter().find(|t| t.name == name))
         {
             let citation = self.rules.source(&tier.source).map_or(tier.source.as_str(), |s| s.citation.as_str());
-            card = card.child(div().text_sm().child(format!(
-                "{} means: {} ({citation}) ClassiVAR cannot say which tier today's evidence falls in: official point ranges for the tiers are not published yet.",
-                tier.name, tier.description
-            )));
+            let ranges_note = if tiers_are_ranged(self.rules) {
+                "The loaded rule file gives official point ranges to the tiers."
+            } else {
+                "ClassiVAR cannot say which tier today's evidence falls in: official point ranges for the tiers are not published yet."
+            };
+            card = card.child(
+                div().text_sm().child(format!("{} means: {} ({citation}) {ranges_note}", tier.name, tier.description)),
+            );
         }
         card.child(
-            div()
-                .text_xs()
-                .text_color(muted)
-                .child("This is a candidate for you to review, not a decision. Check each change below."),
+            caption(muted).child("This is a candidate for you to review, not a decision. Check each change below."),
         )
         .into_any_element()
     }
@@ -1478,7 +1479,7 @@ impl Workbench {
             Err(error) => format!("could not be scored: {error}"),
             Ok(a) => match a.class() {
                 Some(class) => format!("{} pts → {}", a.total_points, class.short()),
-                None if !a.has_evidence => "no criteria".to_string(),
+                None if !a.has_evidence => "no counted criteria".to_string(),
                 None => format!("{} pts, class withheld", a.total_points),
             },
         }
@@ -1486,8 +1487,8 @@ impl Workbench {
 
     pub(super) fn history_table(&self, re: &Reevaluation, cx: &mut Context<Self>) -> AnyElement {
         let (border, muted) = (cx.theme().border, cx.theme().muted_foreground);
-        let cell = |content: AnyElement| div().flex_1().min_w(px(130.)).px_1().child(content);
-        let first = |content: AnyElement| div().w(px(56.)).flex_none().child(content);
+        let cell = |content: AnyElement| div().flex_1().min_w(px(120.)).px_1().child(content);
+        let first = |content: AnyElement| div().w(px(48.)).flex_none().child(content);
         let latest_cells = re.latest_index;
 
         let mut header = div().flex().items_start().py_1().child(first(div().into_any_element()));
@@ -1501,14 +1502,14 @@ impl Workbench {
                     .flex()
                     .flex_col()
                     .child(div().text_xs().font_weight(FontWeight::SEMIBOLD).child(format!("{} · {}", r.label, r.year)))
-                    .child(div().text_xs().text_color(muted).child(reported))
+                    .child(caption(muted).child(reported))
                     .into_any_element(),
             ));
         }
         header = header
             .child(cell(div().text_xs().font_weight(FontWeight::SEMIBOLD).child("Today (you)").into_any_element()));
 
-        let mut table = div().flex().flex_col().min_w(px(56. + 130. * (re.records.len() + 1) as f32)).child(header);
+        let mut table = div().flex().flex_col().min_w(px(48. + 120. * (re.records.len() + 1) as f32)).child(header);
         for row in &re.rows {
             let mut line = div().flex().items_center().py_1().border_t_1().border_color(border).child(first(
                 div().text_sm().font_weight(FontWeight::SEMIBOLD).child(row.code.clone()).into_any_element(),
@@ -1533,9 +1534,7 @@ impl Workbench {
             let mut col = div().flex().flex_col().child(div().text_sm().child(Self::total_text(&r.assessment)));
             if r.consistency() == Consistency::Differs {
                 col = col.child(
-                    div()
-                        .text_xs()
-                        .text_color(muted)
+                    caption(muted)
                         .child(format!("! it reported {}; its evidence scores differently", r.reported_class.short())),
                 );
             }
@@ -1549,7 +1548,7 @@ impl Workbench {
             .flex_col()
             .gap_1()
             .child(div().id("history-scroll").overflow_x_scroll().child(table.child(total)))
-            .child(div().text_xs().text_color(muted).child(format!(
+            .child(caption(muted).child(format!(
                 "Records are scored the way they were made (criteria that no longer count are still counted). Today's evidence uses today's rules. {}. An outlined cell differs from the latest record.",
                 rules_tag(self.rules)
             )))
@@ -1568,13 +1567,15 @@ impl Workbench {
                     .flex_col()
                     .child(div().font_weight(FontWeight::SEMIBOLD).child(tier.name.clone()))
                     .child(div().child(tier.description.clone()))
-                    .child(div().text_xs().text_color(muted).child(format!("Source: {citation}"))),
+                    .child(caption(muted).child(format!("Source: {citation}"))),
             );
         }
-        list.child(div().text_xs().text_color(muted).child(
-            "Laboratories use these tiers in their own way, and no official point ranges exist yet (they are expected with ACMG SVCv4.0). ClassiVAR records the tier a lab named, and does not assign one itself.",
-        ))
-        .into_any_element()
+        let closing = if tiers_are_ranged(self.rules) {
+            "Laboratories use these tiers in their own way. This rule file gives official point ranges to every tier, so a VUS result carries the tier the evidence falls in."
+        } else {
+            "Laboratories use these tiers in their own way, and no official point ranges exist yet (they are expected with ACMG SVCv4.0). ClassiVAR records the tier a lab named, and does not assign one itself."
+        };
+        list.child(caption(muted).child(closing)).into_any_element()
     }
 
     // ---------- whole right pane ----------
@@ -1641,6 +1642,12 @@ impl Workbench {
                 )
             })
             .child(div().child(heading("Notes")).child(self.notes(result, variant, cx)))
+            .when(result.class().is_some(), |pane| {
+                let muted = cx.theme().muted_foreground;
+                pane.child(
+                    div().child(heading("About these rules")).child(caption(muted).child(rules_about_text(self.rules))),
+                )
+            })
             .into_any_element()
     }
 
@@ -1668,7 +1675,16 @@ impl Workbench {
 }
 
 impl Render for Workbench {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // While a question waits on screen, it owns the keyboard: the question
+        // window takes the focus, and Tab cannot walk out to the controls
+        // behind it. Enter and Space keep their normal meaning on whichever
+        // control inside the window has the focus; Escape (and the window's
+        // Cancel button) is handled by the global key observer.
+        if self.confirm.is_some() && !self.confirm_focus.is_focused(window) {
+            window.focus(&self.confirm_focus, cx);
+        }
+        let modal_open = self.confirm.is_some();
         let rules = self.rules;
         // An earlier record is scored the way it was made, as in the history table.
         let counting = match self.editing {
@@ -1711,6 +1727,13 @@ impl Render for Workbench {
             .flex_col()
             .bg(background)
             .text_color(foreground)
+            // The capture phase runs before every control inside, so a blocked
+            // key cannot act on whichever element holds the focus.
+            .capture_key_down(move |event, _window, cx| {
+                if modal_open && event.keystroke.key == "tab" {
+                    cx.stop_propagation();
+                }
+            })
             .child(self.top_bar(cx))
             .children(self.file_status_banner(cx))
             .child(self.case_panel(cx))

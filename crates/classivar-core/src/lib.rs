@@ -11,11 +11,12 @@ pub mod reevaluate;
 pub mod rules;
 
 pub use assess::{Applied, AssessError, Assessment, Conflict, Counting, Item, MAX_REASON_CHARS, NextClass, Warning};
-pub use case::{CASE_FORMAT, CaseError, CaseFile, GeneDecision, SavedRecord};
+pub use case::{CASE_FORMAT, CaseError, CaseFile, GeneDecision, MAX_RECORDS, SavedRecord};
 pub use model::{Category, Class, Direction, Strength};
 pub use reevaluate::{Consistency, Reason, Reevaluation, Rescored, Row, Submission, Verdict};
 pub use rules::{
     BA1_SOURCE, Ba1Exception, Criterion, Cutoff, DeNovoPhenotype, DeNovoReading, DeNovoRules, EvidenceReading,
-    FunctionalRules, LocusBand, LocusChoice, LocusReading, LocusRules, NonSegregationRules, NonSegregationSituation,
-    Pm3Reading, Pm3Row, Pm3Rules, Predictor, RuleError, RuleSet, RuleSetRef, SegregationKind, YieldStep,
+    FunctionalRules, HELPER_CODES, LocusBand, LocusChoice, LocusReading, LocusRules, NonSegregationRules,
+    NonSegregationSituation, Pm3Reading, Pm3Row, Pm3Rules, Predictor, RuleError, RuleSet, RuleSetRef, SegregationKind,
+    YieldStep,
 };

@@ -28,41 +28,15 @@ impl Workbench {
     /// published calibration gives. It only fills in the criterion; the curator
     /// still presses Apply.
     pub(super) fn predictor_helper(&self, cx: &mut Context<Self>) -> AnyElement {
-        let (border, muted, background) = (cx.theme().border, cx.theme().muted_foreground, cx.theme().background);
-        let open = self.predictor_open;
-        let mut panel =
-            div().p_3().rounded_md().border_1().border_color(border).bg(background).flex().flex_col().gap_2();
-        panel = panel.child(
-            div()
-                .flex()
-                .items_center()
-                .gap_2()
-                .child(div().flex_1().text_sm().font_weight(FontWeight::SEMIBOLD).child("Predictor score → PP3 or BP4"))
-                .child(
-                    Button::new("predictor-toggle")
-                        .label(if open { "Close" } else { "Use a score" })
-                        .accessibility_label(if open {
-                            "Close the predictor score helper"
-                        } else {
-                            "Open the predictor score helper"
-                        })
-                        .small()
-                        .outline()
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.predictor_open = !this.predictor_open;
-                            if !this.predictor_open {
-                                this.predictor_eligible = false;
-                            }
-                            cx.notify();
-                        })),
-                ),
+        let muted = cx.theme().muted_foreground;
+        let mut panel = self.helper_start(
+            ("predictor", "Predictor score → PP3 or BP4"),
+            "predictor score helper",
+            Self::toggle_predictor,
+            cx,
         );
-        if !open {
-            return panel.into_any_element();
-        }
 
-        let mut tools =
-            div().flex().flex_wrap().items_center().gap_2().child(div().text_xs().text_color(muted).child("Tool"));
+        let mut tools = div().flex().flex_wrap().items_center().gap_2().child(caption(muted).child("Tool"));
         for (i, tool) in self.rules.predictors.iter().enumerate() {
             tools = tools.child(
                 Button::new(SharedString::from(format!("predictor-tool-{}", tool.id)))
@@ -87,8 +61,8 @@ impl Workbench {
                 .flex()
                 .items_center()
                 .gap_2()
-                .child(div().text_xs().text_color(muted).child("Score"))
-                .child(div().w(px(140.)).child(Input::new(&self.predictor_input))),
+                .child(caption(muted).child("Score"))
+                .child(div().w(px(140.)).child(Input::new(&self.predictor_input).aria_label("Predictor score"))),
         );
         if let Some(eligibility) = &tool.eligibility {
             panel = panel.child(
@@ -96,7 +70,7 @@ impl Workbench {
                     .flex()
                     .flex_col()
                     .gap_1()
-                    .child(div().text_xs().text_color(muted).child(format!("Before applying, confirm {eligibility}.")))
+                    .child(caption(muted).child(format!("Before applying, confirm {eligibility}.")))
                     .child(
                         Button::new("predictor-eligible")
                             .label("I checked this condition")
@@ -158,8 +132,7 @@ impl Workbench {
         let eligible = tool.eligibility.is_none() || self.predictor_eligible;
         if let Some(reading) = reading {
             if !eligible {
-                panel = panel
-                    .child(div().text_xs().text_color(muted).child("Confirm the condition above before applying."));
+                panel = panel.child(caption(muted).child("Confirm the condition above before applying."));
             } else {
                 let label = format!("Apply {} {}", reading.code, reading.strength.label());
                 let score = self.predictor_input.read(cx).value().trim().to_string();
@@ -211,12 +184,12 @@ impl Workbench {
         }
         let citation = self.rules.source(&tool.source).map(|s| s.citation.clone());
         panel
-            .when_some(tool.note.clone(), |d, note| d.child(div().text_xs().text_color(muted).child(note)))
-            .child(div().text_xs().text_color(muted).child(
+            .when_some(tool.note.clone(), |d, note| d.child(caption(muted).child(note)))
+            .child(caption(muted).child(
                 "Choose one tool before you see its result, and use it for the whole case. The tool, score and source are saved with the case as the reason for the strength.",
             ))
             .when_some(citation, |d, citation| {
-                d.child(div().text_xs().text_color(muted).child(format!("Source: {citation}")))
+                d.child(caption(muted).child(format!("Source: {citation}")))
             })
             .into_any_element()
     }
@@ -224,35 +197,14 @@ impl Workbench {
     /// Turns functional-assay facts into PS3 or BS3 at the strength Brnich 2019
     /// gives. Like the predictor helper, it only fills in the criterion.
     pub(super) fn functional_helper(&self, cx: &mut Context<Self>) -> AnyElement {
-        let (border, muted, background) = (cx.theme().border, cx.theme().muted_foreground, cx.theme().background);
-        let open = self.functional_open;
-        let mut panel =
-            div().p_3().rounded_md().border_1().border_color(border).bg(background).flex().flex_col().gap_2();
-        panel = panel.child(
-            div()
-                .flex()
-                .items_center()
-                .gap_2()
-                .child(
-                    div().flex_1().text_sm().font_weight(FontWeight::SEMIBOLD).child("Functional assay → PS3 or BS3"),
-                )
-                .child(
-                    Button::new("functional-toggle")
-                        .label(if open { "Close" } else { "Use an assay" })
-                        .accessibility_label(if open {
-                            "Close the functional evidence helper"
-                        } else {
-                            "Open the functional evidence helper"
-                        })
-                        .small()
-                        .outline()
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.functional_open = !this.functional_open;
-                            cx.notify();
-                        })),
-                ),
+        let muted = cx.theme().muted_foreground;
+        let mut panel = self.helper_start(
+            ("functional", "Functional assay → PS3 or BS3"),
+            "functional evidence helper",
+            |this| this.functional_open = !this.functional_open,
+            cx,
         );
-        let Some(rules) = self.rules.functional.as_ref().filter(|_| open) else {
+        let Some(rules) = self.rules.functional.as_ref() else {
             return panel.into_any_element();
         };
 
@@ -268,7 +220,7 @@ impl Workbench {
                 }))
         };
         panel = panel
-            .child(div().text_xs().text_color(muted).child(
+            .child(caption(muted).child(
                 "First do the paper's four steps yourself: define the disease mechanism, judge the class of assay, judge this assay, then apply it to the variant.",
             ))
             .child(
@@ -277,7 +229,7 @@ impl Workbench {
                     .flex_wrap()
                     .items_center()
                     .gap_2()
-                    .child(div().text_xs().text_color(muted).child("What is known"))
+                    .child(caption(muted).child("What is known"))
                     .child(route_button("functional-route-controls", "Number of controls", AssayRoute::Controls, cx))
                     .child(route_button("functional-route-oddspath", "OddsPath value", AssayRoute::OddsPath, cx)),
             );
@@ -303,17 +255,16 @@ impl Workbench {
                             .flex_wrap()
                             .items_center()
                             .gap_2()
-                            .child(div().text_xs().text_color(muted).child("The assay showed"))
+                            .child(caption(muted).child("The assay showed"))
                             .child(direction_button("functional-damage", "Damage (PS3)", true, cx))
                             .child(direction_button("functional-no-damage", "No damage (BS3)", false, cx)),
                     )
                     .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .child(div().text_xs().text_color(muted).child("Validation controls"))
-                            .child(div().w(px(120.)).child(Input::new(&self.controls_input))),
+                        div().flex().items_center().gap_2().child(caption(muted).child("Validation controls")).child(
+                            div()
+                                .w(px(120.))
+                                .child(Input::new(&self.controls_input).aria_label("Validation control count")),
+                        ),
                     );
                 match self.typed_count(&self.controls_input, cx) {
                     None => (
@@ -344,12 +295,11 @@ impl Workbench {
             }
             AssayRoute::OddsPath => {
                 panel = panel.child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_2()
-                        .child(div().text_xs().text_color(muted).child("OddsPath"))
-                        .child(div().w(px(120.)).child(Input::new(&self.oddspath_input))),
+                    div().flex().items_center().gap_2().child(caption(muted).child("OddsPath")).child(
+                        div()
+                            .w(px(120.))
+                            .child(Input::new(&self.oddspath_input).aria_label("OddsPath value from the assay")),
+                    ),
                 );
                 match self.typed_number(&self.oddspath_input, cx) {
                     None => ("Type the OddsPath value from the assay's statistical analysis.".to_string(), None),
@@ -386,7 +336,7 @@ impl Workbench {
                 }
             };
             if reading.code == "PS3" && reading.strength == Strength::VeryStrong {
-                panel = panel.child(div().text_xs().text_color(muted).child(
+                panel = panel.child(caption(muted).child(
                     "Even Very strong functional evidence is not enough alone for a Pathogenic class (Brnich 2019). The program does not check this for you.",
                 ));
             }
@@ -405,25 +355,22 @@ impl Workbench {
         }
         let citation = self.rules.source(&rules.source).map(|s| s.citation.clone());
         panel
-            .when_some(citation, |d, citation| {
-                d.child(div().text_xs().text_color(muted).child(format!("Source: {citation}")))
-            })
+            .when_some(citation, |d, citation| d.child(caption(muted).child(format!("Source: {citation}"))))
             .into_any_element()
     }
 
-    /// The frame of a helper panel: its title and the button that opens and closes it.
-    /// The newer helper panels share it; `toggle` flips the helper's open flag.
+    /// The frame of an open helper panel: its title and a Close button. The
+    /// helper is opened from the bar (`helper_bar.rs`); `toggle` flips its open flag.
+    /// `ids` is the stem of the button id (`{stem}-close`) and the panel title.
     fn helper_start(
         &self,
         ids: (&'static str, &'static str),
-        label: &'static str,
         what: &'static str,
-        open: bool,
         toggle: fn(&mut Self),
         cx: &mut Context<Self>,
     ) -> Div {
         let (border, background) = (cx.theme().border, cx.theme().background);
-        let (button_id, title) = ids;
+        let (key, title) = ids;
         div().p_3().rounded_md().border_1().border_color(border).bg(background).flex().flex_col().gap_2().child(
             div()
                 .flex()
@@ -431,13 +378,9 @@ impl Workbench {
                 .gap_2()
                 .child(div().flex_1().text_sm().font_weight(FontWeight::SEMIBOLD).child(title))
                 .child(
-                    Button::new(button_id)
-                        .label(if open { "Close" } else { label })
-                        .accessibility_label(if open {
-                            format!("Close the {what}")
-                        } else {
-                            format!("Open the {what}")
-                        })
+                    Button::new(SharedString::from(format!("{key}-close")))
+                        .label("Close")
+                        .accessibility_label(format!("Close the {what}"))
                         .small()
                         .outline()
                         .on_click(cx.listener(move |this, _, _, cx| {
@@ -453,14 +396,12 @@ impl Workbench {
     /// total; the curator picks one. Like the other helpers, it only fills in criteria.
     pub(super) fn locus_helper(&self, cx: &mut Context<Self>) -> AnyElement {
         let panel = self.helper_start(
-            ("locus-toggle", "Family and phenotype → PP1 and PP4"),
-            "Use points",
+            ("locus", "Family and phenotype → PP1 and PP4"),
             "co-segregation and phenotype helper",
-            self.locus_open,
             |this| this.locus_open = !this.locus_open,
             cx,
         );
-        let Some(rules) = self.rules.locus_evidence.as_ref().filter(|_| self.locus_open) else {
+        let Some(rules) = self.rules.locus_evidence.as_ref() else {
             return panel.into_any_element();
         };
         let inputs = self.read_locus_inputs(rules, cx);
@@ -474,28 +415,32 @@ impl Workbench {
     /// The PP4 half: the diagnostic yield, how many variants share the allele, and the paper's cautions.
     fn locus_phenotype_part(&self, rules: &LocusRules, inputs: &LocusInputs, cx: &mut Context<Self>) -> Div {
         let muted = cx.theme().muted_foreground;
-        let row = |label: &'static str, input: &Entity<InputState>| {
+        let row = |label: &'static str, input: &Entity<InputState>, aria: &'static str| {
             div()
                 .flex()
                 .items_center()
                 .gap_2()
-                .child(div().text_xs().text_color(muted).child(label))
-                .child(div().w(px(120.)).child(Input::new(input)))
+                .child(caption(muted).child(label))
+                .child(div().w(px(120.)).child(Input::new(input).aria_label(aria)))
         };
         let mut part = div()
             .flex()
             .flex_col()
             .gap_2()
             .child(
-                div().text_xs().text_color(muted).child(
+                caption(muted).child(
                     "Fill in one or both parts. An empty box counts as 0 points. The paper divides the yield, never the points, when several variants share an allele.",
                 ),
             )
-            .child(row("Diagnostic yield of testing for the phenotype (%)", &self.yield_input))
-            .child(row("Variants on the same allele (1 if alone)", &self.variants_input))
+            .child(row(
+                "Diagnostic yield of testing for the phenotype (%)",
+                &self.yield_input,
+                "Diagnostic yield, percent",
+            ))
+            .child(row("Variants on the same allele (1 if alone)", &self.variants_input, "Variants sharing the allele"))
             .child(div().text_sm().child(inputs.pp4_note.clone()));
         for note in &rules.notes {
-            part = part.child(div().text_xs().text_color(muted).child(note.clone()));
+            part = part.child(caption(muted).child(note.clone()));
         }
         part
     }
@@ -515,8 +460,7 @@ impl Workbench {
                     cx.notify();
                 }))
         };
-        let mut kinds =
-            div().flex().flex_wrap().items_center().gap_2().child(div().text_xs().text_color(muted).child("Family"));
+        let mut kinds = div().flex().flex_wrap().items_center().gap_2().child(caption(muted).child("Family"));
         for (i, kind) in rules.segregation.iter().enumerate() {
             kinds = kinds.child(
                 Button::new(SharedString::from(format!("locus-kind-{}", kind.id)))
@@ -540,7 +484,7 @@ impl Workbench {
                     .flex_wrap()
                     .items_center()
                     .gap_2()
-                    .child(div().text_xs().text_color(muted).child("Can other genes cause this phenotype?"))
+                    .child(caption(muted).child("Can other genes cause this phenotype?"))
                     .child(genes_button(
                         "locus-genes-several",
                         "Several genes can cause it",
@@ -550,19 +494,21 @@ impl Workbench {
                     .child(genes_button("locus-genes-one", "Only this gene causes it", PhenotypeGenes::One, cx)),
             )
             .when(self.locus_genes == PhenotypeGenes::One, |d| {
-                d.child(div().text_xs().text_color(muted).child(rules.homogeneity_text.clone()))
+                d.child(caption(muted).child(rules.homogeneity_text.clone()))
             })
             .child(kinds)
-            .when_some(rules.segregation[self.locus_kind].note.clone(), |d, note| {
-                d.child(div().text_xs().text_color(muted).child(note))
-            })
+            .when_some(rules.segregation[self.locus_kind].note.clone(), |d, note| d.child(caption(muted).child(note)))
             .child(
                 div()
                     .flex()
                     .items_center()
                     .gap_2()
-                    .child(div().text_xs().text_color(muted).child("Informative family members (see the note)"))
-                    .child(div().w(px(120.)).child(Input::new(&self.segregations_input))),
+                    .child(caption(muted).child("Informative family members (see the note)"))
+                    .child(
+                        div()
+                            .w(px(120.))
+                            .child(Input::new(&self.segregations_input).aria_label("Informative family member count")),
+                    ),
             )
             .child(div().text_sm().child(inputs.pp1_note.clone()))
     }
@@ -624,9 +570,7 @@ impl Workbench {
             result = result.child(div().text_sm().child("Fill in at least one box to see the points."));
         }
         let citation = self.rules.source(&rules.source).map(|s| s.citation.clone());
-        result.when_some(citation, |d, citation| {
-            d.child(div().text_xs().text_color(muted).child(format!("Source: {citation}")))
-        })
+        result.when_some(citation, |d, citation| d.child(caption(muted).child(format!("Source: {citation}"))))
     }
 
     /// Asks which situation fits and applies BS4 only where ClinGen 2024 supports
@@ -635,23 +579,17 @@ impl Workbench {
     pub(super) fn non_segregation_helper(&self, cx: &mut Context<Self>) -> AnyElement {
         let muted = cx.theme().muted_foreground;
         let panel = self.helper_start(
-            ("segregation-toggle", "Non-segregation → BS4"),
-            "Check the situation",
+            ("segregation", "Non-segregation → BS4"),
             "non-segregation helper",
-            self.segregation_open,
             |this| this.segregation_open = !this.segregation_open,
             cx,
         );
-        let Some(rules) = self.rules.non_segregation.as_ref().filter(|_| self.segregation_open) else {
+        let Some(rules) = self.rules.non_segregation.as_ref() else {
             return panel.into_any_element();
         };
 
-        let mut situations = div()
-            .flex()
-            .flex_wrap()
-            .items_center()
-            .gap_2()
-            .child(div().text_xs().text_color(muted).child("What fits the family"));
+        let mut situations =
+            div().flex().flex_wrap().items_center().gap_2().child(caption(muted).child("What fits the family"));
         for (i, situation) in rules.situations.iter().enumerate() {
             situations = situations.child(
                 Button::new(SharedString::from(format!("segregation-situation-{}", situation.id)))
@@ -690,55 +628,48 @@ impl Workbench {
         }
         let citation = self.rules.source(&rules.source).map(|s| s.citation.clone());
         panel
-            .when_some(citation, |d, citation| {
-                d.child(div().text_xs().text_color(muted).child(format!("Source: {citation}")))
-            })
+            .when_some(citation, |d, citation| d.child(caption(muted).child(format!("Source: {citation}"))))
             .into_any_element()
     }
 
     /// Shows the dated source list for the curator to check manually.
     pub(super) fn ba1_reference(&self, cx: &mut Context<Self>) -> AnyElement {
-        let mut panel = self.helper_start(
-            ("ba1-reference-toggle", "BA1 exceptions (July 2018)"),
-            "View list",
-            "BA1 exceptions reference",
-            self.ba1_open,
-            |this| this.ba1_open = !this.ba1_open,
-            cx,
-        );
-        if self.ba1_open {
-            let muted = cx.theme().muted_foreground;
-            panel = panel.child(div().text_xs().text_color(muted).child(
+        let muted = cx.theme().muted_foreground;
+        let mut panel = self
+            .helper_start(
+                ("ba1-reference", "BA1 exceptions (July 2018)"),
+                "BA1 exceptions reference",
+                |this| this.ba1_open = !this.ba1_open,
+                cx,
+            )
+            .child(caption(muted).child(
                 "Manual reference, not a variant lookup. Check these exceptions before using BA1. Absence from this dated list does not establish eligibility. The list includes uncertain variants; HFE entries have reduced penetrance. It does not set a class or change your evidence."));
-            for row in &self.rules.ba1_exceptions {
-                panel =
-                    panel.child(div().text_xs().child(format!(
-                        "{}: {} | ClinVar {} | {}",
-                        row.gene, row.variant, row.clinvar_id, row.allele_id
-                    )));
-            }
-            if let Some(source) = self.rules.source(BA1_SOURCE) {
-                panel = panel.child(div().text_xs().text_color(muted).child(format!("Source: {}", source.citation)));
-            }
+        for row in &self.rules.ba1_exceptions {
+            panel = panel.child(
+                div()
+                    .text_xs()
+                    .child(format!("{}: {} | ClinVar {} | {}", row.gene, row.variant, row.clinvar_id, row.allele_id)),
+            );
+        }
+        if let Some(source) = self.rules.source(BA1_SOURCE) {
+            panel = panel.child(caption(muted).child(format!("Source: {}", source.citation)));
         }
         panel.into_any_element()
     }
 
     pub(super) fn pm3_helper(&self, cx: &mut Context<Self>) -> AnyElement {
         let mut panel = self.helper_start(
-            ("pm3-toggle", "Recessive patients: PM3"),
-            "Count patients",
+            ("pm3", "Recessive patients: PM3"),
             "PM3 patients helper",
-            self.pm3_open,
             |this| this.pm3_open = !this.pm3_open,
             cx,
         );
-        let Some(table) = self.rules.pm3.as_ref().filter(|_| self.pm3_open) else {
+        let Some(table) = self.rules.pm3.as_ref() else {
             return panel.into_any_element();
         };
         let muted = cx.theme().muted_foreground;
         for note in &table.notes {
-            panel = panel.child(div().text_xs().text_color(muted).child(note.clone()));
+            panel = panel.child(caption(muted).child(note.clone()));
         }
         let mut counts = Vec::new();
         let mut parts = Vec::new();
@@ -763,7 +694,7 @@ impl Workbench {
                     .flex_col()
                     .gap_1()
                     .child(div().text_xs().child(format!("{} ({} per patient{})", row.label, row.points, limit)))
-                    .child(div().w(px(210.)).child(Input::new(input))),
+                    .child(div().w(px(210.)).child(Input::new(input).aria_label(format!("PM3 count: {}", row.label)))),
             );
         }
         panel = panel.child(
@@ -818,7 +749,7 @@ impl Workbench {
             );
         }
         if let Some(source) = self.rules.source(&table.source) {
-            panel = panel.child(div().text_xs().text_color(muted).child(format!("Source: {}", source.citation)));
+            panel = panel.child(caption(muted).child(format!("Source: {}", source.citation)));
         }
         panel.into_any_element()
     }
@@ -826,18 +757,16 @@ impl Workbench {
     pub(super) fn de_novo_helper(&self, cx: &mut Context<Self>) -> AnyElement {
         let muted = cx.theme().muted_foreground;
         let panel = self.helper_start(
-            ("de-novo-toggle", "De novo patients → PS2 or PM6"),
-            "Count patients",
+            ("de-novo", "De novo patients → PS2 or PM6"),
             "de novo helper",
-            self.de_novo_open,
             |this| this.de_novo_open = !this.de_novo_open,
             cx,
         );
-        let Some(rules) = self.rules.de_novo.as_ref().filter(|_| self.de_novo_open) else {
+        let Some(rules) = self.rules.de_novo.as_ref() else {
             return panel.into_any_element();
         };
 
-        let mut panel = panel.child(div().text_xs().text_color(muted).child(
+        let mut panel = panel.child(caption(muted).child(
             "How many patients had this variant new (de novo)? Sort them by how well the phenotype fits the gene, and by whether the parental relationships were confirmed.",
         ));
         let mut counts = Vec::new();
@@ -846,12 +775,8 @@ impl Workbench {
         let points_text = |points: f64| format!("{points} {}", if points == 1.0 { "point" } else { "points" });
         for (i, row) in rules.phenotypes.iter().enumerate() {
             if row.confirmed == 0.0 && row.unconfirmed == 0.0 {
-                panel = panel.child(
-                    div()
-                        .text_xs()
-                        .text_color(muted)
-                        .child(format!("{}: 0 points. Do not count these patients.", row.label)),
-                );
+                panel =
+                    panel.child(caption(muted).child(format!("{}: 0 points. Do not count these patients.", row.label)));
                 counts.push((0, 0));
                 continue;
             }
@@ -884,23 +809,26 @@ impl Workbench {
                             .items_center()
                             .gap_2()
                             .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(muted)
+                                caption(muted)
                                     .child(format!("Parents confirmed ({} each)", points_text(row.confirmed))),
                             )
-                            .child(div().w(px(110.)).child(Input::new(&self.de_novo_inputs[i][0])))
                             .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(muted)
-                                    .child(format!("Not confirmed ({} each)", points_text(row.unconfirmed))),
+                                div().w(px(110.)).child(
+                                    Input::new(&self.de_novo_inputs[i][0])
+                                        .aria_label(format!("De novo patients, {} (parents confirmed)", row.id)),
+                                ),
                             )
-                            .child(div().w(px(110.)).child(Input::new(&self.de_novo_inputs[i][1]))),
+                            .child(
+                                caption(muted).child(format!("Not confirmed ({} each)", points_text(row.unconfirmed))),
+                            )
+                            .child(
+                                div().w(px(110.)).child(
+                                    Input::new(&self.de_novo_inputs[i][1])
+                                        .aria_label(format!("De novo patients, {} (parents not confirmed)", row.id)),
+                                ),
+                            ),
                     )
-                    .when(!limit.is_empty(), |d| {
-                        d.child(div().text_xs().text_color(muted).child(limit.trim().to_string()))
-                    }),
+                    .when(!limit.is_empty(), |d| d.child(caption(muted).child(limit.trim().to_string()))),
             );
             counts.push((confirmed, unconfirmed));
         }
@@ -921,7 +849,7 @@ impl Workbench {
                             cx.notify();
                         })),
                 )
-                .child(div().text_xs().text_color(muted).child(rules.recessive_text.clone())),
+                .child(caption(muted).child(rules.recessive_text.clone())),
         );
 
         let reading = (!unusable).then(|| self.rules.read_de_novo(&counts, self.de_novo_recessive)).flatten();
@@ -985,13 +913,11 @@ impl Workbench {
             panel = panel.child(buttons);
         }
         for note in &rules.notes {
-            panel = panel.child(div().text_xs().text_color(muted).child(note.clone()));
+            panel = panel.child(caption(muted).child(note.clone()));
         }
         let citation = self.rules.source(&rules.source).map(|s| s.citation.clone());
         panel
-            .when_some(citation, |d, citation| {
-                d.child(div().text_xs().text_color(muted).child(format!("Source: {citation}")))
-            })
+            .when_some(citation, |d, citation| d.child(caption(muted).child(format!("Source: {citation}"))))
             .into_any_element()
     }
 
@@ -1113,10 +1039,10 @@ impl Workbench {
                 c.strength.label(),
                 to.label()
             )))
-            .child(div().text_xs().text_color(muted).child(
+            .child(caption(muted).child(
                 "A stronger strength than the guideline default needs a reason. It is saved with the case and shown next to the criterion.",
             ))
-            .child(Input::new(&self.reason_input))
+            .child(Input::new(&self.reason_input).aria_label("Reason for raising the strength"))
             .child(
                 div()
                     .flex()

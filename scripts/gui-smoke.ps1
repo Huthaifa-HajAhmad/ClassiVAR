@@ -7,8 +7,9 @@
 #
 # Controls are found by accessible name, so renaming these means updating the
 # script: "Theme: light. Switch to dark.", "PVS1:*not applied*", "PVS1 Very
-# strong:*", "PVS1 strength: Very strong*", "BRCA1". The script never calls the
-# live sources, so it runs offline; the live source tests cover the network.
+# strong:*", "PVS1 strength: Very strong*", "BRCA1". Text boxes are found by
+# their aria labels. The script never calls the gene sources, so it runs
+# offline; the live source tests cover the network.
 #
 # Usage (Windows):
 #   powershell -ExecutionPolicy Bypass -File scripts/gui-smoke.ps1
@@ -44,6 +45,7 @@ public static class ClassiVarSmokeWin {
   [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
   [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);
+  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
   [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
 }
@@ -168,14 +170,15 @@ try {
         Focus-App
         Invoke-Element (Find-Button-Like $name)
     }
-    # A text box is found by its placeholder, which is also its accessible name.
+    # A text box is found by its accessible name, which its aria label sets
+    # (the placeholder text may differ from that name).
     function Find-Box([string]$placeholder) {
         $cond = New-Object System.Windows.Automation.PropertyCondition(
             [System.Windows.Automation.AutomationElement]::NameProperty, $placeholder)
         return (Root).FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)
     }
-    function Gene-Box { return Find-Box "Gene symbol, e.g. BRCA1" }
-    function Set-GeneText([string]$text) { Set-BoxText "Gene symbol, e.g. BRCA1" $text }
+    function Gene-Box { return Find-Box "Gene symbol" }
+    function Set-GeneText([string]$text) { Set-BoxText "Gene symbol" $text }
     function Press-Key([string]$keys) {
         Focus-App
         [System.Windows.Forms.SendKeys]::SendWait($keys)
@@ -233,7 +236,9 @@ try {
         $g.CopyFromScreen($p.X, $p.Y, 0, 0, (New-Object System.Drawing.Size($r.Right, $r.Bottom)))
         $path = Join-Path $OutDir "$name.png"
         $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
-        $c = $bmp.GetPixel(20, $r.Bottom - 80)
+        # A background probe: the result pane's empty bottom-right corner, away
+        # from result content, criteria rows and scroll bars.
+        $c = $bmp.GetPixel($r.Right - 60, $r.Bottom - 40)
         $g.Dispose(); $bmp.Dispose()
         $script:shots += $path
         return [pscustomobject]@{ Path = $path; Background = $c }
@@ -244,12 +249,11 @@ try {
     }
 
     Focus-App
-    # The first frame can be captured before the window has painted, so look again for a few seconds.
+    # The first frame can be captured before the window has painted, so wait
+    # for a control to appear in the accessibility tree first (it is pushed
+    # with the first painted frame), then capture and check the background.
+    $null = Find-Button-Like "Save case*"
     $light = Capture "01-light"
-    for ($i = 0; $i -lt 15 -and $light.Background.R -lt 200; $i++) {
-        Start-Sleep -Milliseconds 400
-        $light = Capture "01-light"
-    }
     if ($light.Background.R -lt 200) { throw "the app did not start in the light theme" }
 
     Click-Button-Like "Theme:*Switch to dark*"
@@ -291,58 +295,58 @@ try {
     Click-Button-Like "PVS1 Very strong:*"
     Find-Button-Like "PVS1:*applied*" | Out-Null
     Find-Button-Like "PVS1 strength: Very strong*" | Out-Null
-    $after = Capture "05-pvs1-supporting"
+    $after = Capture "05-pvs1-applied"
 
     # The predictor helper turns a REVEL score into PP3 at the published strength.
     Scroll-List-To-Top
     Click-Button "Open the predictor score helper"
-    Set-BoxText "Score, e.g. 0.85" "0.95"
+    Set-BoxText "Predictor score" "0.95"
     Click-Button-Like "Apply PP3 Strong*"
     Find-Button-Like "PP3:*applied*" | Out-Null
     Find-Button-Like "PP3 strength: Strong*" | Out-Null
     # A score between the limits gives no button, and a benign score above
     # this program's limit is lowered to Moderate.
-    Set-BoxText "Score, e.g. 0.85" "0.5"
+    Set-BoxText "Predictor score" "0.5"
     if (@(Names | Where-Object { $_ -like "Apply PP3*" -or $_ -like "Apply BP4*" }).Count -ne 0) {
         throw "a score between the limits still offered to apply a criterion"
     }
-    Set-BoxText "Score, e.g. 0.85" "0.01"
+    Set-BoxText "Predictor score" "0.01"
     Find-Button-Like "Apply BP4 Moderate*" | Out-Null
     $predictor = Capture "05b-predictor"
     # SpliceAI is applied at Supporting only; 0.1 to 0.2 gives nothing (Walker 2023).
     # The paper's table is only for variants outside donor/acceptor +/-1,2, so the
     # helper withholds Apply until the curator confirms that, and it accepts 0 to 1.
     Click-Button "SpliceAI"
-    Set-BoxText "Score, e.g. 0.85" "0.9"
+    Set-BoxText "Predictor score" "0.9"
     if (@(Names | Where-Object { $_ -like "Apply PP3*" -or $_ -like "Apply BP4*" }).Count -ne 0) {
         throw "SpliceAI offered Apply before its scope was confirmed"
     }
     Scroll-To-Button "Confirm the variant is outside*"
     Click-Button-Like "Confirm the variant is outside*"
-    Set-BoxText "Score, e.g. 0.85" "0.9"
+    Set-BoxText "Predictor score" "0.9"
     Find-Button-Like "Apply PP3 Supporting*" | Out-Null
-    Set-BoxText "Score, e.g. 0.85" "0.15"
+    Set-BoxText "Predictor score" "0.15"
     if (@(Names | Where-Object { $_ -like "Apply PP3*" -or $_ -like "Apply BP4*" }).Count -ne 0) {
         throw "a SpliceAI score between 0.1 and 0.2 still offered to apply a criterion"
     }
-    Set-BoxText "Score, e.g. 0.85" "1.5"
+    Set-BoxText "Predictor score" "1.5"
     if (@(Names | Where-Object { $_ -like "Apply PP3*" -or $_ -like "Apply BP4*" }).Count -ne 0) {
         throw "a SpliceAI score outside 0 to 1 still offered to apply a criterion"
     }
-    Set-BoxText "Score, e.g. 0.85" "0.05"
+    Set-BoxText "Predictor score" "0.05"
     Find-Button-Like "Apply BP4 Supporting*" | Out-Null
     Capture "05b2-spliceai" | Out-Null
     Click-Button "Close the predictor score helper"
 
     # The functional helper: controls route, then the OddsPath route.
     Click-Button "Open the functional evidence helper"
-    Set-BoxText "Controls, e.g. 11" "12"
+    Set-BoxText "Validation control count" "12"
     Click-Button-Like "Apply PS3 Moderate*"
     Find-Button-Like "PS3:*applied*" | Out-Null
     Click-Button "OddsPath value"
-    Set-BoxText "OddsPath, e.g. 5.2" "400"
+    Set-BoxText "OddsPath value from the assay" "400"
     Find-Button-Like "Apply PS3 Very strong*" | Out-Null
-    Set-BoxText "OddsPath, e.g. 5.2" "1"
+    Set-BoxText "OddsPath value from the assay" "1"
     if (@(Names | Where-Object { $_ -like "Apply PS3*" -or $_ -like "Apply BS3*" }).Count -ne 0) {
         throw "an OddsPath in the indeterminate range still offered to apply a criterion"
     }
@@ -352,9 +356,9 @@ try {
     # The family and phenotype helper: a yield of 60% earns 3.5 PP4 points and
     # three dominant co-segregations earn 3 PP1 points. The sum, 6.5, is cut to
     # the limit of 5, where the paper allows Strong with Supporting.
-    $yieldBox = "Diagnostic yield %, e.g. 60"
-    $countBox = "Informative family members, e.g. 3"
-    $variantsBox = "Variants on the allele, e.g. 1"
+    $yieldBox = "Diagnostic yield, percent"
+    $countBox = "Informative family member count"
+    $variantsBox = "Variants sharing the allele"
     $anyApply = { @(Names | Where-Object { $_ -like "Apply PP1*" -or $_ -like "Apply PP4*" }).Count -ne 0 }
     Click-Button "Open the co-segregation and phenotype helper"
     Set-BoxText $yieldBox "60"
@@ -393,8 +397,9 @@ try {
     Click-Button "Close the co-segregation and phenotype helper"
 
     # The non-segregation helper offers BS4 only where the paper supports it.
+    Scroll-To-Button "Open the non-segregation helper"
     Click-Button "Open the non-segregation helper"
-    foreach ($label in @("Recessive, compound heterozygous", "Reduced penetrance, unaffected carriers", "Many look-alike cases (phenocopy)")) {
+    foreach ($label in @("Recessive, compound heterozygous", "Reduced penetrance, unaffected carriers", "Many look-alike cases (phenocopy)", "Conflicting results or a very large family")) {
         Click-Button $label
         if (@(Names | Where-Object { $_ -like "Apply BS4*" }).Count -ne 0) {
             throw "BS4 was offered for a situation where the paper does not support it: $label"
@@ -410,8 +415,9 @@ try {
     # The de novo helper: two patients with a highly specific phenotype and confirmed
     # parents earn 2 + 2 = 4 points, Very Strong (ClinGen SVI v1.1, Table 2). A
     # recessive condition with no second variant lowers it one level, to Strong.
-    # Every count box has the same name; the first is "highly specific, confirmed".
-    $patientsBox = "Patients, e.g. 1"
+    # Every count box has an aria label that names its row; the first row is
+    # "highly specific, confirmed".
+    $patientsBox = "De novo patients, highly-specific (parents confirmed)"
     Scroll-To-Button "Open the de novo helper"
     Click-Button "Open the de novo helper"
     Set-BoxText $patientsBox "2"
@@ -440,32 +446,32 @@ try {
     # PM3: the source's PAH example gives two points, Strong. Four reaches Very Strong.
     Scroll-To-Button "Open the PM3 patients helper"
     Click-Button "Open the PM3 patients helper"
-    Set-BoxText "PM3 patients: confirmed" "2"
+    Set-BoxText "PM3 count: Pathogenic or likely pathogenic, confirmed in trans" "2"
     if (@(Names | Where-Object { $_ -like "Apply PM3*" }).Count -ne 0) {
         throw "PM3 offered evidence before its conditions were confirmed"
     }
     Scroll-To-Button "I checked the PM3 conditions"
     Click-Button "I checked the PM3 conditions"
     Find-Button-Like "Apply PM3 Strong*" | Out-Null
-    Set-BoxText "PM3 patients: confirmed" "4"
+    Set-BoxText "PM3 count: Pathogenic or likely pathogenic, confirmed in trans" "4"
     Scroll-To-Button "Apply PM3 Very*"
     $pm3 = Capture "05h-pm3"
     Click-Button-Like "Apply PM3 Very*"
     Find-Button-Like "PM3 strength: Very*" | Out-Null
-    Set-BoxText "PM3 patients: confirmed" ""
+    Set-BoxText "PM3 count: Pathogenic or likely pathogenic, confirmed in trans" ""
     if (@(Names | Where-Object { $_ -like "Apply PM3*" }).Count -ne 0) {
         throw "PM3 offered evidence without patients"
     }
-    Set-BoxText "PM3 patients: homozygous" "20"
+    Set-BoxText "PM3 count: Homozygous (same variant on both copies)" "20"
     Find-Button-Like "Apply PM3 Moderate*" | Out-Null
-    Set-BoxText "PM3 patients: homozygous" ""
-    Set-BoxText "PM3 patients: uncertain" "20"
+    Set-BoxText "PM3 count: Homozygous (same variant on both copies)" ""
+    Set-BoxText "PM3 count: Uncertain second variant, confirmed in trans" "20"
     Find-Button-Like "Apply PM3 Supporting*" | Out-Null
     # A negative count must poison an otherwise valid reading, not count as 0:
     # two confirmed patients alone would earn Strong, so Apply must vanish.
-    Set-BoxText "PM3 patients: confirmed" "2"
+    Set-BoxText "PM3 count: Pathogenic or likely pathogenic, confirmed in trans" "2"
     Find-Button-Like "Apply PM3 Strong*" | Out-Null
-    Set-BoxText "PM3 patients: uncertain" "-1"
+    Set-BoxText "PM3 count: Uncertain second variant, confirmed in trans" "-1"
     if (@(Names | Where-Object { $_ -like "Apply PM3*" }).Count -ne 0) {
         throw "PM3 accepted a negative count"
     }
@@ -487,7 +493,7 @@ try {
     Scroll-To-Button "PM1 strength: Moderate*"
     Click-Button-Like "PM1 strength: Moderate*"
     $raise = Capture "05d-raise-reason"
-    Set-BoxText "Why is this stronger than the default?" "Hot spot in a well-studied domain"
+    Set-BoxText "Reason for raising the strength" "Hot spot in a well-studied domain"
     Scroll-To-Button "Save the reason and raise PM1*"
     Click-Button-Like "Save the reason and raise PM1*"
     Find-Button-Like "PM1 strength: Strong*" | Out-Null
@@ -552,7 +558,7 @@ try {
     # Removing a record must ask first, not delete on one click.
     Click-Button-Like "Lab A*"
     # The name box renames the record as you type.
-    Set-BoxText "Lab or source, e.g. Lab A (ClinVar)" "Quest Dx"
+    Set-BoxText "Lab or source name" "Quest Dx"
     Find-Button-Like "Quest Dx*" | Out-Null
     # Put the criteria list at the top, so the Page Down check below has room to move it.
     $c = (Find-Button-Like "PS1:*").Current.BoundingRectangle
@@ -567,6 +573,22 @@ try {
         throw "Remove record did not ask for confirmation"
     }
     $modal = Capture "07a-confirm-window"
+    # The question owns the keyboard. A helper reads the focused element from
+    # UIA; after Tab presses it must stay inside the question (its controls are
+    # "Cancel" and "Yes, continue"; the window itself carries no name).
+    function Focused-Name {
+        $el = [System.Windows.Automation.AutomationElement]::FocusedElement
+        if ($null -eq $el) { return "" }
+        try { return $el.Current.Name } catch { return "" }
+    }
+    $allowed = @("", "Cancel", "Yes, continue")
+    for ($i = 0; $i -lt 3; $i++) {
+        Press-Key "{TAB}"
+        $focused = Focused-Name
+        if ($allowed -notcontains $focused) {
+            throw "the confirmation window let Tab focus '$focused' behind or outside itself"
+        }
+    }
     # Page Down must not scroll the list behind the confirmation window.
     $c = (Find-Button-Like "PS1:*").Current.BoundingRectangle
     [ClassiVarSmokeWin]::SetCursorPos([int]($c.X + $c.Width / 2), [int]($c.Y + $c.Height / 2)) | Out-Null
@@ -582,6 +604,32 @@ try {
     Click-Button "Remove record"
     Click-Button "Cancel"
     $reported = Capture "07-reported"
+
+    # The loaded example is fictional, and the gene box is empty on it, so the
+    # old "same gene, different gene" guard cannot notice a first gene check:
+    # checking a gene on the example asks first. Escape leaves it intact.
+    Set-GeneText "brca2"
+    Click-Button "Check gene"
+    if (@(Names | Where-Object { $_ -eq "Yes, continue" }).Count -ne 1) {
+        throw "checking a gene on the fictional example did not ask first"
+    }
+    $guard = Capture "07b-example-gene-guard"
+    Press-Escape
+    if (@(Names | Where-Object { $_ -eq "Yes, continue" }).Count -ne 0) {
+        throw "Escape did not close the gene question"
+    }
+    if (@(Names | Where-Object { $_ -like "PM2:*applied*" }).Count -ne 1) {
+        throw "the gene question on the example lost the example's evidence"
+    }
+    Set-GeneText ""
+
+    # The 960 x 600 minimum window: the top bar, the case panel, the criteria
+    # and the result must all stay reachable.
+    [ClassiVarSmokeWin]::SetWindowPos($h, [IntPtr]::Zero, 60, 60, 960, 600, 0x0044) | Out-Null
+    Start-Sleep -Milliseconds 900
+    $small = Capture "08-small-window"
+    Find-Button-Like "Save case*" | Out-Null
+    Find-Button-Like "PM2:*applied*" | Out-Null
 
     Click-Button-Like "Theme:*Switch to light*"
     $back = Capture "08-light-again"

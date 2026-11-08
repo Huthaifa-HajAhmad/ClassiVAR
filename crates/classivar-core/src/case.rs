@@ -19,6 +19,28 @@ use crate::rules::{RuleSet, RuleSetRef};
 /// reader misunderstand a new file.
 pub const CASE_FORMAT: u32 = 1;
 
+/// The most earlier records one case can hold. The history table gets unreadable
+/// long before this; the cap also keeps a damaged file from filling the screen.
+pub const MAX_RECORDS: usize = 30;
+
+// The longest each field can be, in characters. The app applies the same caps
+// while typing, so a file with longer fields cannot come from this app; it is
+// refused with the field's name instead of being rendered.
+const MAX_VARIANT_CHARS: usize = 300;
+const MAX_GENE_CHARS: usize = 40;
+const MAX_STAMP_CHARS: usize = 40;
+const MAX_LAB_CHARS: usize = 60;
+const MAX_TIER_CHARS: usize = 40;
+// The range the year buttons use; a file from elsewhere gets the same range.
+const MIN_YEAR: u16 = 2000;
+const MAX_YEAR: u16 = 2100;
+
+/// The first thing a file must say: its layout version.
+#[derive(Deserialize)]
+struct CaseHeader {
+    format: u32,
+}
+
 /// The curator's own answer to: does this gene cause this disease?
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -66,6 +88,10 @@ pub enum CaseError {
         "this file uses layout version {0}, which this program does not know (it knows version {CASE_FORMAT}); it was probably saved by a newer ClassiVAR"
     )]
     UnknownFormat(u32),
+    #[error("{place} is longer than {max} characters, so this cannot be a ClassiVAR case file")]
+    TooLong { place: String, max: usize },
+    #[error("this file holds {0} earlier records and this program opens at most {MAX_RECORDS}")]
+    TooManyRecords(usize),
     #[error("{place} cannot be scored with the current rules: {error}")]
     BadEvidence { place: String, error: AssessError },
 }
@@ -75,13 +101,38 @@ impl CaseFile {
         serde_json::to_string_pretty(self).expect("a case is plain data and always converts to JSON")
     }
 
-    /// Read a case and check it once, here, so the rest of the program can trust it:
-    /// the layout version is known, and every criterion exists in `rules`, is used
-    /// once, and has a strength the rules accept.
+    /// Read a case and check it once, here, so the rest of the program can trust
+    /// it: the layout version is known, every field is a size the app writes,
+    /// the record count fits the screen, and every criterion exists in `rules`,
+    /// is used once, and has a strength the rules accept.
     pub fn from_json(text: &str, rules: &RuleSet) -> Result<CaseFile, CaseError> {
-        let case: CaseFile = serde_json::from_str(text)?;
-        if case.format != CASE_FORMAT {
-            return Err(CaseError::UnknownFormat(case.format));
+        // The layout version is read first: a future file whose field names
+        // have changed must be refused as "newer program", not as broken JSON.
+        let header: CaseHeader = serde_json::from_str(text)?;
+        if header.format != CASE_FORMAT {
+            return Err(CaseError::UnknownFormat(header.format));
+        }
+        let mut case: CaseFile = serde_json::from_str(text)?;
+        let capped = |place: String, value: &str, max: usize| -> Result<(), CaseError> {
+            (value.chars().count() <= max).then_some(()).ok_or(CaseError::TooLong { place, max })
+        };
+        capped("The variant name".to_string(), &case.variant, MAX_VARIANT_CHARS)?;
+        capped("The gene name".to_string(), &case.gene, MAX_GENE_CHARS)?;
+        capped("The saved-on date".to_string(), &case.saved_on, MAX_STAMP_CHARS)?;
+        capped("The writing program version".to_string(), &case.app_version, MAX_STAMP_CHARS)?;
+        for record in &case.records {
+            capped(format!("The record '{}' lab name", record.label), &record.label, MAX_LAB_CHARS)?;
+            if let Some(tier) = &record.reported_tier {
+                capped(format!("The record '{}' VUS tier name", record.label), tier, MAX_TIER_CHARS)?;
+            }
+        }
+        if case.records.len() > MAX_RECORDS {
+            return Err(CaseError::TooManyRecords(case.records.len()));
+        }
+        // Typing clamps the year into this range; so does opening, so the year
+        // buttons on an opened record cannot push past their own range.
+        for record in &mut case.records {
+            record.year = record.year.clamp(MIN_YEAR, MAX_YEAR);
         }
         // Validate today's block the way old records are read, so a strength that
         // was legal when the case was saved still opens. The screen lowers it to
@@ -235,6 +286,63 @@ mod tests {
     fn a_file_from_a_newer_layout_is_refused() {
         let json = sample().to_json().replace("\"format\": 1", "\"format\": 2");
         assert!(matches!(CaseFile::from_json(&json, rules()), Err(CaseError::UnknownFormat(2))));
+    }
+
+    #[test]
+    fn an_unknown_layout_is_reported_before_field_or_evidence_errors() {
+        let mut case = sample();
+        case.variant = "x".repeat(1000);
+        case.records[0].criteria = vec![applied("PS1", crate::model::Strength::StandAlone)];
+        let json = case.to_json().replace("\"format\": 1", "\"format\": 2");
+        assert!(matches!(CaseFile::from_json(&json, rules()), Err(CaseError::UnknownFormat(2))));
+    }
+
+    #[test]
+    fn fields_the_app_cannot_wipe_are_refused() {
+        let mut case = sample();
+        case.variant = "x".repeat(301);
+        let error = CaseFile::from_json(&case.to_json(), rules()).unwrap_err();
+        assert!(matches!(&error, CaseError::TooLong { place, max: 300 } if place.contains("variant")), "{error}");
+
+        let mut case = sample();
+        case.records[0].label = "a".repeat(61);
+        assert!(matches!(CaseFile::from_json(&case.to_json(), rules()), Err(CaseError::TooLong { .. })));
+
+        let mut case = sample();
+        case.records[0].reported_tier = Some("t".repeat(41));
+        assert!(matches!(CaseFile::from_json(&case.to_json(), rules()), Err(CaseError::TooLong { .. })));
+    }
+
+    #[test]
+    fn a_case_at_the_field_limits_still_opens() {
+        let mut case = sample();
+        case.variant = "x".repeat(300);
+        case.records[0].label = "a".repeat(60);
+        assert!(CaseFile::from_json(&case.to_json(), rules()).is_ok());
+    }
+
+    #[test]
+    fn a_file_with_too_many_records_is_refused() {
+        let padding =
+            SavedRecord { label: "Lab".into(), year: 2020, class: None, reported_tier: None, criteria: vec![] };
+        let mut case = sample();
+        case.records = vec![padding; MAX_RECORDS + 1];
+        assert!(matches!(CaseFile::from_json(&case.to_json(), rules()), Err(CaseError::TooManyRecords(31))));
+    }
+
+    #[test]
+    fn the_record_years_are_brought_into_the_typing_range() {
+        let mut case = sample();
+        case.records[0].year = 1990;
+        case.records.push(SavedRecord {
+            label: "Future".into(),
+            year: 2200,
+            class: None,
+            reported_tier: None,
+            criteria: vec![],
+        });
+        let opened = CaseFile::from_json(&case.to_json(), rules()).unwrap();
+        assert_eq!((opened.records[0].year, opened.records[2].year), (2000, 2100));
     }
 
     #[test]

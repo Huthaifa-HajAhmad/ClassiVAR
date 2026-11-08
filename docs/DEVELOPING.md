@@ -6,7 +6,7 @@ This is the practical guide: how to build, test, change and review the app. The 
 
 - Rust **1.98.1** (pinned by `rust-toolchain.toml`; `rustup` installs it on the first `cargo` command).
 - Windows: Visual Studio C++ build tools, Windows SDK, CMake. macOS: Xcode command-line tools (CI has since compiled there on a `macos-15-intel` runner; a local developer setup has not been tried).
-- Network access for a first build (crates); the UI smoke test clicks "Check gene", which also calls the live gene sources.
+- Network access for the first build (crates). The UI smoke test never calls the gene sources, so it runs offline; only `cargo test -p classivar-sources -- --ignored` and the weekly CI job use the network.
 
 ## First run
 
@@ -64,9 +64,9 @@ powershell -ExecutionPolicy Bypass -File scripts/gui-smoke.ps1
 - starts from the light theme, tests light → dark → light with the saved choice, gene fill-in suggestions, the PVS1 guide, and clearing the gene box;
 - restores the theme preference it found and writes screenshots to `%TEMP%\classivar-smoke`.
 
-It finds controls by their accessible names (for example `PVS1:*not applied*`, `PVS1 Very strong:*`, `Theme:*Switch to dark*`), so renaming a button means updating the script.
+It finds controls by their accessible names (for example `PVS1:*not applied*`, `PVS1 Very strong:*`, `Theme:*Switch to dark*`). Text boxes carry an `aria_label`, which is their accessible name, so a box is found by that label (for example `Predictor score`, `De novo patients, highly-specific (parents confirmed)`); renaming one means updating the script.
 
-A click on a button that is outside the visible part of the criteria list does nothing, and the helper panels at the top of the list push criteria rows down. So the script scrolls first: `Scroll-To-Button` (for rows of the list, which can also hide under the pane header) and `Bring-Into-View` (a safety net for buttons below the window). When you add a panel above the list, expect to add `Scroll-To-Button` calls before the clicks that follow it. Plain text on screen is not visible to the script; check it in the screenshots.
+A click on a button that is outside the visible part of the criteria list does nothing, and an open helper panel (it opens below the "Evidence helpers" bar) pushes criteria rows down. So the script scrolls first: `Scroll-To-Button` (for rows of the list, which can also hide under the pane header) and `Bring-Into-View` (a safety net for buttons below the window). When you add a panel above the list, expect to add `Scroll-To-Button` calls before the clicks that follow it. Plain text on screen is not visible to the script; check it in the screenshots.
 
 It is Windows-only because it drives UI Automation. The paths it does **not** cover and that need a human click: Save/Open dialogs, keyboard-only use, macOS.
 
@@ -82,7 +82,9 @@ It is Windows-only because it drives UI Automation. The paths it does **not** co
 | ClinGen/G2P/PanelApp access | `crates/classivar-sources/src/` |
 | screen state and actions | `crates/classivar/src/view.rs` |
 | drawing (top bar, panels, criteria, result) | `crates/classivar/src/view/panels.rs` |
-| criteria helpers (predictor score, functional assay, family and phenotype points, non-segregation, reason prompt) | `crates/classivar/src/view/panels/helpers.rs` |
+| the Evidence helpers bar (which helpers show, and their buttons) | `crates/classivar/src/view/panels/helper_bar.rs` |
+| criteria helper panels (predictor score, functional assay, family and phenotype points, non-segregation, PM3, de novo, BA1 reference, reason prompt) | `crates/classivar/src/view/panels/helpers.rs` |
+| the app's own colours and their contrast test | `crates/classivar/src/design.rs` |
 | gene suggestions | `crates/classivar/src/genes.rs` |
 | theme preference | `crates/classivar/src/settings.rs` |
 
@@ -92,9 +94,10 @@ It is Windows-only because it drives UI Automation. The paths it does **not** co
 
 - `mode`: New variant or Reported variant.
 - `editing`: Today, or one earlier record by index.
-- `today` / `records[i].evidence`: a map from criterion code to `Choice { strength, situation }`. `situation` is a PVS1 guide id, not a sentence.
+- `today` / `records[i].evidence`: a map from criterion code to `Choice { strength, situation, reason }`. `situation` is a PVS1 guide id, not a sentence.
 - `guide_open`: the one criterion whose guide is showing (Today only).
-- `confirm`: the one pending question (clear, remove record, switch gene, open case, load example).
+- `confirm`: the one pending question (clear, remove record, switch gene, open case, load example), with `confirm_focus` holding the keyboard while it is open and the page root blocking Tab behind it.
+- `example`: on while the fictional example is on screen; it warns in a banner, refuses Save and makes a gene check ask first.
 - `gene_link`, `case_gene`, `gene` lookups: the gene decision, the gene actually checked, and the four answers.
 - `next_record`: the next record number, so a removal cannot create two "Record 2"s.
 
@@ -127,14 +130,14 @@ Add `guide_source` and one or more `[[criteria.guide]]` entries. Each needs a st
 
 1. State and actions in `view.rs`, drawing in `view/panels.rs`. Keep functions small: the Windows debug stack is the reason.
 2. Use theme tokens (`cx.theme()`) for chrome and the checked pairs for evidence colours. Add a contrast test if you add a new pair.
-3. Give every button a stable id and, when the label is a glyph or an abbreviation, an `accessibility_label`.
+3. Give every button a stable id and, when the label is a glyph or an abbreviation, an `accessibility_label`; give every text box an `aria_label`. The smoke script finds both by those names.
 4. Run `scripts/gui-smoke.ps1` and click the new path.
 
 ## Debugging
 
 - **App closes when a screen opens**: stack overflow. Check the function that draws it; `build.rs` already asks for 16 MB, but keep render functions small. Reproduce by clicking, not by tests.
 - **A backtrace stops at a dependency**: dependencies build without debug info (`[profile.dev.package."*"]` in `Cargo.toml`, which is what keeps `target/` near 2 GB instead of 5). You still get the crate and the function, not the file and line. To step into one, comment that block out or narrow it to the crate name; `CARGO_PROFILE_DEV_DEBUG` cannot override a package rule.
-- **Theme resets**: the preference is `%APPDATA%\ClassiVAR\settings.txt`. Delete it to force light.
+- **Theme resets**: the preference is `%APPDATA%\ClassiVAR\settings.txt` on Windows, `~/.config/ClassiVAR/settings.txt` elsewhere. Delete it to force light.
 - **A saved case will not open**: the file may be from a newer layout or use a criterion the current rules reject. The message names the reason; `case.rs` has the format and version.
 - **A gene answer looks stale**: each lookup is generation-counted; starting a new check drops late answers. Answers are not saved with a case (the curator re-checks after opening).
 - **A source test fails**: check the endpoint with the live test first; the parser is meant to fail loudly, never to return a shorter list.
@@ -152,4 +155,4 @@ Before asking for review:
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs fmt, clippy, tests and build on Windows (blocking) and macOS (currently non-blocking out of caution — see below), plus `cargo audit`. `.github/workflows/live-sources.yml` runs the live source tests weekly. Run [42086149175](https://github.com/Huthaifa-HajAhmad/ClassiVAR/actions/runs/42086149175) on 2026-11-05 is fully green, including the first macOS build of the app (`macos-15-intel`; the earlier arm64 pool was twice exhausted — "Repository status" in ROADMAP has the story). Put the newest green run URL in `docs/ROADMAP.md` under D3.
+`.github/workflows/ci.yml` runs fmt, clippy, tests and build on Windows **and** macOS — both block a merge since the first green macOS build (run 42086149175) — plus `cargo audit`. `.github/workflows/live-sources.yml` runs the live source tests weekly. Run [42086149175](https://github.com/Huthaifa-HajAhmad/ClassiVAR/actions/runs/42086149175) on 2026-11-05 was the first fully green run; put the newest green run URL in `docs/ROADMAP.md` under D3.

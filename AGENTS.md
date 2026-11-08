@@ -33,7 +33,7 @@ powershell -ExecutionPolicy Bypass -File scripts/gui-smoke.ps1   # Windows UI sm
 rules/acmg-amp-points.toml   all clinical content: criteria, points, classes, sources, guides, caps
 crates/classivar-core/       engine, no UI: rules.rs (load+check), assess.rs (score), reevaluate.rs (reported variants), case.rs (file format)
 crates/classivar-sources/    ClinGen, G2P, PanelApp clients; shared HTTP rules and caps
-crates/classivar/            GPUI app: main.rs, view.rs (Workbench state), view/panels.rs and view/panels/helpers.rs (drawing), genes.rs, settings.rs
+crates/classivar/            GPUI app: main.rs, view.rs (Workbench state), view/panels.rs, view/panels/helper_bar.rs and view/panels/helpers.rs (drawing), design.rs (the app's own colours), genes.rs, settings.rs
 docs/                        ROADMAP.md is the current status; ARCHITECTURE.md is the map; AUDIT is historical
 ```
 
@@ -43,13 +43,14 @@ Key types: `RuleSet` → `Applied` → `Assessment` (`class()`, `points_class`, 
 
 - `Assessment::class()` is `None` when there is no counted evidence, a contradictory pair is applied, both sides of the 2015 table are met while the points would give a confident class, or a combined limit is exceeded. Do not make the UI invent a class in those states.
 - Earlier records are scored with `Counting::AsRecorded`, so a strength that is capped today still opens. Never "repair" an old record silently.
-- A new assessment of a guided criterion (PVS1) must carry a guide answer id; the engine rejects a bare strength. Keep guide ids stable: saved cases refer to them.
+- A new assessment of a guided criterion (PVS1) must carry a guide answer id; the engine rejects a bare strength. Keep guide ids stable: saved cases refer to them. Rebuilding a missing answer is only allowed when exactly one guide answer sets the strength (`unique_situation_for`); otherwise ask, never guess. The criteria the helpers set (`HELPER_CODES`) refuse a guide at load time.
 - `start_from_latest` must lower copied strengths to today's limits, fill the matching guide answer, and say so.
 - `Assessment::class()` also withholds when a PP1+PP4-style combined limit is exceeded; do not make the UI invent a class.
-- Every new button needs a stable id, a visible label, and `accessibility_label` when the label is a glyph or abbreviation.
-- Colours: use theme tokens for chrome, and the checked WCAG pairs (`class_fill`/`class_ink`, `direction_colour`, warning pair) for meaning. Extend the contrast test for both themes if you add a pair.
+- Every new button needs a stable id, a visible label, and `accessibility_label` when the label is a glyph or abbreviation. Every text box gets an `aria_label`.
+- The fictional example never names a variant or gene on its own: saving is refused and checking a gene asks first, so a demo case cannot be attributed to a real variant (`Workbench.example`).
+- Colours: use theme tokens for chrome, and the checked WCAG pairs in `design.rs` (`class_fill`/`class_ink`, `direction_colour`/`direction_ink`, warning pair) for meaning. Do not write a raw `rgb(...)` in a view file. Extend the contrast test for both themes if you add a pair.
 - The debug build once overflowed the 1 MB Windows stack. Keep render functions small; `build.rs` requests 16 MB as a second safety net.
-- Saved case files contain variant, gene and lab history. `*.classivar.json` is git-ignored; keep it that way.
+- Saved case files contain variant, gene and lab history. `*.classivar.json` is git-ignored; keep it that way. `CaseFile::from_json` caps field lengths and the record count; raise the caps together with the app's own typing caps.
 
 ## Verify a UI change
 
