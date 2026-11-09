@@ -667,6 +667,8 @@ impl Workbench {
         let source = self.rules.source(&c.source).map(|s| s.citation.clone());
 
         let (toggle_target, cycle_target, detail_code) = (c.clone(), c.clone(), c.code.clone());
+        let title_target = c.clone();
+        let title_id = SharedString::from(format!("criterion-title-{}", c.code));
         let remove_code = c.code.clone();
         let guide_open = self.editing == Editing::Today && self.guide_open.as_deref() == Some(c.code.as_str());
         let raise_open =
@@ -701,10 +703,28 @@ impl Workbench {
                                 })),
                         ),
                     )
-                    .child(div().flex_1().min_w_0().text_sm().child(c.title.clone()))
-                    .when_some(discouraged_row_note(c.discouraged, self.editing), |row, note| {
-                        row.child(caption(muted).child(note))
-                    })
+                    // The code button is the keyboard path; the rest of the row is the
+                    // same action for the pointer, so a criterion is applied by clicking
+                    // its name as well as its code. The buttons beside it keep their own
+                    // clicks: a click on them never reaches this container.
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .cursor_pointer()
+                            .id(title_id)
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.toggle(&title_target);
+                                cx.notify();
+                            }))
+                            .child(div().text_sm().child(c.title.clone()))
+                            .when_some(discouraged_row_note(c.discouraged, self.editing), |row, note| {
+                                row.child(caption(muted).child(note))
+                            }),
+                    )
                     .when_some(strength, |row, strength| {
                         row.child(
                             Button::new(SharedString::from(format!("strength-{}", c.code)))
@@ -1487,49 +1507,99 @@ impl Workbench {
 
     pub(super) fn history_table(&self, re: &Reevaluation, cx: &mut Context<Self>) -> AnyElement {
         let (border, muted) = (cx.theme().border, cx.theme().muted_foreground);
-        let cell = |content: AnyElement| div().flex_1().min_w(px(120.)).px_1().child(content);
-        let first = |content: AnyElement| div().w(px(48.)).flex_none().child(content);
+        // Three columns: the criterion codes, the reported records, and today's own
+        // evidence. Only the records scroll sideways, so the reader never loses the
+        // criterion or today's result while comparing a long history.
+        //
+        // The three columns are separate stacks, and a stack cannot see its
+        // neighbours' row heights. Every criterion row is therefore given the same
+        // height in all three, and the three header lines hold the same two
+        // one-line texts, so the columns cannot drift apart.
+        const ROW_H: f32 = 36.;
+        const LABEL_W: f32 = 48.;
+        const COL_W: f32 = 120.;
+        let cell = |content: AnyElement| div().flex_1().min_w(px(COL_W)).px_1().child(content);
         let latest_cells = re.latest_index;
 
-        let mut header = div().flex().items_start().py_1().child(first(div().into_any_element()));
+        let mut labels = div().flex().flex_col().child(
+            div()
+                .flex()
+                .flex_col()
+                .py_1()
+                .child(div().text_xs().font_weight(FontWeight::SEMIBOLD).truncate().child("Criterion"))
+                .child(caption(muted).truncate().child("code")),
+        );
+
+        let mut record_head = div().flex().items_start().py_1();
         for r in &re.records {
             let reported = match &r.reported_tier {
                 Some(tier) => format!("reported {} · {tier}", r.reported_class.short()),
                 None => format!("reported {}", r.reported_class.short()),
             };
-            header = header.child(cell(
+            record_head = record_head.child(cell(
                 div()
                     .flex()
                     .flex_col()
-                    .child(div().text_xs().font_weight(FontWeight::SEMIBOLD).child(format!("{} · {}", r.label, r.year)))
-                    .child(caption(muted).child(reported))
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .truncate()
+                            .child(format!("{} · {}", r.label, r.year)),
+                    )
+                    .child(caption(muted).truncate().child(reported))
                     .into_any_element(),
             ));
         }
-        header = header
-            .child(cell(div().text_xs().font_weight(FontWeight::SEMIBOLD).child("Today (you)").into_any_element()));
+        let mut columns =
+            div().flex().flex_col().w_full().min_w(px(COL_W * re.records.len() as f32)).child(record_head);
 
-        let mut table = div().flex().flex_col().min_w(px(48. + 120. * (re.records.len() + 1) as f32)).child(header);
+        let mut today = div().flex().flex_col().child(
+            div()
+                .flex()
+                .flex_col()
+                .py_1()
+                .child(div().text_xs().font_weight(FontWeight::SEMIBOLD).truncate().child("Today (you)"))
+                .child(caption(muted).truncate().child("your evidence")),
+        );
+
         for row in &re.rows {
-            let mut line = div().flex().items_center().py_1().border_t_1().border_color(border).child(first(
-                div().text_sm().font_weight(FontWeight::SEMIBOLD).child(row.code.clone()).into_any_element(),
-            ));
+            labels = labels.child(
+                div()
+                    .h(px(ROW_H))
+                    .flex()
+                    .items_center()
+                    .border_t_1()
+                    .border_color(border)
+                    .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child(row.code.clone())),
+            );
             let today_index = row.cells.len() - 1;
+            let mut line = div().h(px(ROW_H)).flex().items_center().border_t_1().border_color(border);
             for (i, strength) in row.cells.iter().enumerate() {
-                // Outline today's cell when it differs from the latest record.
-                let changed = i == today_index && latest_cells.is_some_and(|l| row.cells[l] != *strength);
-                line = line.child(cell(self.evidence_chip(&row.code, *strength, changed, cx)));
+                // Only today's cell is outlined, and only when it differs from the latest record.
+                if i == today_index {
+                    continue;
+                }
+                line = line.child(cell(self.evidence_chip(&row.code, *strength, false, cx)));
             }
-            table = table.child(line);
+            columns = columns.child(line);
+            let changed = latest_cells.is_some_and(|l| row.cells[l] != row.cells[today_index]);
+            today = today.child(
+                div().h(px(ROW_H)).flex().items_center().border_t_1().border_color(border).child(self.evidence_chip(
+                    &row.code,
+                    row.cells[today_index],
+                    changed,
+                    cx,
+                )),
+            );
         }
 
-        let mut total = div()
-            .flex()
-            .items_start()
+        let labels_total = div()
             .py_1()
             .border_t_1()
             .border_color(border)
-            .child(first(div().text_xs().font_weight(FontWeight::SEMIBOLD).child("Total").into_any_element()));
+            .child(div().text_xs().font_weight(FontWeight::SEMIBOLD).child("Total"));
+        let mut columns_total = div().flex().items_start().py_1().border_t_1().border_color(border);
         for r in &re.records {
             let mut col = div().flex().flex_col().child(div().text_sm().child(Self::total_text(&r.assessment)));
             if r.consistency() == Consistency::Differs {
@@ -1538,18 +1608,49 @@ impl Workbench {
                         .child(format!("! it reported {}; its evidence scores differently", r.reported_class.short())),
                 );
             }
-            total = total.child(cell(col.into_any_element()));
+            columns_total = columns_total.child(cell(col.into_any_element()));
         }
-        total = total.child(cell(
-            div().text_sm().font_weight(FontWeight::BOLD).child(Self::total_text(&re.today)).into_any_element(),
-        ));
+        let today_total = div()
+            .py_1()
+            .border_t_1()
+            .border_color(border)
+            .child(div().text_sm().font_weight(FontWeight::BOLD).child(Self::total_text(&re.today)));
+
         div()
             .flex()
             .flex_col()
             .gap_1()
-            .child(div().id("history-scroll").overflow_x_scroll().child(table.child(total)))
+            .child(
+                div()
+                    .flex()
+                    .child(
+                        div()
+                            .w(px(LABEL_W))
+                            .flex_none()
+                            .border_r_1()
+                            .border_color(border)
+                            .child(labels.child(labels_total)),
+                    )
+                    .child(
+                        div()
+                            .id("history-scroll")
+                            .flex_1()
+                            .min_w_0()
+                            .overflow_x_scroll()
+                            .child(columns.child(columns_total)),
+                    )
+                    .child(
+                        div()
+                            .w(px(COL_W))
+                            .flex_none()
+                            .border_l_1()
+                            .border_color(border)
+                            .pl_1()
+                            .child(today.child(today_total)),
+                    ),
+            )
             .child(caption(muted).child(format!(
-                "Records are scored the way they were made (criteria that no longer count are still counted). Today's evidence uses today's rules. {}. An outlined cell differs from the latest record.",
+                "Records are scored the way they were made (criteria that no longer count are still counted). Today's evidence uses today's rules. {}. An outlined cell differs from the latest record. The criterion and Today columns stay in place while the records scroll sideways.",
                 rules_tag(self.rules)
             )))
             .into_any_element()
