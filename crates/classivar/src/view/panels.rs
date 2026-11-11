@@ -12,8 +12,12 @@
 
 use super::*;
 
+mod combining_table;
+mod evidence_stack;
 mod helper_bar;
 mod helpers;
+mod point_axis;
+mod what_if;
 
 /// A section heading in the results pane.
 fn heading(text: impl Into<SharedString>) -> Div {
@@ -1260,7 +1264,8 @@ impl Workbench {
                 next.class.label()
             ));
         }
-        list.child(caption(muted).child("The evidence that could move it is in the lanes marked none."))
+        list.child(self.what_if(result, cx))
+            .child(caption(muted).child("The evidence that could move it is in the lanes marked none."))
             .into_any_element()
     }
 
@@ -1730,26 +1735,32 @@ impl Workbench {
             pane = pane.child(div().pt_2().border_t_1().border_color(border));
         }
 
-        pane.child(div().child(heading("What it is made of")).child(self.evidence_lanes(result, cx)))
-            .when(result.class().is_some(), |pane| {
-                pane.child(div().child(heading("What would change it")).child(self.what_changes(result, cx)))
-            })
-            .when(result.class().is_none() && result.has_evidence, |pane| {
-                pane.child(
-                    div()
-                        .text_xs()
-                        .text_color(cx.theme().muted_foreground)
-                        .child("Resolve the withheld result above to see what would change the class."),
-                )
-            })
-            .child(div().child(heading("Notes")).child(self.notes(result, variant, cx)))
-            .when(result.class().is_some(), |pane| {
-                let muted = cx.theme().muted_foreground;
-                pane.child(
-                    div().child(heading("About these rules")).child(caption(muted).child(rules_about_text(self.rules))),
-                )
-            })
-            .into_any_element()
+        pane.when(result.class().is_some(), |pane| {
+            pane.child(div().child(heading("How the points add up")).child(self.evidence_stack(result, cx)))
+        })
+        .child(div().child(heading("What it is made of")).child(self.evidence_lanes(result, cx)))
+        .when(combining_table::is_shown(result), |pane| {
+            pane.child(div().child(heading("What the 2015 table says")).child(self.combining_table(result, cx)))
+        })
+        .when(result.class().is_some(), |pane| {
+            pane.child(div().child(heading("What would change it")).child(self.what_changes(result, cx)))
+        })
+        .when(result.class().is_none() && result.has_evidence, |pane| {
+            pane.child(
+                div()
+                    .text_xs()
+                    .text_color(cx.theme().muted_foreground)
+                    .child("Resolve the withheld result above to see what would change the class."),
+            )
+        })
+        .child(div().child(heading("Notes")).child(self.notes(result, variant, cx)))
+        .when(result.class().is_some(), |pane| {
+            let muted = cx.theme().muted_foreground;
+            pane.child(
+                div().child(heading("About these rules")).child(caption(muted).child(rules_about_text(self.rules))),
+            )
+        })
+        .into_any_element()
     }
 
     pub(super) fn error_screen(&self, message: String, cx: &mut Context<Self>) -> AnyElement {

@@ -6,12 +6,14 @@
 
 pub mod assess;
 pub mod case;
+pub mod combining_table;
 pub mod model;
 pub mod reevaluate;
 pub mod rules;
 
 pub use assess::{Applied, AssessError, Assessment, Conflict, Counting, Item, MAX_REASON_CHARS, NextClass, Warning};
 pub use case::{CASE_FORMAT, CaseError, CaseFile, GeneDecision, MAX_RECORDS, SavedRecord};
+pub use combining_table::{Need, ROWS as TABLE_ROWS, TableRow};
 pub use model::{Category, Class, Direction, Strength};
 pub use reevaluate::{Consistency, Reason, Reevaluation, Rescored, Row, Submission, Verdict};
 pub use rules::{

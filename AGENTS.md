@@ -31,9 +31,9 @@ powershell -ExecutionPolicy Bypass -File scripts/gui-smoke.ps1   # Windows UI sm
 
 ```
 rules/acmg-amp-points.toml   all clinical content: criteria, points, classes, sources, guides, caps
-crates/classivar-core/       engine, no UI: rules.rs (load+check), assess.rs (score), reevaluate.rs (reported variants), case.rs (file format)
+crates/classivar-core/       engine, no UI: rules.rs (load+check), assess.rs (score), combining_table.rs (the 2015 table as rows), reevaluate.rs (reported variants), case.rs (file format)
 crates/classivar-sources/    ClinGen, G2P, PanelApp clients; shared HTTP rules and caps
-crates/classivar/            GPUI app: main.rs, view.rs (Workbench state), view/panels.rs, view/panels/helper_bar.rs and view/panels/helpers.rs (drawing), design.rs (the app's own colours), genes.rs, settings.rs
+crates/classivar/            GPUI app: main.rs, view.rs (Workbench state), view/panels.rs, view/panels/helper_bar.rs, view/panels/helpers.rs, view/panels/evidence_stack.rs, view/panels/combining_table.rs, view/panels/point_axis.rs and view/panels/what_if.rs (drawing; the layout rules of the stack, the table and the axis are plain tested functions, and point_axis draws the axis the stack and the "what if" bars share), design.rs (the app's own colours), genes.rs, settings.rs
 docs/                        ROADMAP.md is the current status; ARCHITECTURE.md is the map; AUDIT is historical
 ```
 
