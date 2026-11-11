@@ -50,29 +50,10 @@ pub fn suggestions_for(typed: &str, limit: usize) -> Vec<&'static str> {
     found
 }
 
-/// Is this something worth sending to the gene sources? Letters, digits and
-/// hyphens, up to 20 characters. The same shape the source crate accepts.
-pub fn is_gene_symbol(text: &str) -> bool {
-    let text = text.trim();
-    !text.is_empty() && text.len() <= 20 && text.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{SYMBOLS, is_gene_symbol, suggestions_for};
+    use super::{SYMBOLS, suggestions_for};
     use std::collections::HashSet;
-
-    #[test]
-    fn only_symbol_shaped_text_is_checked() {
-        assert!(is_gene_symbol("BRCA1"));
-        assert!(is_gene_symbol("NKX2-5"));
-        assert!(is_gene_symbol(" c9orf72 "));
-        assert!(!is_gene_symbol(""));
-        assert!(!is_gene_symbol("   "));
-        assert!(!is_gene_symbol("BRCA1; DROP"));
-        assert!(!is_gene_symbol("a b"));
-        assert!(!is_gene_symbol(&"A".repeat(21)));
-    }
 
     #[test]
     fn the_list_holds_gene_symbols_without_duplicates() {

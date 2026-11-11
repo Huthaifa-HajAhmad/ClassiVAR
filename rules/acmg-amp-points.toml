@@ -1,9 +1,10 @@
 # Rule set: ACMG/AMP 2015 criteria with the points scoring system.
 #
-# STATUS: DRAFT, UNVERIFIED. Written from the author's memory of the sources
-# listed below. Nothing here has been checked line by line against the papers
-# yet. A qualified reviewer must verify every entry before the content is used
-# for anything beyond research and learning.
+# STATUS: DRAFT, UNVERIFIED. No qualified reviewer has checked this file. The
+# builder compared parts of it with the sources on the web; [meta].note says
+# what and when. That is not a line-by-line review of every entry. A qualified
+# reviewer must verify every entry before the content is used for anything
+# beyond research and learning.
 #
 # How to read this file:
 #   [meta]           which rule set this is, and its review status

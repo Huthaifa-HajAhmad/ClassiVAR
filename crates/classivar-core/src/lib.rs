@@ -6,12 +6,17 @@
 
 pub mod assess;
 pub mod case;
+pub mod date;
 pub mod model;
 pub mod reevaluate;
 pub mod rules;
 
 pub use assess::{Applied, AssessError, Assessment, Conflict, Counting, Item, MAX_REASON_CHARS, NextClass, Warning};
-pub use case::{CASE_FORMAT, CaseError, CaseFile, GeneDecision, MAX_RECORDS, SavedRecord};
+pub use case::{
+    CASE_FORMAT, CaseError, CaseFile, GeneDecision, MAX_LAB_CHARS, MAX_RECORDS, MAX_VARIANT_CHARS, MAX_YEAR, MIN_YEAR,
+    SavedRecord,
+};
+pub use date::is_calendar_date;
 pub use model::{Category, Class, Direction, Strength};
 pub use reevaluate::{Consistency, Reason, Reevaluation, Rescored, Row, Submission, Verdict};
 pub use rules::{

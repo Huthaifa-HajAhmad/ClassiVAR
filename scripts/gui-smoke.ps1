@@ -133,6 +133,14 @@ try {
         $a = Get-ListArea
         [ClassiVarSmokeWin]::SetCursorPos($a.PointerX, $a.PointerY) | Out-Null
     }
+    # The result pane scrolls with the same keys when the pointer is over it.
+    function Point-At-Result([int]$y = 520) {
+        $origin = New-Object ClassiVarSmokeWin+POINT
+        [ClassiVarSmokeWin]::ClientToScreen($h, [ref]$origin) | Out-Null
+        $client = New-Object ClassiVarSmokeWin+RECT
+        [ClassiVarSmokeWin]::GetClientRect($h, [ref]$client) | Out-Null
+        [ClassiVarSmokeWin]::SetCursorPos([int]($origin.X + $client.Right - 150), [int]($origin.Y + $y)) | Out-Null
+    }
     # A click on a button whose centre is below the window does nothing. Like a
     # person would, scroll down until the centre is on screen. This is only a safety
     # net for the generic click helpers: a row of the criteria list can also hide
@@ -165,6 +173,15 @@ try {
     function Click-Button([string]$name) {
         Focus-App
         Invoke-Element (Find-Button $name)
+    }
+    # A raw click at a point, used only where no control is exposed to automation
+    # but a real click still proves the behaviour (the criterion title is plain text).
+    function Click-Point([int]$x, [int]$y) {
+        Focus-App
+        [ClassiVarSmokeWin]::SetCursorPos($x, $y) | Out-Null
+        [ClassiVarSmokeWin]::mouse_event(0x02, 0, 0, 0, [UIntPtr]::Zero)
+        [ClassiVarSmokeWin]::mouse_event(0x04, 0, 0, 0, [UIntPtr]::Zero)
+        Start-Sleep -Milliseconds 450
     }
     function Click-Button-Like([string]$name) {
         Focus-App
@@ -522,6 +539,18 @@ try {
         throw "removing PM1 left its reason prompt open"
     }
 
+    # A criterion is applied by clicking its name as well as its code. The code
+    # button stays the accessible control; the title is the pointer's larger target
+    # and is plain text, so this clicks the row beside the code.
+    Scroll-To-Button "PM1:*not applied*"
+    $pm1Row = (Find-Button-Like "PM1:*not applied*").Current.BoundingRectangle
+    Click-Point ([int]($pm1Row.X + 150)) ([int]($pm1Row.Y + $pm1Row.Height / 2))
+    Find-Button-Like "PM1:*applied*" | Out-Null
+    $titleClick = Capture "05j-title-click"
+    Scroll-To-Button "PM1:*applied*"
+    Click-Button-Like "PM1:*applied*"
+    Find-Button-Like "PM1:*not applied*" | Out-Null
+
     # Page Down and Page Up scroll the list under the mouse pointer.
     Scroll-To-Button "PS1:*"
     $ps1 = Find-Button-Like "PS1:*"
@@ -623,6 +652,15 @@ try {
     }
     Set-GeneText ""
 
+    # The history table: the criterion and Today columns are frozen, and the
+    # records between them scroll sideways. The table is plain text, so these are
+    # captures for the eye rather than assertions. This one is at the wide window.
+    Point-At-Result 600
+    Press-Key "{PGDN}"
+    Press-Key "{PGDN}"
+    $historyWide = Capture "07c-history"
+    for ($i = 0; $i -lt 4; $i++) { Press-Key "{PGUP}" }
+
     # The 960 x 600 minimum window: the top bar, the case panel, the criteria
     # and the result must all stay reachable.
     [ClassiVarSmokeWin]::SetWindowPos($h, [IntPtr]::Zero, 60, 60, 960, 600, 0x0044) | Out-Null
@@ -634,6 +672,12 @@ try {
     Click-Button-Like "Theme:*Switch to light*"
     $back = Capture "08-light-again"
     if ($back.Background.R -lt 200) { throw "the background did not return to light" }
+
+    # The same table at the narrow window: the frozen pair still leaves room for
+    # two record columns. The pane is short here, so this takes more page steps.
+    Point-At-Result 520
+    for ($i = 0; $i -lt 6; $i++) { Press-Key "{PGDN}" }
+    $history = Capture "09-history-narrow"
 
     Write-Host "GUI smoke passed. Screenshots:" -ForegroundColor Green
     $shots | ForEach-Object { Write-Host "  $_" }
