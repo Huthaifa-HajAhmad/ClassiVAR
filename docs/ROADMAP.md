@@ -9,6 +9,7 @@ Written 2026-11-04, after the audit in `docs/AUDIT-2026-11-04.md`. It replaces t
 - **Built since the audit:** saving and opening a case (phase A), reported VUS sub-tiers (phase B), and a redesigned screen. The screen was checked by clicking through the real window on 2026-11-04.
 - **Latest (2026-11-09):** the history table keeps its criterion column and today's own evidence in place while the reported records scroll between them (the open U13 item), and clicking a criterion's name now applies it; GPUI Kit moved to the 0.9.1 patch. Before that (2026-11-08): the Phase C safety pass (PVS1 situation guide with the answer saved, strength caps, PM4/PVS1, both-sides rule, PP1+PP4 cap, BP4 ceiling), a light/dark switch, gene suggestions, the Phase E review fixes, the Phase G design pass, and the **first full code-review pass** (Phase G, 2026-11-08: all fifteen review findings fixed; see the entry at the end of Phase G).
 - **Dependencies (2026-11-09):** GPUI Kit moved to the 0.9.1 patch (`gpui-kit` 0.9.1, `gpui-pre` 0.3.12). Backward compatible; the one API that mattered (`ColumnFixed::Right`) prompted the history-table split rather than being adopted, because the table is drawn by hand. The merge gate and the GUI smoke test pass, both themes were checked. Details in `ARCHITECTURE.md`.
+- **Code health pass (2026-11-11):** all three crates were split into small modules and keep to the size limits (files of 300 lines, functions of 50); helper state and readings are separated from drawing, so the next helper has a place to go. No rule, number or behaviour changed. Details and the open items are in "Code health" below.
 - **Not built:** ClinVar import, lessons, practice shelf, a macOS build, a licence.
 
 ## What each audit finding became
@@ -59,7 +60,7 @@ Verification follow-up (2026-11-04): added saved-case tests for unchanged assess
 Add each as a note, then as logic, with a source and a worked example:
 1. **Done.** PVS1 strength guide (Abou Tayoun 2018): nine situations with short labels, including "does not apply". The chosen situation is saved in the case file and shown on the row. The engine refuses a new PVS1 with no guide answer. Still shortened: it does not walk the tree question by question or apply the gene-level downgrade (Table 1).
 2. **Done, needs review.** Strength limits on weak evidence, all recorded as program safeguards. No Supporting-default criterion reaches Very Strong; benign criteria stop at Strong (BP4 at Moderate per Pejaver 2022); BA1 has only stand-alone; PM6 stops at Strong; PM3 now reaches Very Strong per ClinGen 2019. Limits do not apply to earlier records.
-3. **Done, with a curator's nuance.** When both sides of the 2015 table are met: if the points also say VUS, the class is VUS (the ordinary conflicting-evidence case); if the points would be confident, the class is withheld with "needs expert judgment" and the criteria on each side are listed. BA1 against evidence that itself reaches Pathogenic is withheld, because known common pathogenic variants exist (the ClinGen exception list).
+3. **Done, with a curator's nuance.** When both sides of the 2015 table are met: if the points also say VUS, the class is VUS (the ordinary conflicting-evidence case); if the points would be confident, the class is withheld with "needs expert judgment" and the criteria on each side are listed. BA1 together with pathogenic evidence that meets any pathogenic rule of the 2015 table (Likely pathogenic or Pathogenic) is withheld, because known common pathogenic variants exist (the ClinGen exception list). BA1 with pathogenic evidence that meets no rule stays Benign.
 4. **Done (2026-11-04), needs review.** PP3 and BP4 calibrated thresholds (Pejaver 2022, Table 2) for REVEL, BayesDel without allele frequency, MutPred2 and VEST4, in `[[predictors]]`. A "Predictor score" helper in the criteria list reads a score and offers PP3 or BP4 at the published strength; a score between the limits gives neither. BP4 stays capped at Moderate, so REVEL at or below 0.016 (Strong in the paper) and at or below 0.003 (Very Strong) applies Moderate, and the screen says so. The PM1 + PP3 limit of Strong is a combined cap. Tests use the table's own limits. The numbers were read from the open-access paper (PMC9748256) and cross-checked against my memory of the REVEL row; a reviewer must still check them against the paper. Not built: the other nine tools in the paper, and the paper's advice to choose the tool before seeing its result (the screen only says it).
 5. **Done (2026-11-04), needs review.** PS3 and BS3 (Brnich 2019, read from the open-access paper): the citation is in `[[sources]]` and a "Functional assay" helper reads either the number of validation controls (11 or more reaches Moderate, 1 to 10 reaches Supporting, none gives no evidence, and this route goes no higher) or an OddsPath value (above 2.1, 4.3, 18.7 and 350 gives PS3 Supporting, Moderate, Strong and Very Strong; below 0.48, 0.23 and 0.053 gives BS3 Supporting, Moderate and Strong; each limit is crossed strictly; 0.48 to 2.1 gives nothing). The paper's four steps are shown as a reminder only. The paper says even Very Strong functional evidence is not enough alone for Pathogenic; the screen repeats this but the engine does not enforce it. Not built: the assay-class tables, or checking the number of controls against the paper's other conditions.
 6. **Done, needs review.** PP1, BS4, PP4 (ClinGen 2024; Am J Hum Genet 111:24-38). **PP1 and PP4 (2026-11-04):** Rule version 0.7.0 adds `[locus_evidence]` (Tables 2, 3 and 4 of the paper, read from the open-access text PMC10806742 in two separate fetches that agreed). A "Family and phenotype" helper turns a diagnostic yield (percent) into PP4 points (Table 2; a yield between two rows takes the lower row) and a count of co-segregating family members into PP1 points (Table 3: 1 point each for dominant and X-linked male, 2 for recessive affected, 0.4 for recessive unaffected). It adds them, cuts the sum to the paper's limit of 5 points, and lists the strength choices Table 4 allows for that total (for example 4 to 4.9 points: PP1 Strong, or PP4 Strong, or PP1 Moderate with PP4 Moderate). The curator picks one; a criterion a choice leaves out is not touched. The points and the total are saved as the reason for each strength. The loader refuses a table whose choice is worth more program points than its band has earned. The existing PP1+PP4 limit of 5 points still withholds the class if the strengths are set by hand above it. Tests cover every row edge of the three tables.
@@ -182,9 +183,60 @@ The app is built on GPUI Kit 0.9 (`gpui-kit`, published by Longbridge; `gpui-com
 ### Later
 Gene-specific rule sets from the ClinGen CSpec API (it works: checked 2026-11-04), OMIM, SVCv4.0 when published, population and prediction data, PDF and slide export.
 
+## Code health (2026-11-11)
+
+A read of the whole project, then two passes of changes that tests, the merge gate or the real-window smoke test could prove. No clinical rule, number or class changed. The merge gate passes (137 engine, 49 UI and 31 offline source tests), the five live source tests pass, and the Windows smoke test passes with the screenshots looked at.
+
+**Engine**
+
+- `rules.rs` (2,462 lines) became `rules/`: types, readers and load-time checks in their own files, tests grouped by table. The four copies of "limits must go from weakest to strongest" are one function, and the 167-line `check` is a list of short steps. Messages for a bad rule file read slightly differently; the error kinds did not change.
+- `assess_as` (177 lines) became short steps in `assess/`; the three double-counting warnings are one table. "Is a class shown" and "show the next-class hints" were two copies of one condition; the hints now follow `Assessment::class()`. `reevaluate` was split the same way.
+- Calendar dates: one `is_calendar_date` in the engine (it refuses `2024-02-31` and `2023-02-29`). The rule file's review date and the ClinGen parser both use it.
+
+**Sources**
+
+- One shared web client (a connection pool) for all lookups instead of a new client per request. The live tests pass with it.
+- The gene-symbol shape check lives here (`is_gene_symbol`); the app used its own copy.
+
+**App**
+
+- `view.rs` (1,770 lines), `view/panels.rs` (1,851) and `view/panels/helpers.rs` (1,075) became about 40 files, none over 300 lines of production code, and no function over 50 lines in any crate.
+- The loose helper fields on `Workbench` (about 25) are one `Helpers` value with a small state type for each helper (`view/helper_state.rs`). A new helper no longer changes `Workbench`.
+- Each helper's reading is a plain function with tests: predictor score, functional assay, PM3, de novo, and PP1/PP4 (`locus_read.rs`). The drawing code only draws. Number parsing is one place (`parse_number`, `parse_count`).
+- `carry_forward` replaces the two near-copies that brought evidence onto today's rules (Open a case, and Start from the latest record), with tests for lowering, dropping, guide answers and reasons. The `start_from_latest` path had no test before.
+- The variant, lab-name and year limits are defined once, in `case.rs`. Smaller: ten identical "repaint on typing" handlers became one, the criteria list no longer copies each criterion three times per draw, and unused parameters and copies were removed.
+- `AGENTS.md` said CI had never run; it has been green since 2026-11-05. Fixed.
+
+**Decided not to do**
+
+- *Caching the draw.* A worst-case frame (30 records, every criterion) costs about 0.7 ms in an unoptimised build, against a 16 ms frame. Caching would add a way to show stale results for no visible gain.
+- *Removing the unknown-rating fallback in `Curation::rank`.* The field is a public `String`, so the type cannot promise the parser's check; the fallback stays.
+
+**One mistake of mine, caught and fixed.** An early scripted edit read `view.rs` with the wrong text encoding and double-encoded `•`, `·` in four strings. Neither the tests nor the smoke test would have shown it. I found it by chance, repaired it, and compared every non-ASCII line of the original files with the new ones. `AGENTS.md` now says to search for `â€` and `Â` after a scripted edit.
+
+**Still open:** nothing from this pass. The items it listed were settled in the review that follows (the rule file header, the criteria title overlap and the test blocks).
+
+## Code review (2026-11-11)
+
+A second read of the work above, looking for defects rather than for tidiness. Three were real and are fixed; the rest are listed for you.
+
+**Fixed**
+
+1. *A reason over the limit could brick the whole screen.* The engine refuses a reason longer than `MAX_REASON_CHARS` (500) with `BadReason`, and the screen turns a scoring error into the error screen, whose only way out is "Clear this evidence". The helpers build their reasons out of rule-file text (`reference`, `eligibility`, table labels), and the loader checks those for emptiness only, not for length. A rule file with a long eligibility text therefore made every case unscorable after one Apply. Reasons are now cut to the limit as they are made (`bounded_reason` in `view.rs`), with a marker when something was left out, and two tests hold it.
+2. *Two functions were over 50 lines.* The house rule is 50, and the pass above claimed no function was over it. `assess_as` (51) is now `assess_as` plus `score_items`, and one locus test (52) is now two. The claim is true again, and a scan of the three crates confirms it.
+3. *A stale pointer in `docs/ARCHITECTURE.md`.* It sent the reader to `view/panels.rs` for `history_table`, which moved to `view/panels/history.rs` in the pass above.
+
+**Settled afterwards (2026-11-11)**
+
+- *BA1.* The code is right and the wording was loose. The class is withheld when BA1 is applied together with pathogenic evidence that meets any pathogenic rule of the 2015 table (Likely pathogenic or Pathogenic), because the points would hide the conflict. BA1 with pathogenic evidence that meets no rule stays Benign. Both cases are pinned by a test, and the wording under "Needs your decision" and in Phase C item 3 now says this.
+- *"Answer the guide again" when the answer was kept.* `carry_forward` now reports `GuideRebuilt` only when the answer was rebuilt from the strength. A saved answer that still fits is not a change and gets no note. A test covers both.
+- *Two reason limits.* There is one: the app types against `MAX_REASON_CHARS`, the engine's constant, and `bounded_reason` cuts helper reasons to it.
+- *Rule file header.* It now says what is true: no qualified reviewer has checked the file, the builder compared parts of it with web sources (`[meta].note` says what and when), and that is not a line-by-line review. Comment only; no rule and no version changed.
+- *Criteria titles at 1240 px.* A long title (for example PM2) ran under its strength button. It now wraps. Checked in the real window; the title code was the cause, and the earlier guess that it predates the refactor was not tested against an older build.
+- *Test blocks over 300 lines.* The four inline test blocks (`case.rs`, `reevaluate.rs`, `clingen.rs`, `panelapp.rs`) are now `tests.rs` files next to them. No test changed.
 ## Needs your decision
 - **Licence (D6).** I did not pick one. "Internal proprietary" is the simplest if the code stays inside your team.
-- **BA1 against Pathogenic evidence: decided, please confirm.** The program withholds the class when BA1 and evidence that itself reaches a Pathogenic rule are both applied. The reasoning: a known pathogenic variant can be common (founder effect, reduced penetrance), which is exactly what ClinGen's BA1 exception list is for. BA1 with weaker pathogenic evidence stays Benign.
+- **BA1 against Pathogenic evidence: decided, please confirm.** The program withholds the class when BA1 is applied together with pathogenic evidence that meets any pathogenic rule of the 2015 table, Likely pathogenic included (for example BA1 + PVS1 Very strong + PM5 Moderate: 2 points, a VUS in the 2015 table, class withheld). The reasoning: a known pathogenic variant can be common (founder effect, reduced penetrance), which is exactly what ClinGen's BA1 exception list is for. BA1 with pathogenic evidence that meets no rule stays Benign. A test pins both cases.
 - **Repository status (2026-11-05).** The rule versions 0.9.0/0.10.0 (PM3 helper, BA1 reference, the de novo helper, and all corrections from the three-part code review) are committed through `8ec6c31`. The first remote is `github.com/Huthaifa-HajAhmad/ClassiVAR` (private). First CI run [42080890167](https://github.com/Huthaifa-HajAhmad/ClassiVAR/actions/runs/42080890167): `audit` and `check (windows-latest)` green; the `macos` job never ran — GitHub cancelled it twice for runner capacity ("The job was not acquired by Runner of type hosted even after multiple attempts"; the `macos-latest` arm64 pool was saturated, and `macos-13` and `macos-14` are retired, the latter on 2026-11-02). The macOS job moved to `macos-15-intel` (available until August 2027), and the next run [42086149175](https://github.com/Huthaifa-HajAhmad/ClassiVAR/actions/runs/42086149175) is fully green: audit, Windows, and the first macOS build of the app (fmt, clippy, tests, build). A macOS *run* of the app and installers remain unbuilt (D4).
 
 ## Research backlog
