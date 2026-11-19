@@ -6,6 +6,7 @@
 
 pub mod assess;
 pub mod case;
+pub mod combining_table;
 pub mod date;
 pub mod model;
 pub mod reevaluate;
@@ -16,6 +17,7 @@ pub use case::{
     CASE_FORMAT, CaseError, CaseFile, GeneDecision, MAX_LAB_CHARS, MAX_RECORDS, MAX_VARIANT_CHARS, MAX_YEAR, MIN_YEAR,
     SavedRecord,
 };
+pub use combining_table::{Need, ROWS as TABLE_ROWS, TableRow};
 pub use date::is_calendar_date;
 pub use model::{Category, Class, Direction, Strength};
 pub use reevaluate::{Consistency, Reason, Reevaluation, Rescored, Row, Submission, Verdict};

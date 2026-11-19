@@ -74,6 +74,23 @@ fn pvs1_with_pm2_at_supporting_stays_likely_pathogenic_in_both_methods() {
 }
 
 #[test]
+fn the_assessment_names_the_rows_of_the_table_it_meets() {
+    // PVS1 + PM2 Supporting meets one row: the ClinGen 2020 addition.
+    let a = apply(&[("PVS1", VeryStrong), ("PM2", Supporting)]);
+    assert_eq!(a.table_rows.len(), 1);
+    assert!(a.table_rows[0].clingen_2020_addition);
+    assert_eq!(a.table_rows[0].class, Class::LikelyPathogenic);
+    // Two Strong criteria meet the "two Strong" row, and Pathogenic comes first.
+    let a = apply(&[("PS1", Strong), ("PS3", Strong)]);
+    assert_eq!(a.table_rows[0].class, Class::Pathogenic);
+    assert_eq!(a.table_rows[0].text(), "≥2 Strong");
+    // One Supporting criterion meets no row, so the table gives VUS.
+    let a = apply(&[("PM2", Supporting)]);
+    assert!(a.table_rows.is_empty());
+    assert_eq!(a.classic_class, Some(Class::Vus));
+}
+
+#[test]
 fn classic_table_benign_side() {
     assert_eq!(apply(&[("BA1", StandAlone)]).classic_class, Some(Class::Benign));
     assert_eq!(apply(&[("BS1", Strong), ("BS2", Strong)]).classic_class, Some(Class::Benign));

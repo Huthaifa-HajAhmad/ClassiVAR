@@ -12,9 +12,10 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
+use crate::combining_table::{self, TableRow};
 use crate::model::{Class, Direction, Strength};
 use crate::rules::{RuleSet, RuleSetRef};
-use classic::{classic_class, table_sides};
+use classic::classic_class;
 use pairs::double_counting_warnings;
 
 /// One criterion the curator applied, at the strength they chose.
@@ -138,6 +139,10 @@ pub struct Assessment {
     /// None if there is no evidence, the evidence contradicts itself, or it uses
     /// a strength the table does not cover (for example moderate benign evidence).
     pub classic_class: Option<Class>,
+    /// The rows of the 2015 table that the counted evidence meets, strongest
+    /// first. Empty when none is met (the table then gives VUS). Unlike
+    /// `classic_class`, it is filled even when the evidence contradicts itself.
+    pub table_rows: Vec<&'static TableRow>,
     /// Only set when official VUS tier ranges exist in the rule file.
     pub vus_tier: Option<String>,
     /// Criteria that contradict each other. The class is withheld until they are resolved.
@@ -219,12 +224,14 @@ impl RuleSet {
         let points_class =
             if has_stand_alone_benign(&items) { Class::Benign } else { self.class_for_points(total_points) };
         let has_evidence = items.iter().any(|i| i.counted);
-        let (pathogenic_side, benign_side) = table_sides(&items);
+        let table_rows = combining_table::met_rows(&items);
+        let (pathogenic_side, benign_side) = combining_table::sides(&table_rows);
 
         let mut assessment = Assessment {
             rule_set: self.reference(),
             // Contradictory evidence gets no class from either method.
-            classic_class: if has_evidence && conflicts.is_empty() { classic_class(&items) } else { None },
+            classic_class: if has_evidence && conflicts.is_empty() { classic_class(&items, &table_rows) } else { None },
+            table_rows,
             has_evidence,
             pathogenic_points,
             benign_points,

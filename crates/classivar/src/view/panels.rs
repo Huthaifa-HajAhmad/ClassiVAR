@@ -12,18 +12,24 @@
 
 use super::*;
 
+mod combining_table;
 mod criteria;
 mod criterion_row;
+mod evidence_stack;
 mod gene_cards;
 mod helper_bar;
 mod helpers;
 mod hero;
 mod history;
 mod lanes;
+mod point_axis;
 mod records;
 mod results;
+mod strength_ladder;
+mod timeline;
 mod top;
 mod verdict;
+mod what_if;
 
 /// A section heading in the results pane.
 fn heading(text: impl Into<SharedString>) -> Div {

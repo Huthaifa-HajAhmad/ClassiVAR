@@ -86,7 +86,8 @@ impl Workbench {
                 next.class.label()
             ));
         }
-        list.child(caption(muted).child("The evidence that could move it is in the lanes marked none."))
+        list.child(self.what_if(result, cx))
+            .child(caption(muted).child("The evidence that could move it is in the lanes marked none."))
             .into_any_element()
     }
 

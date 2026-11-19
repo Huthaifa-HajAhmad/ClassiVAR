@@ -28,7 +28,13 @@ impl Workbench {
             // The result comes first on both paths; the verdict and history are commentary on it.
             .child(self.hero(result, variant, cx))
             .when(reported, |pane| pane.children(self.reported_sections(reevaluation, incomplete, variant, cx)))
+            .when(result.class().is_some(), |pane| {
+                pane.child(div().child(heading("How the points add up")).child(self.evidence_stack(result, cx)))
+            })
             .child(div().child(heading("What it is made of")).child(self.evidence_lanes(result, cx)))
+            .when(combining_table::is_shown(result), |pane| {
+                pane.child(div().child(heading("What the 2015 table says")).child(self.combining_table(result, cx)))
+            })
             .when(result.class().is_some(), |pane| {
                 pane.child(div().child(heading("What would change it")).child(self.what_changes(result, cx)))
             })
@@ -67,6 +73,10 @@ impl Workbench {
                 );
             }
             if !re.records.is_empty() {
+                if re.today.as_ref().is_ok_and(|today| today.class().is_some()) {
+                    sections
+                        .push(div().child(heading("Records against today, in points")).child(self.timeline(re, cx)));
+                }
                 sections.push(div().child(heading("History against today's rules")).child(self.history_table(re, cx)));
             }
             // Today's own notes stay visible while a record is being edited.

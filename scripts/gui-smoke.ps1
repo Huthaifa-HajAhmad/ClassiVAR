@@ -123,8 +123,10 @@ try {
         [ClassiVarSmokeWin]::ClientToScreen($h, [ref]$origin) | Out-Null
         $top = $origin.Y + 255
         $bottom = $origin.Y + $client.Bottom
+        # The criteria pane is a fixed 480 px wide, so a control to the right of
+        # that line belongs to the result pane, not to the list.
         return [pscustomobject]@{
-            Top = $top; Bottom = $bottom
+            Top = $top; Bottom = $bottom; Right = $origin.X + 480
             PointerX = $origin.X + 200; PointerY = [int](($top + $bottom) / 2)
         }
     }
@@ -142,15 +144,19 @@ try {
         [ClassiVarSmokeWin]::SetCursorPos([int]($origin.X + $client.Right - 150), [int]($origin.Y + $y)) | Out-Null
     }
     # A click on a button whose centre is below the window does nothing. Like a
-    # person would, scroll down until the centre is on screen. This is only a safety
+    # person would, scroll the pane the control belongs to (Page Up or Page Down
+    # with the pointer over it) until the centre is on screen. This is only a safety
     # net for the generic click helpers: a row of the criteria list can also hide
     # under the pane header, and Scroll-To-Button (which knows where the list
     # starts) is used for those.
     function Bring-Into-View($el) {
         for ($i = 0; $i -lt 10; $i++) {
             $r = $el.Current.BoundingRectangle
-            if (($r.Y + $r.Height / 2) -le (Get-ListArea).Bottom) { return }
-            Point-At-List
+            $area = Get-ListArea
+            if (($r.Y + $r.Height / 2) -le $area.Bottom) { return }
+            # The control may be in the criteria list or in the result pane ("Remove
+            # record" is in the history table). Scrolling the wrong pane does nothing.
+            if (($r.X + $r.Width / 2) -le $area.Right) { Point-At-List } else { Point-At-Result $area.PointerY }
             Press-Key "{PGDN}"
         }
     }
@@ -314,6 +320,17 @@ try {
     Find-Button-Like "PVS1 strength: Very strong*" | Out-Null
     $after = Capture "05-pvs1-applied"
 
+    # The lower part of the result: how the points add up, and the 2015 table.
+    # They are drawn, not controls, so this is a capture for the eye.
+    Point-At-Result 600
+    Press-Key "{PGDN}"
+    Press-Key "{PGDN}"
+    Capture "05k-result-lower" | Out-Null
+    # One page further down: "What would change it", with its outlined bars on the scale.
+    Press-Key "{PGDN}"
+    Capture "05l-what-if" | Out-Null
+    for ($i = 0; $i -lt 4; $i++) { Press-Key "{PGUP}" }
+
     # The predictor helper turns a REVEL score into PP3 at the published strength.
     Scroll-List-To-Top
     Click-Button "Open the predictor score helper"
@@ -451,6 +468,11 @@ try {
     Scroll-To-Button "Apply PM6 Strong*"
     Click-Button-Like "Apply PM6 Strong*"
     Find-Button-Like "PM6 strength: Strong*" | Out-Null
+    # Several criteria are applied here, so rows of the 2015 table are met and marked.
+    Point-At-Result 600
+    for ($i = 0; $i -lt 2; $i++) { Press-Key "{PGDN}" }
+    Capture "05g2-table-met-rows" | Out-Null
+    for ($i = 0; $i -lt 8; $i++) { Press-Key "{PGUP}" }
     # No patients: nothing to apply.
     Set-BoxText $patientsBox ""
     if (@(Names | Where-Object { $_ -like "Apply PS2*" -or $_ -like "Apply PM6*" }).Count -ne 0) {
@@ -551,6 +573,38 @@ try {
     Click-Button-Like "PM1:*applied*"
     Find-Button-Like "PM1:*not applied*" | Out-Null
 
+    # "More" opens the strength ladder: every step with its points, and the program's limit.
+    Scroll-To-Button "More about PM1*"
+    Click-Button-Like "More about PM1*"
+    Find-Button-Like "Less about PM1*" | Out-Null
+    $ladderTop = Capture "05j2-strength-ladder-top"
+    Press-Key "{PGDN}"
+    $ladder = Capture "05j2-strength-ladder"
+    Scroll-To-Button "Less about PM1*"
+    Click-Button-Like "Less about PM1*"
+    Find-Button-Like "More about PM1*" | Out-Null
+
+    # Two Strong benign criteria on top of the pathogenic evidence meet rows of the
+    # 2015 table on both sides. The class is withheld, and the table explains why.
+    # These are drawn, not controls, so they are captures for the eye.
+    Scroll-To-Button "BS1:*not applied*"
+    Click-Button-Like "BS1:*not applied*"
+    Scroll-To-Button "BS2:*not applied*"
+    Click-Button-Like "BS2:*not applied*"
+    Point-At-Result 600
+    for ($i = 0; $i -lt 10; $i++) { Press-Key "{PGUP}" }
+    Capture "05m-withheld-top" | Out-Null
+    Press-Key "{PGDN}"
+    Press-Key "{PGDN}"
+    Capture "05m-withheld-table" | Out-Null
+    for ($i = 0; $i -lt 4; $i++) { Press-Key "{PGUP}" }
+    Scroll-To-Button "BS1:*applied*"
+    Click-Button-Like "BS1:*applied*"
+    Scroll-To-Button "BS2:*applied*"
+    Click-Button-Like "BS2:*applied*"
+    Find-Button-Like "BS2:*not applied*" | Out-Null
+    Find-Button-Like "BS1:*not applied*" | Out-Null
+
     # Page Down and Page Up scroll the list under the mouse pointer.
     Scroll-To-Button "PS1:*"
     $ps1 = Find-Button-Like "PS1:*"
@@ -595,7 +649,6 @@ try {
     Press-Key "{PGUP}"
     Press-Key "{PGUP}"
     Press-Key "{PGUP}"
-    $ps1Top = (Find-Button-Like "PS1:*").Current.BoundingRectangle.Y
     Click-Button "Remove record"
     Start-Sleep -Milliseconds 300
     if (@(Names | Where-Object { $_ -eq "Yes, continue" }).Count -ne 1) {
@@ -618,12 +671,18 @@ try {
             throw "the confirmation window let Tab focus '$focused' behind or outside itself"
         }
     }
-    # Page Down must not scroll the list behind the confirmation window.
+    # Page Down must not scroll the list behind the confirmation window. The position
+    # is read with the window already open and after the Tab presses, so the only
+    # thing that can move it between the two readings is a scroll: opening the
+    # question and moving focus inside it are already settled by then.
     $c = (Find-Button-Like "PS1:*").Current.BoundingRectangle
+    $ps1Top = $c.Y
     [ClassiVarSmokeWin]::SetCursorPos([int]($c.X + $c.Width / 2), [int]($c.Y + $c.Height / 2)) | Out-Null
     Press-Key "{PGDN}"
     $ps1Behind = (Find-Button-Like "PS1:*").Current.BoundingRectangle.Y
-    if ($ps1Behind -ne $ps1Top) { throw "Page Down scrolled the list behind the confirmation window" }
+    if ($ps1Behind -ne $ps1Top) {
+        throw "Page Down scrolled the list behind the confirmation window (PS1 at $ps1Top before, $ps1Behind after)"
+    }
     # Escape answers Cancel, and the record is still there.
     Press-Escape
     if (@(Names | Where-Object { $_ -eq "Yes, continue" }).Count -ne 0) {

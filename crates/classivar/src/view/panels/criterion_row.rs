@@ -143,6 +143,9 @@ impl Workbench {
         if open && let Some(note) = c.note.clone() {
             text = text.child(format!("Note: {note}"));
         }
+        if open {
+            text = text.child(self.strength_ladder(c, strength, cx));
+        }
         if let Some(option) = guide_option {
             let answer = if open {
                 format!("Guide answer: {} — {}", option.short, option.situation)

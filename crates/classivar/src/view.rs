@@ -42,6 +42,8 @@ mod evidence;
 mod example;
 mod file_io;
 mod gene;
+#[cfg(test)]
+mod headless;
 mod helper_state;
 
 use helper_state::{AssayRoute, Helpers, PhenotypeGenes, new_box};
