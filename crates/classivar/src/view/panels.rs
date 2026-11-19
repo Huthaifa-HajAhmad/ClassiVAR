@@ -91,6 +91,8 @@ impl Render for Workbench {
         };
         let (incomplete, reevaluation) = self.compare_with_records();
         let variant = self.variant_name(cx);
+        // Worked out once per draw: the Save marker and the file message must agree.
+        let unsaved = self.has_unsaved_changes(cx);
         let (background, foreground) = (cx.theme().background, cx.theme().foreground);
 
         div()
@@ -107,8 +109,8 @@ impl Render for Workbench {
                     cx.stop_propagation();
                 }
             })
-            .child(self.top_bar(cx))
-            .children(self.file_status_banner(cx))
+            .child(self.top_bar(unsaved, cx))
+            .children(self.file_status_banner(unsaved, cx))
             .child(self.case_panel(cx))
             .child(div().flex().flex_1().min_h_0().child(self.criteria_panel(&result, cx)).child(self.results_panel(
                 &result,

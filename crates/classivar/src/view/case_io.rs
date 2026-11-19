@@ -1,5 +1,6 @@
 //! Saving, opening and clearing a case.
 
+use super::unsaved::banner_status;
 use super::*;
 
 /// The evidence of a saved block, as the screen holds it. A reason is cut to
@@ -56,6 +57,7 @@ impl Workbench {
             return;
         }
         let case = self.case_file(cx);
+        let saved = case.clone();
         let folder = default_save_folder();
         let chosen = cx.prompt_for_new_path(&folder, Some(&suggested_file_name(&case.variant)));
         self._file_task = Some(cx.spawn(async move |this, cx| {
@@ -69,13 +71,7 @@ impl Workbench {
                 Ok(Err(error)) => Some(Status::attention(format!("Could not open the save dialog: {error}"))),
                 Err(_) => Some(Status::attention("The save dialog closed without an answer.")),
             };
-            this.update(cx, |this, cx| {
-                if message.is_some() {
-                    this.file_status = message;
-                }
-                cx.notify();
-            })
-            .ok();
+            this.update(cx, |this, cx| this.finish_save(message, saved, cx)).ok();
         }));
     }
 
@@ -171,12 +167,16 @@ impl Workbench {
         self.gene_input.update(cx, |input, cx| input.set_value(case.gene.clone(), window, cx));
         self.reset_helpers(window, cx);
 
+        // What is on screen now is the baseline: the file holds the case before it was adjusted.
+        let shown = self.case_file(cx);
+        self.remember_saved(shown);
         let status = open_status(self.rules, &case, &adjusted);
         self.set_file_status(status, cx);
     }
 
-    pub(super) fn file_status_banner(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let status = self.file_status.as_ref()?;
+    /// The message about the last save or open. `unsaved` says whether the case has changed since.
+    pub(super) fn file_status_banner(&self, unsaved: bool, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let status = banner_status(self.file_status.as_ref()?, unsaved);
         let (fill, ink) = match status.tone {
             Tone::Done => (confirm_fill(), confirm_ink()),
             Tone::Attention => (warning_fill(), warning_ink()),
@@ -209,6 +209,7 @@ impl Workbench {
         self.gene_error = None;
         self.example = false;
         self.file_status = None;
+        self.forget_saved();
         self.guide_open = None;
         self.confirm = None;
         self.open_details.clear();

@@ -9,12 +9,13 @@
 //! Explicit imports on purpose: `use gpui_kit::*` also brings GPUI's `test` macro
 //! into scope, and `#[gpui::test]` then expands into itself without end.
 
-use classivar_core::{Class, RuleSet};
+use classivar_core::{Class, GeneDecision, RuleSet, Strength};
 use gpui::{Entity, TestAppContext, VisualTestContext};
 use gpui_kit::component::ThemeMode;
 use gpui_kit::init;
 
 use super::{Choice, Editing, Mode, Workbench};
+use crate::status::Status;
 use crate::theme;
 
 fn rules() -> &'static RuleSet {
@@ -133,4 +134,104 @@ fn a_pathogenic_result_draws_without_panicking(cx: &mut TestAppContext) {
         this.rules.assess(&super::to_applied(&this.today)).expect("the evidence can be scored").class()
     });
     assert!(matches!(class, Some(Class::Pathogenic | Class::LikelyPathogenic)), "{class:?}");
+}
+
+/// Apply one criterion at its default strength.
+fn apply_default(this: &mut Workbench, code: &str) {
+    let strength = this.rules.criterion(code).expect("criterion exists").strength;
+    this.today.insert(code.to_string(), Choice::new(strength));
+}
+
+#[gpui::test]
+fn a_change_after_saving_is_noticed_and_undoing_it_is_noticed_too(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    workbench.update_in(cx, |this, window, cx| {
+        assert!(!this.has_unsaved_changes(cx), "nothing was saved yet, so there is nothing to compare with");
+        apply_default(this, "PM2");
+        let saved = this.case_file(cx);
+        this.remember_saved(saved);
+        assert!(!this.has_unsaved_changes(cx));
+
+        apply_default(this, "PS1");
+        assert!(this.has_unsaved_changes(cx), "a new criterion is a change");
+        this.today.remove("PS1");
+        assert!(!this.has_unsaved_changes(cx), "putting it back is not a change");
+
+        this.today.insert("PM2".to_string(), Choice::new(Strength::Moderate));
+        assert!(this.has_unsaved_changes(cx), "a different strength is a change");
+        apply_default(this, "PM2");
+
+        this.variant_input.update(cx, |input, cx| input.set_value("NM_000000.1:c.1A>G", window, cx));
+        assert!(this.has_unsaved_changes(cx), "the variant name is part of the case");
+    });
+    draw(cx);
+}
+
+#[gpui::test]
+fn an_opened_case_is_unchanged_until_it_is_edited_and_clearing_forgets_it(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    workbench.update_in(cx, |this, window, cx| {
+        apply_default(this, "PM2");
+        let case = this.case_file(cx);
+        this.apply_case(case, window, cx);
+        assert!(!this.has_unsaved_changes(cx), "a case just opened matches its file");
+        apply_default(this, "PP3");
+        assert!(this.has_unsaved_changes(cx));
+        this.clear_case(window, cx);
+        assert!(!this.has_unsaved_changes(cx), "a cleared case has no file to differ from");
+    });
+}
+
+#[gpui::test]
+fn a_failed_save_keeps_the_old_baseline_and_a_finished_one_moves_it(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    workbench.update_in(cx, |this, _, cx| {
+        apply_default(this, "PM2");
+        let before = this.case_file(cx);
+        this.remember_saved(before.clone());
+        apply_default(this, "PS1");
+        let edited = this.case_file(cx);
+
+        this.finish_save(Some(Status::attention("Could not save to a.json: disk full.")), edited.clone(), cx);
+        assert!(this.has_unsaved_changes(cx), "a failed save wrote nothing, so the change is still unsaved");
+        this.finish_save(None, edited.clone(), cx);
+        assert!(this.has_unsaved_changes(cx), "a closed dialog wrote nothing either");
+
+        this.finish_save(Some(Status::done("Saved to a.json.")), edited, cx);
+        assert!(!this.has_unsaved_changes(cx), "a finished save makes what was written the baseline");
+    });
+}
+
+#[gpui::test]
+fn the_gene_decision_and_the_records_are_part_of_the_saved_state(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    workbench.update_in(cx, |this, window, cx| {
+        apply_default(this, "PM2");
+        let saved = this.case_file(cx);
+        this.remember_saved(saved);
+
+        this.gene_link = GeneDecision::Established;
+        assert!(this.has_unsaved_changes(cx), "the gene decision is saved in the file");
+        this.gene_link = GeneDecision::NotDecided;
+        assert!(!this.has_unsaved_changes(cx));
+
+        this.add_record(window, cx);
+        assert!(this.has_unsaved_changes(cx), "a new earlier record is a change");
+        this.remove_record(0, window, cx);
+        assert!(!this.has_unsaved_changes(cx), "taking the record away again is not a change");
+    });
+}
+
+#[gpui::test]
+fn loading_the_example_removes_the_marker(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    workbench.update_in(cx, |this, window, cx| {
+        apply_default(this, "PM2");
+        let saved = this.case_file(cx);
+        this.remember_saved(saved);
+        apply_default(this, "PS1");
+        assert!(this.has_unsaved_changes(cx));
+        this.load_example(window, cx);
+        assert!(!this.has_unsaved_changes(cx), "the example is never saved, so it has no file to differ from");
+    });
 }

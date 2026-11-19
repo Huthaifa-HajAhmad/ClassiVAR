@@ -49,6 +49,7 @@ mod helper_state;
 use helper_state::{AssayRoute, Helpers, PhenotypeGenes, new_box};
 mod panels;
 mod records;
+mod unsaved;
 mod watchers;
 mod widgets;
 
@@ -224,6 +225,8 @@ pub struct Workbench {
     confirm_focus: FocusHandle,
     /// The result of the last save or open, shown until the curator dismisses it.
     file_status: Option<Status>,
+    /// The case as last saved or opened, to tell whether it has changed since (see `unsaved.rs`).
+    saved_case: Option<CaseFile>,
     /// The next number for a new record, so removing one cannot create two "Record 2"s.
     next_record: u32,
     /// Counts lookups, so a slow old answer cannot replace a newer one.
@@ -274,6 +277,7 @@ impl Workbench {
             confirm: None,
             confirm_focus: cx.focus_handle(),
             file_status: None,
+            saved_case: None,
             next_record: 1,
             lookup_id: 0,
             _lookup_tasks: Vec::new(),

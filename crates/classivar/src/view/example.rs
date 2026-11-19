@@ -50,6 +50,7 @@ impl Workbench {
         // Flag the case as fictional: a checked gene starts a real case, so the
         // curator is asked first, and Save refuses until the example is cleared.
         self.example = true;
+        self.forget_saved();
         self.file_status = Some(Status::attention(
             "Loaded the fictional example. The criteria here are the demo's, not a real variant: checking a gene asks to start a real case, and Save refuses until the example is cleared.",
         ));
