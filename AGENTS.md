@@ -33,7 +33,7 @@ powershell -ExecutionPolicy Bypass -File scripts/gui-smoke.ps1   # Windows UI sm
 rules/acmg-amp-points.toml   all clinical content: criteria, points, classes, sources, guides, caps
 crates/classivar-core/       engine, no UI: rules.rs (load+check), assess.rs (score), combining_table.rs (the 2015 table as rows), reevaluate.rs (reported variants), case.rs (file format)
 crates/classivar-sources/    ClinGen, G2P, PanelApp clients; shared HTTP rules and caps
-crates/classivar/            GPUI app: main.rs, view.rs (Workbench state), view/panels.rs, view/panels/helper_bar.rs, view/panels/helpers.rs, view/panels/evidence_stack.rs, view/panels/combining_table.rs, view/panels/point_axis.rs and view/panels/what_if.rs (drawing; the layout rules of the stack, the table and the axis are plain tested functions, and point_axis draws the axis the stack and the "what if" bars share), design.rs (the app's own colours), genes.rs, settings.rs
+crates/classivar/            GPUI app: main.rs, view.rs (Workbench state), view/panels.rs, view/panels/helper_bar.rs, view/panels/helpers.rs, view/panels/evidence_stack.rs, view/panels/combining_table.rs, view/panels/point_axis.rs, view/panels/what_if.rs, view/panels/timeline.rs and view/panels/strength_ladder.rs (drawing; the layout rules of the stack, the table, the timeline and the ladder are plain tested functions, and point_axis draws the axis the stack, the "what if" bars and the timeline share), design.rs (the app's own colours), genes.rs, settings.rs
 docs/                        ROADMAP.md is the current status; ARCHITECTURE.md is the map; AUDIT is historical
 ```
 
@@ -54,10 +54,10 @@ Key types: `RuleSet` → `Applied` → `Assessment` (`class()`, `points_class`, 
 
 ## Verify a UI change
 
-Tests do not draw the window, and a stack overflow or a bad binding only appears on screen. After a UI change:
+The unit tests do not draw the window, and a stack overflow or a bad binding only appears on screen (the headless tests catch a panic in a render function, not a wrong binding). After a UI change:
 
-1. `scripts/check.ps1`
-2. `scripts/gui-smoke.ps1` (it never calls the live sources, so it runs offline; it refuses to act unless ClassiVAR is the foreground window; screenshots go to `%TEMP%\classivar-smoke`)
+1. `scripts/check.ps1`. It includes the headless window tests (`crates/classivar/src/view/headless.rs`): they draw the real window in GPUI's test platform with no screen, mouse or keyboard, so run them freely, also while the user is working. They set state directly; they do not click.
+2. `scripts/gui-smoke.ps1`. **It takes over the user's mouse and keyboard and must not run while the user is using the machine** (it also fails when they touch it). Ask first, or run it only when the user says the machine is free. (it never calls the live sources, so it runs offline; it refuses to act unless ClassiVAR is the foreground window; screenshots go to `%TEMP%\classivar-smoke`)
 3. Click the changed path yourself if the smoke script does not cover it (Save/Open dialogs and keyboard are not covered).
 
 ## Gotchas
@@ -65,7 +65,7 @@ Tests do not draw the window, and a stack overflow or a bad binding only appears
 - Theme preference: `%APPDATA%\ClassiVAR\settings.txt` (`theme=dark|light`).
 - A case saved under other rules says so on open; per-record rule sets are intentionally not saved.
 - Live source tests hit real services; run them separately, not in the merge gate.
-- CI (`.github/workflows/`) has never run: no remote existed. Treat "CI covers it" as false until a run URL is in `docs/ROADMAP.md`.
+- CI (`.github/workflows/`) first ran on 2026-11-05 (run URL in `docs/ROADMAP.md`, D3). It has not run since the headless window tests were added, so treat "CI covers it" as unverified until a newer run URL is in `docs/ROADMAP.md`.
 - The repository had no commits beyond the audit baseline when this file was written. Do not commit unless the user asks.
 
 ## When you change behaviour

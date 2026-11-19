@@ -25,6 +25,7 @@ fn moves(result: &Assessment) -> Vec<Bar> {
             to,
             end: format!("= {}", points_text(to)),
             hollow: true,
+            neutral: false,
         }
     });
     let down = result.to_downgrade.map(|next| {
@@ -37,6 +38,7 @@ fn moves(result: &Assessment) -> Vec<Bar> {
             to,
             end: format!("= {}", points_text(to)),
             hollow: true,
+            neutral: false,
         }
     });
     [up, down].into_iter().flatten().collect()

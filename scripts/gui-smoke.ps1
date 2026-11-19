@@ -573,6 +573,17 @@ try {
     Click-Button-Like "PM1:*applied*"
     Find-Button-Like "PM1:*not applied*" | Out-Null
 
+    # "More" opens the strength ladder: every step with its points, and the program's limit.
+    Scroll-To-Button "More about PM1*"
+    Click-Button-Like "More about PM1*"
+    Find-Button-Like "Less about PM1*" | Out-Null
+    $ladderTop = Capture "05j2-strength-ladder-top"
+    Press-Key "{PGDN}"
+    $ladder = Capture "05j2-strength-ladder"
+    Scroll-To-Button "Less about PM1*"
+    Click-Button-Like "Less about PM1*"
+    Find-Button-Like "More about PM1*" | Out-Null
+
     # Two Strong benign criteria on top of the pathogenic evidence meet rows of the
     # 2015 table on both sides. The class is withheld, and the table explains why.
     # These are drawn, not controls, so they are captures for the eye.

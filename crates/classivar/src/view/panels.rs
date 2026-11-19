@@ -17,6 +17,8 @@ mod evidence_stack;
 mod helper_bar;
 mod helpers;
 mod point_axis;
+mod strength_ladder;
+mod timeline;
 mod what_if;
 
 /// A section heading in the results pane.
@@ -784,6 +786,9 @@ impl Workbench {
                 });
                 if open && let Some(note) = c.note.clone() {
                     text = text.child(format!("Note: {note}"));
+                }
+                if open {
+                    text = text.child(self.strength_ladder(c, strength, cx));
                 }
                 if let Some(option) = guide_option {
                     let answer = if open {
@@ -1720,6 +1725,11 @@ impl Workbench {
                     );
                 }
                 if !re.records.is_empty() {
+                    if re.today.as_ref().is_ok_and(|today| today.class().is_some()) {
+                        pane = pane.child(
+                            div().child(heading("Records against today, in points")).child(self.timeline(re, cx)),
+                        );
+                    }
                     pane = pane
                         .child(div().child(heading("History against today's rules")).child(self.history_table(re, cx)));
                 }

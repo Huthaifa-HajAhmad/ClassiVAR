@@ -78,6 +78,7 @@ fn bars(steps: &[Step]) -> Vec<Bar> {
             to: step.to,
             end: format!("= {}", points_text(step.to)),
             hollow: false,
+            neutral: false,
         })
         .collect()
 }

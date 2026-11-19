@@ -33,6 +33,8 @@ use crate::design::{
 };
 use crate::status::{Status, Tone};
 
+#[cfg(test)]
+mod headless;
 mod panels;
 
 /// Width of one point in the evidence lanes.

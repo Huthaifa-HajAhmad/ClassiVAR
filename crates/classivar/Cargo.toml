@@ -10,3 +10,7 @@ classivar-core = { version = "0.1.0", path = "../classivar-core" }
 classivar-sources = { version = "0.1.0", path = "../classivar-sources" }
 gpui-kit = "0.9"
 serde_json = "1.0.154"
+
+[dev-dependencies]
+# GPUI's own headless test platform: windows without a screen, for tests that draw the real views.
+gpui-pre = { version = "0.3.12", features = ["test-support"] }

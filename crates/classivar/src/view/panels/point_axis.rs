@@ -1,6 +1,6 @@
 //! Bars drawn on the points scale's own axis. "How the points add up" and the
-//! "what if" lines under "What would change it" both use them, so a point is the
-//! same width in both, and the class limits sit at the same point values as on
+//! "what if" lines under "What would change it" and the records timeline all use
+//! them, so a point is the same width in each, and the class limits sit at the same point values as on
 //! the scale above. When the bars run past the scale the axis is widened (see
 //! `widened`), so the picture is wider than the scale and the class limits are
 //! read from the point values printed under the zones rather than from their
@@ -37,6 +37,9 @@ pub(super) struct Bar {
     pub end: String,
     /// Outlined instead of filled: shows a move that is possible, not evidence that is applied.
     pub hollow: bool,
+    /// Drawn in the quiet text colour instead of a direction colour: for a total of
+    /// zero, which favours neither side.
+    pub neutral: bool,
 }
 
 /// The points scale, made wider where the bars go past it. A total of 19 points
@@ -110,7 +113,7 @@ fn bar_row(bar: &Bar, scale: &Scale, border: Hsla, muted: Hsla) -> Div {
     for edge in scale.zones.iter().map(|(_, from, _)| *from) {
         track = track.child(div().absolute().top(px(0.)).left(px(x_of(edge))).w(px(1.)).h_full().bg(border));
     }
-    let colour = direction_colour(bar.direction);
+    let colour: Rgba = if bar.neutral { muted.into() } else { direction_colour(bar.direction) };
     track = track.child(
         div()
             .absolute()
