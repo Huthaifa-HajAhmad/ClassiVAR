@@ -76,15 +76,17 @@ impl Workbench {
 
 impl Render for Workbench {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // While a question waits on screen, it owns the keyboard: the question
-        // window takes the focus, and Tab cannot walk out to the controls
-        // behind it. Enter and Space keep their normal meaning on whichever
-        // control inside the window has the focus; Escape (and the window's
-        // Cancel button) is handled by the global key observer.
-        if self.confirm.is_some() && !self.confirm_focus.is_focused(window) {
+        // While a question waits on screen, it owns the keyboard: its window takes
+        // the focus and traps Tab (see `confirm_modal`). Enter and Space keep
+        // their normal meaning on the answer that has the focus; Escape (and the
+        // window's Cancel button) is handled by the global key observer.
+        if self.confirm.is_some() && !self.confirm_focus.contains_focused(window, cx) {
             window.focus(&self.confirm_focus, cx);
+        } else if self.confirm.is_none() && window.focused(cx).is_none() {
+            // With no focus at all Tab has nowhere to start from: a fresh window,
+            // or one whose question just closed. The page holds it until a control does.
+            window.focus(&self.page_focus, cx);
         }
-        let modal_open = self.confirm.is_some();
         let result = match self.score_on_screen() {
             Ok(result) => result,
             Err(error) => return self.error_screen(format!("The evidence on screen cannot be scored: {error}"), cx),
@@ -102,13 +104,7 @@ impl Render for Workbench {
             .flex_col()
             .bg(background)
             .text_color(foreground)
-            // The capture phase runs before every control inside, so a blocked
-            // key cannot act on whichever element holds the focus.
-            .capture_key_down(move |event, _window, cx| {
-                if modal_open && event.keystroke.key == "tab" {
-                    cx.stop_propagation();
-                }
-            })
+            .track_focus(&self.page_focus)
             .child(self.top_bar(unsaved, cx))
             .children(self.file_status_banner(unsaved, cx))
             .child(self.case_panel(cx))
