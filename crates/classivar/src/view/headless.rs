@@ -9,7 +9,7 @@
 //! Explicit imports on purpose: `use gpui_kit::*` also brings GPUI's `test` macro
 //! into scope, and `#[gpui::test]` then expands into itself without end.
 
-use classivar_core::{Class, RuleSet};
+use classivar_core::{Class, RuleSet, Strength};
 use gpui::{Entity, TestAppContext, VisualTestContext};
 use gpui_kit::component::ThemeMode;
 use gpui_kit::init;
@@ -133,4 +133,50 @@ fn a_pathogenic_result_draws_without_panicking(cx: &mut TestAppContext) {
         this.rules.assess(&super::to_applied(&this.today)).expect("the evidence can be scored").class()
     });
     assert!(matches!(class, Some(Class::Pathogenic | Class::LikelyPathogenic)), "{class:?}");
+}
+
+/// Apply one criterion at its default strength.
+fn apply_default(this: &mut Workbench, code: &str) {
+    let strength = this.rules.criterion(code).expect("criterion exists").strength;
+    this.today.insert(code.to_string(), Choice::new(strength));
+}
+
+#[gpui::test]
+fn a_change_after_saving_is_noticed_and_undoing_it_is_noticed_too(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    workbench.update_in(cx, |this, window, cx| {
+        assert!(!this.has_unsaved_changes(cx), "nothing was saved yet, so there is nothing to compare with");
+        apply_default(this, "PM2");
+        let saved = this.case_file(cx);
+        this.remember_saved(saved);
+        assert!(!this.has_unsaved_changes(cx));
+
+        apply_default(this, "PS1");
+        assert!(this.has_unsaved_changes(cx), "a new criterion is a change");
+        this.today.remove("PS1");
+        assert!(!this.has_unsaved_changes(cx), "putting it back is not a change");
+
+        this.today.insert("PM2".to_string(), Choice::new(Strength::Moderate));
+        assert!(this.has_unsaved_changes(cx), "a different strength is a change");
+        apply_default(this, "PM2");
+
+        this.variant_input.update(cx, |input, cx| input.set_value("NM_000000.1:c.1A>G", window, cx));
+        assert!(this.has_unsaved_changes(cx), "the variant name is part of the case");
+    });
+    draw(cx);
+}
+
+#[gpui::test]
+fn an_opened_case_is_unchanged_until_it_is_edited_and_clearing_forgets_it(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    workbench.update_in(cx, |this, window, cx| {
+        apply_default(this, "PM2");
+        let case = this.case_file(cx);
+        this.apply_case(case, window, cx);
+        assert!(!this.has_unsaved_changes(cx), "a case just opened matches its file");
+        apply_default(this, "PP3");
+        assert!(this.has_unsaved_changes(cx));
+        this.clear_case(window, cx);
+        assert!(!this.has_unsaved_changes(cx), "a cleared case has no file to differ from");
+    });
 }

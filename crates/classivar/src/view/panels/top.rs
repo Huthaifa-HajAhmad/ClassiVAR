@@ -62,9 +62,12 @@ impl Workbench {
     }
 
     fn file_buttons(&self, cx: &mut Context<Self>) -> Div {
+        let muted = cx.theme().muted_foreground;
         div()
             .flex()
+            .items_center()
             .gap_3()
+            .when(self.has_unsaved_changes(cx), |row| row.child(caption(muted).child("Changed since saved")))
             .child(Button::new("save-case").label("Save").accessibility_label("Save case…").small().outline().on_click(
                 cx.listener(|this, _, _, cx| {
                     this.save_case(cx);

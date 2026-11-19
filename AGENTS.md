@@ -33,7 +33,7 @@ powershell -ExecutionPolicy Bypass -File scripts/gui-smoke.ps1   # Windows UI sm
 rules/acmg-amp-points.toml   all clinical content: criteria, points, classes, sources, guides, caps
 crates/classivar-core/       engine, no UI: rules/ (load + check; check*.rs, read.rs for the helper tables), assess/ (score), combining_table.rs (the 2015 table as rows), reevaluate.rs (reported variants), case.rs (file format)
 crates/classivar-sources/    ClinGen, G2P, PanelApp clients; shared HTTP rules and caps
-crates/classivar/            GPUI app: main.rs, view.rs (Workbench state), view/*.rs (actions, records, gene lookups, save/open, helper_state.rs), view/panels/ (drawing, one file per panel) and view/panels/helpers/ (one file per evidence helper), design.rs (the app's own colours), genes.rs, settings.rs
+crates/classivar/            GPUI app: main.rs, view.rs (Workbench state), view/*.rs (actions, records, gene lookups, save/open, unsaved.rs, helper_state.rs), view/panels/ (drawing, one file per panel) and view/panels/helpers/ (one file per evidence helper), design.rs (the app's own colours), genes.rs, settings.rs
                              The three pictures that explain a class are panels too: evidence_stack.rs, combining_table.rs, what_if.rs, timeline.rs and strength_ladder.rs. point_axis.rs draws the axis the stack, the "what if" bars and the timeline share. Their layout rules are plain tested functions; the drawing on top is thin.
                              view/headless.rs: tests that draw the real window in GPUI's test platform (see "Verify a UI change")
 docs/                        ROADMAP.md is the current status; ARCHITECTURE.md is the map; AUDIT is historical
