@@ -1,5 +1,7 @@
 //! The question window shown before work is thrown away.
 
+use gpui_kit::component::FocusTrapElement;
+
 use super::*;
 
 impl Workbench {
@@ -68,9 +70,9 @@ impl Workbench {
     }
 
     /// The question as a window over the screen. The dim layer takes every mouse
-    /// click, the window takes the keyboard focus (see `render`), and Tab is
-    /// blocked at the page root, so nothing behind it can be used until the
-    /// curator answers.
+    /// click, and the window is a focus trap holding the keyboard focus (set in
+    /// `render`): Tab and Shift-Tab cycle between its two answers and cannot
+    /// reach the controls behind it, so the question can be answered without a mouse.
     pub(super) fn confirm_modal(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let confirm = self.confirm.as_ref()?;
         let (background, foreground, border) = (cx.theme().background, cx.theme().foreground, cx.theme().border);
@@ -108,15 +110,13 @@ impl Workbench {
                 .absolute()
                 .inset_0()
                 .occlude()
-                // The keyboard focus target of the question (set in `render`),
-                // so keystrokes act inside it, not behind it.
-                .track_focus(&self.confirm_focus)
                 .flex()
                 .items_center()
                 .justify_center()
                 .p_4()
                 .bg(scrim())
                 .child(card)
+                .focus_trap("confirm-trap", &self.confirm_focus)
                 .into_any_element(),
         )
     }

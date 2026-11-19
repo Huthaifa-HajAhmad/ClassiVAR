@@ -10,9 +10,9 @@
 //! into scope, and `#[gpui::test]` then expands into itself without end.
 
 use classivar_core::{Class, GeneDecision, RuleSet, Strength};
-use gpui::{Entity, TestAppContext, VisualTestContext};
+use gpui::{Entity, TestAppContext, VisualTestContext, WindowOptions};
 use gpui_kit::component::ThemeMode;
-use gpui_kit::init;
+use gpui_kit::{AppContext, init, open_window};
 
 use super::{Choice, Editing, Mode, Workbench};
 use crate::status::Status;
@@ -23,16 +23,22 @@ fn rules() -> &'static RuleSet {
 }
 
 /// A window with a new workbench in it, in the given theme.
-fn open(cx: &mut TestAppContext, theme_mode: ThemeMode) -> (Entity<Workbench>, &mut VisualTestContext) {
+pub(super) fn open(cx: &mut TestAppContext, theme_mode: ThemeMode) -> (Entity<Workbench>, &mut VisualTestContext) {
     cx.update(|cx| {
         init(cx);
         theme::install(theme_mode, cx);
     });
-    cx.add_window_view(|window, cx| Workbench::new(rules(), window, cx))
+    // The same call `main` makes, so the window has the toolkit's root around it (which owns Tab).
+    let (handle, workbench) = cx
+        .update(|cx| {
+            open_window(WindowOptions::default(), cx, |window, cx| cx.new(|cx| Workbench::new(rules(), window, cx)))
+        })
+        .expect("the window opens");
+    (workbench, VisualTestContext::from_window(handle, cx).into_mut())
 }
 
 /// Draw the window once, as the screen would.
-fn draw(cx: &mut VisualTestContext) {
+pub(super) fn draw(cx: &mut VisualTestContext) {
     cx.update(|window, cx| {
         let drawn = window.draw(cx);
         drawn.clear(cx);

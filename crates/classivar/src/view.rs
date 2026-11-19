@@ -44,6 +44,8 @@ mod file_io;
 mod gene;
 #[cfg(test)]
 mod headless;
+#[cfg(test)]
+mod headless_keys;
 mod helper_state;
 
 use helper_state::{AssayRoute, Helpers, PhenotypeGenes, new_box};
@@ -223,6 +225,8 @@ pub struct Workbench {
     /// The confirmation window holds the keyboard focus while it is open, so a
     /// stray Tab or Enter cannot reach the controls behind the question.
     confirm_focus: FocusHandle,
+    /// Holds the focus when no control does, so Tab always has a place to start from.
+    page_focus: FocusHandle,
     /// The result of the last save or open, shown until the curator dismisses it.
     file_status: Option<Status>,
     /// The case as last saved or opened, to tell whether it has changed since (see `unsaved.rs`).
@@ -276,6 +280,7 @@ impl Workbench {
             gene_link: GeneDecision::NotDecided,
             confirm: None,
             confirm_focus: cx.focus_handle(),
+            page_focus: cx.focus_handle(),
             file_status: None,
             saved_case: None,
             next_record: 1,
