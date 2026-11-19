@@ -67,7 +67,7 @@ The unit tests do not draw the window, and a stack overflow or a bad binding onl
 - Theme preference: `%APPDATA%\ClassiVAR\settings.txt` (`theme=dark|light`).
 - A case saved under other rules says so on open; per-record rule sets are intentionally not saved.
 - Live source tests hit real services; run them separately, not in the merge gate.
-- CI (`.github/workflows/`) runs the merge gate on Windows and macOS plus `cargo audit`; the first fully green run is linked in `README.md`. It has not run since the headless window tests were added, so treat "CI covers them" as unverified until a newer run URL is in `docs/ROADMAP.md`. The Windows UI smoke test is not part of CI: run it yourself after a UI change.
+- CI (`.github/workflows/`) runs the merge gate on Windows and macOS plus `cargo audit`; the first fully green run is linked in `README.md`. It has run with the headless window tests and passed on Windows and macOS (run URL in `docs/ROADMAP.md`, Phase E item 7). The Windows UI smoke test is not part of CI: run it yourself after a UI change.
 - Do not commit unless the user asks.
 - Size limits: files of 300 lines (a test block in the same file may go over) and functions of 50 lines hold in all three crates. Keep it that way. A new helper is one state type in `view/helper_state.rs`, one file in `view/panels/helpers/` with a tested function that reads the typed values, and one entry in `view/panels/helper_bar.rs`.
 - Saved text with non-ASCII characters (`•`, `·`, `→`) is easy to damage when a script reads a file with the wrong encoding. After a scripted edit, search for `â€` and `Â`.

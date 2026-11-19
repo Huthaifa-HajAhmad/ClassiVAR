@@ -71,17 +71,7 @@ impl Workbench {
                 Ok(Err(error)) => Some(Status::attention(format!("Could not open the save dialog: {error}"))),
                 Err(_) => Some(Status::attention("The save dialog closed without an answer.")),
             };
-            this.update(cx, |this, cx| {
-                // Only a finished save has the good-news tone; a failed one does not move the saved state.
-                if message.as_ref().is_some_and(|status| status.tone == Tone::Done) {
-                    this.remember_saved(saved);
-                }
-                if message.is_some() {
-                    this.file_status = message;
-                }
-                cx.notify();
-            })
-            .ok();
+            this.update(cx, |this, cx| this.finish_save(message, saved, cx)).ok();
         }));
     }
 
@@ -184,8 +174,9 @@ impl Workbench {
         self.set_file_status(status, cx);
     }
 
-    pub(super) fn file_status_banner(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let status = banner_status(self.file_status.as_ref()?, self.has_unsaved_changes(cx));
+    /// The message about the last save or open. `unsaved` says whether the case has changed since.
+    pub(super) fn file_status_banner(&self, unsaved: bool, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let status = banner_status(self.file_status.as_ref()?, unsaved);
         let (fill, ink) = match status.tone {
             Tone::Done => (confirm_fill(), confirm_ink()),
             Tone::Attention => (warning_fill(), warning_ink()),

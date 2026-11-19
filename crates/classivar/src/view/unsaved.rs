@@ -3,6 +3,12 @@
 //! The answer is worked out by comparing, not by setting a flag at every edit:
 //! a flag would have to be set in every place that changes the case, and one
 //! missed place would leave a "Saved" message that is no longer true.
+//!
+//! Two places show the answer: a marker beside the Save button, and the file
+//! message. The marker is always shown when the case differs. The message only
+//! changes when it was good news ("Saved", "Opened"); a message that already
+//! asks for attention (a case opened under other rules, a failed save) keeps its
+//! own words, so the two can say different things at once, on purpose.
 
 use super::*;
 
@@ -12,16 +18,35 @@ use super::*;
 /// A message that already asks for attention is left as it is.
 pub(super) fn banner_status(status: &Status, unsaved: bool) -> Status {
     if unsaved && status.tone == Tone::Done {
-        Status::attention(format!("{} You have changed the case since. Save again to keep the change.", status.text))
+        Status::attention(format!("{} You have changed the case since. Save to keep the change.", status.text))
     } else {
         status.clone()
     }
+}
+
+/// What a screen reader says for the Save button: the state is part of the name,
+/// because the visible marker beside it is a separate piece of text.
+pub(super) fn save_button_label(unsaved: bool) -> &'static str {
+    if unsaved { "Save case… (changed since saved)" } else { "Save case…" }
 }
 
 impl Workbench {
     /// Remember a case as the saved state: what was written to a file, or what was just opened.
     pub(super) fn remember_saved(&mut self, case: CaseFile) {
         self.saved_case = Some(case);
+    }
+
+    /// The save dialog is finished. A finished save makes what was written the
+    /// saved state; a failed save or a closed dialog does not move it, because
+    /// nothing was written.
+    pub(super) fn finish_save(&mut self, message: Option<Status>, written: CaseFile, cx: &mut Context<Self>) {
+        if message.as_ref().is_some_and(|status| status.tone == Tone::Done) {
+            self.remember_saved(written);
+        }
+        if message.is_some() {
+            self.file_status = message;
+        }
+        cx.notify();
     }
 
     /// Forget the saved state (the case was cleared or replaced by the example).
@@ -42,7 +67,7 @@ impl Workbench {
 
 #[cfg(test)]
 mod tests {
-    use super::banner_status;
+    use super::{banner_status, save_button_label};
     use crate::status::{Status, Tone};
 
     #[test]
@@ -53,6 +78,21 @@ mod tests {
         assert_eq!(changed.tone, Tone::Attention);
         assert!(changed.text.starts_with("Saved to C:\\cases\\a.classivar.json."), "{}", changed.text);
         assert!(changed.text.contains("changed the case since"), "{}", changed.text);
+    }
+
+    #[test]
+    fn the_save_button_name_carries_the_changed_state() {
+        assert_eq!(save_button_label(false), "Save case…");
+        assert_eq!(save_button_label(true), "Save case… (changed since saved)");
+    }
+
+    #[test]
+    fn an_opened_message_does_not_say_save_again() {
+        let opened = Status::done("Opened. Check the gene again to refresh the gene sources.");
+        let changed = banner_status(&opened, true);
+        assert!(changed.text.starts_with("Opened."), "{}", changed.text);
+        assert!(!changed.text.contains("again to keep"), "nothing was saved in this session: {}", changed.text);
+        assert!(changed.text.ends_with("Save to keep the change."), "{}", changed.text);
     }
 
     #[test]
