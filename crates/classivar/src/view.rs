@@ -61,7 +61,7 @@ use describe::{
 };
 use evidence::{carry_forward, evidence_of, open_notes, to_applied};
 use file_io::{default_save_folder, suggested_file_name, write_case};
-use watchers::{repaint_on_change, watch_gene_box, watch_keys, watch_record_name};
+use watchers::{repaint_on_change, watch_close, watch_gene_box, watch_keys, watch_record_name};
 use widgets::{class_badge, notice};
 
 /// Width of one point in the evidence lanes.
@@ -155,6 +155,8 @@ enum Confirm {
     RemoveRecord(usize, String),
     /// Open a case file over the work on screen.
     OpenCase(Box<CaseFile>),
+    /// Close the window although the case changed since it was saved.
+    CloseWindow,
 }
 
 /// Where one lookup stands.
@@ -253,6 +255,7 @@ impl Workbench {
             cx.new(|cx| InputState::new(window, cx).placeholder("Lab or source, e.g. Lab A (ClinVar)"));
         subscriptions.push(watch_record_name(&record_name_input, window, cx));
         subscriptions.push(watch_keys(cx));
+        watch_close(window, cx);
         let helpers = Helpers::new(rules, &mut subscriptions, window, cx);
         Self {
             rules,

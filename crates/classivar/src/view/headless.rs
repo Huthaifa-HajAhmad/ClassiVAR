@@ -241,3 +241,65 @@ fn loading_the_example_removes_the_marker(cx: &mut TestAppContext) {
         assert!(!this.has_unsaved_changes(cx), "the example is never saved, so it has no file to differ from");
     });
 }
+
+#[gpui::test]
+fn closing_an_unchanged_case_just_closes(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    assert!(cx.simulate_close(), "nothing to lose, so the window closes");
+    assert!(workbench.read_with(cx, |this, _| this.confirm.is_none()));
+
+    workbench.update_in(cx, |this, _, cx| {
+        apply_default(this, "PM2");
+        let saved = this.case_file(cx);
+        this.remember_saved(saved);
+    });
+    assert!(cx.simulate_close(), "a saved case closes without a question");
+
+    workbench.update_in(cx, |this, window, cx| this.load_example(window, cx));
+    assert!(cx.simulate_close(), "the example is a demo and is never saved, so closing it loses nothing");
+}
+
+#[gpui::test]
+fn closing_a_saved_case_that_changed_asks(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    workbench.update_in(cx, |this, _, cx| {
+        apply_default(this, "PM2");
+        let saved = this.case_file(cx);
+        this.remember_saved(saved);
+        apply_default(this, "PS1");
+    });
+    assert!(!cx.simulate_close(), "a change after saving would be lost");
+}
+
+#[gpui::test]
+fn closing_a_changed_case_asks_first_and_cancel_keeps_the_window(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    workbench.update_in(cx, |this, _, _| apply_default(this, "PM2"));
+    assert!(!cx.simulate_close(), "unsaved work must not be thrown away by one click on the close button");
+    assert!(workbench.read_with(cx, |this, _| matches!(this.confirm, Some(super::Confirm::CloseWindow))));
+    draw(cx);
+
+    workbench.update_in(cx, |this, window, cx| this.cancel_confirm(window, cx));
+    assert!(
+        workbench.read_with(cx, |this, _| this.confirm.is_none() && !this.today.is_empty()),
+        "Cancel keeps the case"
+    );
+}
+
+#[gpui::test]
+fn a_close_request_replaces_the_question_that_was_open_and_yes_closes_the_window(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    workbench.update_in(cx, |this, _, _| {
+        apply_default(this, "PM2");
+        this.ask(super::Confirm::LoadExample);
+    });
+    assert!(!cx.simulate_close());
+    assert!(
+        workbench.read_with(cx, |this, _| matches!(this.confirm, Some(super::Confirm::CloseWindow))),
+        "the question about closing must show, not stay hidden behind the older one"
+    );
+    assert!(workbench.read_with(cx, |this, _| !this.example), "the older question was cancelled, not answered");
+
+    workbench.update_in(cx, |this, window, cx| this.apply_confirm(window, cx));
+    assert!(cx.windows().is_empty(), "Yes closes the window");
+}

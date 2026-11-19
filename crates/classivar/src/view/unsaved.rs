@@ -31,6 +31,37 @@ pub(super) fn save_button_label(unsaved: bool) -> &'static str {
 }
 
 impl Workbench {
+    /// The window's close button was pressed. A case that still matches its file
+    /// closes at once. Otherwise the close is refused and a question is shown. A
+    /// question that was already open is cancelled first, so the one about
+    /// closing is the one the curator sees (a second question never replaces the
+    /// first elsewhere, but here the curator has just asked to leave).
+    pub(super) fn close_requested(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        if !self.would_lose_work(cx) {
+            return true;
+        }
+        if self.confirm.is_some() {
+            self.cancel_confirm(window, cx);
+        }
+        self.ask(Confirm::CloseWindow);
+        cx.notify();
+        false
+    }
+
+    /// Would closing the window now throw work away? A case that was saved or
+    /// opened is compared with its file. A case never saved holds work as soon
+    /// as it holds any data. The example is a demo and is never saved, so it
+    /// holds none.
+    fn would_lose_work(&self, cx: &App) -> bool {
+        if self.example {
+            return false;
+        }
+        match self.saved_case {
+            Some(_) => self.has_unsaved_changes(cx),
+            None => self.has_case_data(cx),
+        }
+    }
+
     /// Remember a case as the saved state: what was written to a file, or what was just opened.
     pub(super) fn remember_saved(&mut self, case: CaseFile) {
         self.saved_case = Some(case);

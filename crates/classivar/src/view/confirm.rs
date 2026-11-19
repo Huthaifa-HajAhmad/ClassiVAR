@@ -20,6 +20,7 @@ impl Workbench {
             Confirm::LoadExample => self.load_example(window, cx),
             Confirm::OpenCase(case) => self.apply_case(*case, window, cx),
             Confirm::RemoveRecord(index, _) => self.remove_record(index, window, cx),
+            Confirm::CloseWindow => window.remove_window(),
             Confirm::NewGene(symbol) => {
                 self.clear_case(window, cx);
                 self.run_gene_check(symbol, cx);
@@ -63,6 +64,10 @@ impl Workbench {
                 "You are switching from {} to {}. The evidence, records, gene decision and variant name belong to {}. Start a new case for {}? This clears them.",
                 self.case_gene, symbol, self.case_gene, symbol
             ),
+            Confirm::CloseWindow => {
+                "You have changed the case since it was saved. Close ClassiVAR and lose the change? Choose Cancel, then Save case, to keep it."
+                    .to_string()
+            }
             Confirm::RemoveRecord(_, label) => {
                 format!("Remove {label} and every criterion it reported? This cannot be undone.")
             }
