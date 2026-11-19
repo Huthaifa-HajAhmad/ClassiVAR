@@ -107,13 +107,14 @@ fn contradicting_evidence_draws_without_panicking_and_has_no_class(cx: &mut Test
 fn every_helper_open_at_once_draws_without_panicking(cx: &mut TestAppContext) {
     let (workbench, cx) = open(cx, ThemeMode::Light);
     workbench.update_in(cx, |this, _, _| {
-        this.predictor_open = true;
-        this.functional_open = true;
-        this.locus_open = true;
-        this.segregation_open = true;
-        this.pm3_open = true;
-        this.ba1_open = true;
-        this.de_novo_open = true;
+        let helpers = &mut this.helpers;
+        helpers.predictor.open = true;
+        helpers.functional.open = true;
+        helpers.locus.open = true;
+        helpers.segregation.open = true;
+        helpers.pm3.open = true;
+        helpers.ba1_open = true;
+        helpers.de_novo.open = true;
     });
     draw(cx);
 }

@@ -12,6 +12,7 @@
 use classivar_core::Direction;
 
 use super::*;
+use crate::view::describe::Scale;
 
 /// Width of the column with a bar's label and note, and of the one with where it ends.
 const LABEL_WIDTH: f32 = 96.0;

@@ -13,6 +13,7 @@ mod date;
 pub mod g2p;
 pub mod panelapp;
 
+use std::sync::OnceLock;
 use std::time::{Duration, SystemTime};
 
 /// A value together with where it came from and when.
@@ -60,12 +61,18 @@ pub enum SourceError {
     Unexpected(String),
 }
 
-/// Gene symbols are letters, digits and hyphens. Checking once here keeps odd text out of web addresses.
+/// Is this text shaped like a gene symbol? Letters, digits and hyphens, up to 20
+/// characters, ignoring spaces around it. The screen asks this before it starts a
+/// lookup, so it can say what is wrong without waiting for the network.
+pub fn is_gene_symbol(text: &str) -> bool {
+    let text = text.trim();
+    !text.is_empty() && text.len() <= 20 && text.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+}
+
+/// A gene symbol in upper case. Checking once here keeps odd text out of web addresses.
 fn check_symbol(symbol: &str) -> Result<String, SourceError> {
     let symbol = symbol.trim().to_ascii_uppercase();
-    let valid =
-        !symbol.is_empty() && symbol.len() <= 20 && symbol.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
-    if valid { Ok(symbol) } else { Err(SourceError::InvalidSymbol(symbol)) }
+    if is_gene_symbol(&symbol) { Ok(symbol) } else { Err(SourceError::InvalidSymbol(symbol)) }
 }
 
 /// An answer from a service. Rate limits and server errors are retried and then
@@ -106,14 +113,19 @@ fn describe(error: ureq::Error) -> SourceError {
 /// One web client setup for every lookup. It gives up after 30 seconds, names
 /// this program in the request, and hands back every HTTP status so the caller
 /// can read the body of a 404 (a status is not treated as a failure here).
-fn http_agent() -> ureq::Agent {
-    let user_agent = format!("ClassiVAR/{} (variant curation learning tool)", env!("CARGO_PKG_VERSION"));
-    ureq::Agent::config_builder()
-        .timeout_global(Some(Duration::from_secs(30)))
-        .http_status_as_error(false)
-        .user_agent(user_agent)
-        .build()
-        .into()
+fn http_agent() -> &'static ureq::Agent {
+    // One agent for the whole program: its connections are reused, so the pages of
+    // one PanelApp search and later lookups do not each open a new connection.
+    static AGENT: OnceLock<ureq::Agent> = OnceLock::new();
+    AGENT.get_or_init(|| {
+        let user_agent = format!("ClassiVAR/{} (variant curation learning tool)", env!("CARGO_PKG_VERSION"));
+        ureq::Agent::config_builder()
+            .timeout_global(Some(Duration::from_secs(30)))
+            .http_status_as_error(false)
+            .user_agent(user_agent)
+            .build()
+            .into()
+    })
 }
 
 /// Fetch a web address, retrying rate limits and server errors a few times.
@@ -165,6 +177,18 @@ mod tests {
         assert!(check_symbol("").is_err());
         assert!(check_symbol("BRCA1&format=xml").is_err());
         assert!(check_symbol("A VERY LONG TEXT THAT IS NOT A GENE").is_err());
+    }
+
+    #[test]
+    fn only_symbol_shaped_text_is_a_gene_symbol() {
+        assert!(is_gene_symbol("BRCA1"));
+        assert!(is_gene_symbol("NKX2-5"));
+        assert!(is_gene_symbol(" c9orf72 "));
+        assert!(!is_gene_symbol(""));
+        assert!(!is_gene_symbol("   "));
+        assert!(!is_gene_symbol("BRCA1; DROP"));
+        assert!(!is_gene_symbol("a b"));
+        assert!(!is_gene_symbol(&"A".repeat(21)));
     }
 
     #[test]

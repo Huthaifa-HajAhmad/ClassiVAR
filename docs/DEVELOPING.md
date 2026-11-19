@@ -75,15 +75,20 @@ It is Windows-only because it drives UI Automation. The paths it does **not** co
 | You want to change… | Edit |
 |---|---|
 | criterion wording, points, caps, class limits, exclusivity, PVS1 guide | `rules/acmg-amp-points.toml` |
-| how rules are loaded/validated | `crates/classivar-core/src/rules.rs` |
-| scoring, 2015 table, conflicts, both-sides rule | `crates/classivar-core/src/assess.rs` |
+| the shape of the rule file (types) | `crates/classivar-core/src/rules/` (`basics.rs`, `criterion.rs`, `tables.rs`) |
+| how rules are checked at load | `crates/classivar-core/src/rules/check*.rs` |
+| how a score or count is read against a table | `crates/classivar-core/src/rules/read.rs` |
+| scoring, conflicts, caps, warnings | `crates/classivar-core/src/assess/` (`mod.rs`, `item.rs`, `pairs.rs`) |
+| the 2015 combining table | `crates/classivar-core/src/assess/classic.rs` |
 | reported-variant comparison and verdict | `crates/classivar-core/src/reevaluate.rs` |
 | saved-case JSON and version checks | `crates/classivar-core/src/case.rs` |
 | ClinGen/G2P/PanelApp access | `crates/classivar-sources/src/` |
-| screen state and actions | `crates/classivar/src/view.rs` |
-| drawing (top bar, panels, criteria, result) | `crates/classivar/src/view/panels.rs` |
+| screen state, its types and the constructor | `crates/classivar/src/view.rs` |
+| what a click or key does, earlier records, gene lookups, save and open, the question window | `crates/classivar/src/view/` (`actions.rs`, `records.rs`, `gene.rs`, `case_io.rs`, `confirm.rs`) |
+| bringing saved or copied evidence onto today's rules | `crates/classivar/src/view/evidence.rs` (`carry_forward`) |
+| drawing (top bar, panels, criteria, result, history) | `crates/classivar/src/view/panels/` (one file per panel) |
 | the Evidence helpers bar (which helpers show, and their buttons) | `crates/classivar/src/view/panels/helper_bar.rs` |
-| criteria helper panels (predictor score, functional assay, family and phenotype points, non-segregation, PM3, de novo, BA1 reference, reason prompt) | `crates/classivar/src/view/panels/helpers.rs` |
+| an evidence helper: what its typed values mean, and its panel | `crates/classivar/src/view/panels/helpers/` (one file each); its open/typed state is in `crates/classivar/src/view/helper_state.rs` |
 | the app's own colours and their contrast test | `crates/classivar/src/design.rs` |
 | gene suggestions | `crates/classivar/src/genes.rs` |
 | theme preference | `crates/classivar/src/settings.rs` |
@@ -128,7 +133,7 @@ Add `guide_source` and one or more `[[criteria.guide]]` entries. Each needs a st
 
 ### Change the screen
 
-1. State and actions in `view.rs`, drawing in `view/panels.rs`. Keep functions small: the Windows debug stack is the reason.
+1. State in `view.rs` and `view/helper_state.rs`, actions in `view/*.rs`, drawing in `view/panels/`. Work out what a value means in a plain function with a test, and keep each drawing function small: the Windows debug stack is the reason.
 2. Use theme tokens (`cx.theme()`) for chrome and the checked pairs for evidence colours. Add a contrast test if you add a new pair.
 3. Give every button a stable id and, when the label is a glyph or an abbreviation, an `accessibility_label`; give every text box an `aria_label`. The smoke script finds both by those names.
 4. Run `scripts/gui-smoke.ps1` and click the new path.

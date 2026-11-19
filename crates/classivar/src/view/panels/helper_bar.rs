@@ -16,91 +16,112 @@ struct Entry {
     panel: fn(&Workbench, &mut Context<Workbench>) -> AnyElement,
 }
 
+impl Entry {
+    fn new(
+        names: (&'static str, &'static str, &'static str),
+        open: bool,
+        toggle: fn(&mut Workbench),
+        panel: fn(&Workbench, &mut Context<Workbench>) -> AnyElement,
+    ) -> Self {
+        let (key, label, what) = names;
+        Self { key, label, what, open, toggle, panel }
+    }
+}
+
 impl Workbench {
     pub(super) fn toggle_predictor(&mut self) {
-        self.predictor_open = !self.predictor_open;
-        if !self.predictor_open {
-            self.predictor_eligible = false;
+        self.helpers.predictor.open = !self.helpers.predictor.open;
+        if !self.helpers.predictor.open {
+            self.helpers.predictor.eligible = false;
         }
     }
 
     /// The helpers that apply to what is on screen. The evidence helpers fill in
     /// today's evidence only; the BA1 list is a dated reference and also shows
     /// for earlier records. It cannot insert evidence.
-    fn helper_entries(&self) -> Vec<Entry> {
-        let rules = self.rules;
+    fn evidence_entries(&self) -> Vec<Entry> {
+        let (rules, helpers) = (self.rules, &self.helpers);
         let today = self.editing == Editing::Today;
-        let mut entries = Vec::new();
-        if today && !rules.predictors.is_empty() {
-            entries.push(Entry {
-                key: "predictor",
-                label: "Predictor score",
-                what: "predictor score helper",
-                open: self.predictor_open,
-                toggle: Self::toggle_predictor,
-                panel: Self::predictor_helper,
-            });
-        }
-        if today && rules.functional.is_some() {
-            entries.push(Entry {
-                key: "functional",
-                label: "Functional assay",
-                what: "functional evidence helper",
-                open: self.functional_open,
-                toggle: |this| this.functional_open = !this.functional_open,
-                panel: Self::functional_helper,
-            });
-        }
-        if today && rules.locus_evidence.is_some() {
-            entries.push(Entry {
-                key: "locus",
-                label: "Family and phenotype",
-                what: "co-segregation and phenotype helper",
-                open: self.locus_open,
-                toggle: |this| this.locus_open = !this.locus_open,
-                panel: Self::locus_helper,
-            });
-        }
-        if today && rules.non_segregation.is_some() {
-            entries.push(Entry {
-                key: "segregation",
-                label: "Non-segregation",
-                what: "non-segregation helper",
-                open: self.segregation_open,
-                toggle: |this| this.segregation_open = !this.segregation_open,
-                panel: Self::non_segregation_helper,
-            });
-        }
-        if today && rules.pm3.is_some() {
-            entries.push(Entry {
-                key: "pm3",
-                label: "PM3 patients",
-                what: "PM3 patients helper",
-                open: self.pm3_open,
-                toggle: |this| this.pm3_open = !this.pm3_open,
-                panel: Self::pm3_helper,
-            });
-        }
-        if !rules.ba1_exceptions.is_empty() {
-            entries.push(Entry {
-                key: "ba1-reference",
-                label: "BA1 exceptions",
-                what: "BA1 exceptions reference",
-                open: self.ba1_open,
-                toggle: |this| this.ba1_open = !this.ba1_open,
-                panel: Self::ba1_reference,
-            });
-        }
-        if today && rules.de_novo.is_some() {
-            entries.push(Entry {
-                key: "de-novo",
-                label: "De novo patients",
-                what: "de novo helper",
-                open: self.de_novo_open,
-                toggle: |this| this.de_novo_open = !this.de_novo_open,
-                panel: Self::de_novo_helper,
-            });
-        }
+        let table = [
+            (
+                today && !rules.predictors.is_empty(),
+                Entry::new(
+                    ("predictor", "Predictor score", "predictor score helper"),
+                    helpers.predictor.open,
+                    Self::toggle_predictor,
+                    Self::predictor_helper,
+                ),
+            ),
+            (
+                today && rules.functional.is_some(),
+                Entry::new(
+                    ("functional", "Functional assay", "functional evidence helper"),
+                    helpers.functional.open,
+                    |this| this.helpers.functional.open = !this.helpers.functional.open,
+                    Self::functional_helper,
+                ),
+            ),
+            (
+                today && rules.locus_evidence.is_some(),
+                Entry::new(
+                    ("locus", "Family and phenotype", "co-segregation and phenotype helper"),
+                    helpers.locus.open,
+                    |this| this.helpers.locus.open = !this.helpers.locus.open,
+                    Self::locus_helper,
+                ),
+            ),
+            (
+                today && rules.non_segregation.is_some(),
+                Entry::new(
+                    ("segregation", "Non-segregation", "non-segregation helper"),
+                    helpers.segregation.open,
+                    |this| this.helpers.segregation.open = !this.helpers.segregation.open,
+                    Self::non_segregation_helper,
+                ),
+            ),
+        ];
+        table.into_iter().filter_map(|(applies, entry)| applies.then_some(entry)).collect()
+    }
+
+    /// The helpers about patients and the dated BA1 list (the list also shows for earlier records).
+    fn patient_entries(&self) -> Vec<Entry> {
+        let (rules, helpers) = (self.rules, &self.helpers);
+        let today = self.editing == Editing::Today;
+        let table = [
+            (
+                today && rules.pm3.is_some(),
+                Entry::new(
+                    ("pm3", "PM3 patients", "PM3 patients helper"),
+                    helpers.pm3.open,
+                    |this| this.helpers.pm3.open = !this.helpers.pm3.open,
+                    Self::pm3_helper,
+                ),
+            ),
+            (
+                !rules.ba1_exceptions.is_empty(),
+                Entry::new(
+                    ("ba1-reference", "BA1 exceptions", "BA1 exceptions reference"),
+                    helpers.ba1_open,
+                    |this| this.helpers.ba1_open = !this.helpers.ba1_open,
+                    Self::ba1_reference,
+                ),
+            ),
+            (
+                today && rules.de_novo.is_some(),
+                Entry::new(
+                    ("de-novo", "De novo patients", "de novo helper"),
+                    helpers.de_novo.open,
+                    |this| this.helpers.de_novo.open = !this.helpers.de_novo.open,
+                    Self::de_novo_helper,
+                ),
+            ),
+        ];
+        table.into_iter().filter_map(|(applies, entry)| applies.then_some(entry)).collect()
+    }
+
+    fn helper_entries(&self) -> Vec<Entry> {
+        let mut entries = self.evidence_entries();
+        entries.extend(self.patient_entries());
         entries
     }
 

@@ -31,9 +31,11 @@ powershell -ExecutionPolicy Bypass -File scripts/gui-smoke.ps1   # Windows UI sm
 
 ```
 rules/acmg-amp-points.toml   all clinical content: criteria, points, classes, sources, guides, caps
-crates/classivar-core/       engine, no UI: rules.rs (load+check), assess.rs (score), combining_table.rs (the 2015 table as rows), reevaluate.rs (reported variants), case.rs (file format)
+crates/classivar-core/       engine, no UI: rules/ (load + check; check*.rs, read.rs for the helper tables), assess/ (score), combining_table.rs (the 2015 table as rows), reevaluate.rs (reported variants), case.rs (file format)
 crates/classivar-sources/    ClinGen, G2P, PanelApp clients; shared HTTP rules and caps
-crates/classivar/            GPUI app: main.rs, view.rs (Workbench state), view/panels.rs, view/panels/helper_bar.rs, view/panels/helpers.rs, view/panels/evidence_stack.rs, view/panels/combining_table.rs, view/panels/point_axis.rs, view/panels/what_if.rs, view/panels/timeline.rs and view/panels/strength_ladder.rs (drawing; the layout rules of the stack, the table, the timeline and the ladder are plain tested functions, and point_axis draws the axis the stack, the "what if" bars and the timeline share), design.rs (the app's own colours), genes.rs, settings.rs
+crates/classivar/            GPUI app: main.rs, view.rs (Workbench state), view/*.rs (actions, records, gene lookups, save/open, helper_state.rs), view/panels/ (drawing, one file per panel) and view/panels/helpers/ (one file per evidence helper), design.rs (the app's own colours), genes.rs, settings.rs
+                             The three pictures that explain a class are panels too: evidence_stack.rs, combining_table.rs, what_if.rs, timeline.rs and strength_ladder.rs. point_axis.rs draws the axis the stack, the "what if" bars and the timeline share. Their layout rules are plain tested functions; the drawing on top is thin.
+                             view/headless.rs: tests that draw the real window in GPUI's test platform (see "Verify a UI change")
 docs/                        ROADMAP.md is the current status; ARCHITECTURE.md is the map; AUDIT is historical
 ```
 
@@ -50,7 +52,7 @@ Key types: `RuleSet` → `Applied` → `Assessment` (`class()`, `points_class`, 
 - The fictional example never names a variant or gene on its own: saving is refused and checking a gene asks first, so a demo case cannot be attributed to a real variant (`Workbench.example`).
 - Colours: use theme tokens for chrome, and the checked WCAG pairs in `design.rs` (`class_fill`/`class_ink`, `direction_colour`/`direction_ink`, warning pair) for meaning. Do not write a raw `rgb(...)` in a view file. Extend the contrast test for both themes if you add a pair.
 - The debug build once overflowed the 1 MB Windows stack. Keep render functions small; `build.rs` requests 16 MB as a second safety net.
-- Saved case files contain variant, gene and lab history. `*.classivar.json` is git-ignored; keep it that way. `CaseFile::from_json` caps field lengths and the record count; raise the caps together with the app's own typing caps.
+- Saved case files contain variant, gene and lab history. `*.classivar.json` is git-ignored; keep it that way. `CaseFile::from_json` caps field lengths and the record count. The variant, lab-name and year limits are public constants in `case.rs` that the app types against, so there is one number to change. The gene symbol shape is `classivar_sources::is_gene_symbol`.
 
 ## Verify a UI change
 
@@ -65,8 +67,10 @@ The unit tests do not draw the window, and a stack overflow or a bad binding onl
 - Theme preference: `%APPDATA%\ClassiVAR\settings.txt` (`theme=dark|light`).
 - A case saved under other rules says so on open; per-record rule sets are intentionally not saved.
 - Live source tests hit real services; run them separately, not in the merge gate.
-- CI (`.github/workflows/`) first ran on 2026-11-05 (run URL in `docs/ROADMAP.md`, D3). It has not run since the headless window tests were added, so treat "CI covers it" as unverified until a newer run URL is in `docs/ROADMAP.md`.
-- The repository had no commits beyond the audit baseline when this file was written. Do not commit unless the user asks.
+- CI (`.github/workflows/`) runs the merge gate on Windows and macOS plus `cargo audit`; the first fully green run is linked in `README.md`. It has not run since the headless window tests were added, so treat "CI covers them" as unverified until a newer run URL is in `docs/ROADMAP.md`. The Windows UI smoke test is not part of CI: run it yourself after a UI change.
+- Do not commit unless the user asks.
+- Size limits: files of 300 lines (a test block in the same file may go over) and functions of 50 lines hold in all three crates. Keep it that way. A new helper is one state type in `view/helper_state.rs`, one file in `view/panels/helpers/` with a tested function that reads the typed values, and one entry in `view/panels/helper_bar.rs`.
+- Saved text with non-ASCII characters (`•`, `·`, `→`) is easy to damage when a script reads a file with the wrong encoding. After a scripted edit, search for `â€` and `Â`.
 
 ## When you change behaviour
 
