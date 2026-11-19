@@ -103,6 +103,18 @@ fn total_of(record: &Rescored) -> Result<i32, Skip> {
     }
 }
 
+/// The year, which is what the bar is ordered by. When another drawn record has
+/// the same year, the start of the lab's name is added so the bars can be told apart.
+fn bar_label(record: &Rescored, shares_year: bool) -> String {
+    const LAB_CHARS: usize = 8;
+    if !shares_year {
+        return record.year.to_string();
+    }
+    let lab: String = record.label.chars().take(LAB_CHARS).collect();
+    let cut = if record.label.chars().count() > LAB_CHARS { "…" } else { "" };
+    format!("{} · {lab}{cut}", record.year)
+}
+
 fn points_in_words(points: i32) -> String {
     format!("{} point{}", points_text(points), plural(points.abs()))
 }
@@ -116,20 +128,18 @@ fn timeline(re: &Reevaluation) -> Option<Timeline> {
     let mut bars = Vec::new();
     let mut parts = Vec::new();
     let mut skipped = Skipped::default();
+    let mut drawn = Vec::new();
     for record in oldest_first(re) {
         match total_of(record) {
-            Ok(points) => {
-                let reported = record.reported_class.short();
-                bars.push(bar(record.year.to_string(), format!("reported {reported}"), points));
-                parts.push(format!(
-                    "{} {} reported {reported} ({})",
-                    record.year,
-                    record.label,
-                    points_in_words(points)
-                ));
-            }
+            Ok(points) => drawn.push((record, points)),
             Err(skip) => skipped.add(skip),
         }
+    }
+    for (record, points) in &drawn {
+        let reported = record.reported_class.short();
+        let shares_year = drawn.iter().filter(|(other, _)| other.year == record.year).count() > 1;
+        bars.push(bar(bar_label(record, shares_year), format!("reported {reported}"), *points));
+        parts.push(format!("{} {} reported {reported} ({})", record.year, record.label, points_in_words(*points)));
     }
     bars.push(bar("Today".to_string(), format!("now {}", today.points_class.short()), today.total_points));
     parts.push(format!("today {}, {}", points_in_words(today.total_points), today.points_class.short()));
@@ -202,6 +212,19 @@ mod tests {
         let drawn = timeline(&re).expect("today has a class");
         assert_eq!(drawn.bars[0].note, "reported VUS");
         assert_eq!(drawn.bars[1].note, "reported LP");
+    }
+
+    #[test]
+    fn records_from_the_same_year_are_told_apart_by_their_lab_and_others_keep_just_the_year() {
+        let records = [
+            record("Lab Alpha Laboratories", 2020, Class::Vus, &[("PM2", Strength::Supporting)]),
+            record("Lab B", 2020, Class::Vus, &[("PM2", Strength::Supporting)]),
+            record("Lab C", 2023, Class::Vus, &[("PM2", Strength::Supporting)]),
+        ];
+        let re = rules().reevaluate(&records, &today());
+        let drawn = timeline(&re).expect("today has a class");
+        let labels: Vec<_> = drawn.bars.iter().map(|b| b.label.as_str()).collect();
+        assert_eq!(labels, ["2020 · Lab Alph…", "2020 · Lab B", "2023", "Today"]);
     }
 
     #[test]
