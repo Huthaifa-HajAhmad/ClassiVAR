@@ -12,7 +12,7 @@ impl Workbench {
     }
 
     pub(super) fn inspector(&self, assessment: &Assessment, cx: &mut Context<Self>) -> Div {
-        let (muted, border) = (cx.theme().muted_foreground, cx.theme().border);
+        let muted = cx.theme().muted_foreground;
         let item = assessment.items.iter().find(|item| item.counted && Some(&item.code) == self.inspected.as_ref());
         let found =
             item.and_then(|item| Some((item, self.rules.criterion(&item.code)?, self.current().get(&item.code)?)));
@@ -22,14 +22,7 @@ impl Workbench {
             } else {
                 "Click a block to see why it counts."
             };
-            return div()
-                .px_3()
-                .py_2()
-                .rounded_md()
-                .border_1()
-                .border_dashed()
-                .border_color(border)
-                .child(caption(muted).child(hint));
+            return div().flex().justify_center().child(caption(muted).child(hint));
         };
         let mut body = div()
             .flex_1()
@@ -50,10 +43,10 @@ impl Workbench {
         }
         div()
             .flex()
-            .rounded_lg()
+            .rounded(px(crate::look::CARD_RADIUS))
             .overflow_hidden()
-            .bg(cx.theme().secondary)
-            .child(div().w(px(6.)).flex_none().bg(direction_colour(item.direction)))
+            .bg(cx.theme().muted)
+            .child(div().w(px(4.)).flex_none().bg(direction_colour(item.direction)))
             .child(body.p_4())
     }
 
@@ -100,13 +93,12 @@ fn inspector_title(item: &Item) -> Div {
         .items_center()
         .gap_3()
         .child(
-            div()
+            crate::look::figure(13.)
                 .px_2()
                 .py(px(2.))
-                .rounded_md()
+                .rounded(px(7.))
                 .bg(direction_colour(item.direction))
                 .text_color(direction_ink())
-                .font_weight(FontWeight::BOLD)
                 .child(item.code.clone()),
         )
         .child(div().text_lg().font_weight(FontWeight::SEMIBOLD).child(format!(
@@ -124,7 +116,7 @@ fn outcome_tile(
     cx: &Context<Workbench>,
 ) -> Div {
     let dark = cx.theme().is_dark();
-    let tile = div().min_w(px(150.)).px_3().py_2().rounded_md().flex().flex_col().gap_1();
+    let tile = div().min_w(px(150.)).px_3().py_2().rounded(px(crate::look::CARD_RADIUS)).flex().flex_col().gap_1();
     let (class, line) = match outcome {
         Ok(result) => match result.class() {
             Some(class) => (Some(class), format!("{} points", points_text(result.total_points))),

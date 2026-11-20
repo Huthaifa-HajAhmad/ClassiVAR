@@ -131,10 +131,24 @@ impl Workbench {
         if entries.is_empty() {
             return Vec::new();
         }
+        let label = if self.show_helpers { "Hide evidence helpers" } else { "Evidence helpers" };
+        let count = format!("{} {}", entries.len(), if self.show_helpers { "▴" } else { "▾" });
         let toggle = Button::new("evidence-tools")
             .small()
             .ghost()
-            .label(if self.show_helpers { "Hide evidence helpers" } else { "Evidence helpers" })
+            .w_full()
+            .rounded(px(crate::look::CARD_RADIUS))
+            .bg(cx.theme().muted)
+            .accessibility_label(label)
+            .child(
+                div()
+                    .w_full()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child(label))
+                    .child(crate::look::figure(11.).text_color(cx.theme().muted_foreground).child(count)),
+            )
             .toggled(self.show_helpers)
             .on_click(cx.listener(|this, _, _, cx| {
                 this.show_helpers = !this.show_helpers;
@@ -153,6 +167,7 @@ impl Workbench {
                     .accessibility_label(format!("Open the {}", entry.what))
                     .small()
                     .outline()
+                    .rounded(px(999.))
                     .selected(open)
                     .toggled(open)
                     .on_click(cx.listener(move |this, _, _, cx| {

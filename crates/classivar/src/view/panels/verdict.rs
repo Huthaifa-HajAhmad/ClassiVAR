@@ -11,7 +11,7 @@ impl Workbench {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let (border, muted) = (cx.theme().border, cx.theme().muted_foreground);
-        let card = div().flex().flex_col().gap_2().p_4().rounded_lg().border_1().border_color(border);
+        let card = crate::look::card(cx).flex().flex_col().gap_2().p_4();
         let warn = |text: String| notice(text, warning_fill(), warning_ink());
 
         let Some(re) = re else {

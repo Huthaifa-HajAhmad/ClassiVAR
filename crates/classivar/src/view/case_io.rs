@@ -190,19 +190,32 @@ impl Workbench {
         };
         Some(
             div()
-                .flex()
-                .flex_wrap()
-                .items_center()
-                .gap_3()
                 .px_4()
-                .py_1()
-                .child(notice(status.text.clone(), fill, ink))
-                .child(Button::new("file-status-dismiss").label("Dismiss").small().outline().on_click(cx.listener(
-                    |this, _, _, cx| {
-                        this.file_status = None;
-                        cx.notify();
-                    },
-                )))
+                .pb_3()
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_3()
+                        .pl_4()
+                        .pr_1()
+                        .py_1()
+                        .rounded(px(crate::look::CARD_RADIUS))
+                        .bg(fill)
+                        .text_color(ink)
+                        .child(div().flex_1().text_sm().child(status.text.clone()))
+                        .child(
+                            Button::new("file-status-dismiss")
+                                .label("Dismiss")
+                                .small()
+                                .ghost()
+                                .text_color(ink)
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.file_status = None;
+                                    cx.notify();
+                                })),
+                        ),
+                )
                 .into_any_element(),
         )
     }

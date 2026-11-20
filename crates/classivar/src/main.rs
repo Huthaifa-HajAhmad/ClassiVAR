@@ -1,5 +1,7 @@
 mod design;
 mod genes;
+mod labs;
+mod look;
 mod settings;
 mod status;
 mod theme;
@@ -50,6 +52,7 @@ fn main() {
     };
     application().with_assets(assets::Assets).run(move |cx| {
         init(cx);
+        look::install_fonts(cx);
         // Start in the theme last chosen on this machine (light if there is no choice).
         theme::install(settings::load_theme(), cx);
         let bounds = Bounds::centered(None, size(px(1240.), px(900.)), cx);

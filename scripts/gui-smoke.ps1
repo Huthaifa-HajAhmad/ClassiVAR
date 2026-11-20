@@ -161,9 +161,17 @@ try {
     }
     function Invoke-Element($el) {
         Bring-Into-View $el
-        try {
-            $el.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
-        } catch {
+        $done = $false
+        foreach ($pattern in @([System.Windows.Automation.InvokePattern]::Pattern, [System.Windows.Automation.TogglePattern]::Pattern)) {
+            if ($done) { break }
+            try {
+                $action = $el.GetCurrentPattern($pattern)
+                if ($pattern -eq [System.Windows.Automation.InvokePattern]::Pattern) { $action.Invoke() } else { $action.Toggle() }
+                $done = $true
+            } catch {}
+        }
+        # A pressed-state button offers Toggle instead of Invoke; both are tried above.
+        if (-not $done) {
             # Some custom-drawn buttons do not expose Invoke. Fall back to a real
             # mouse click, but only after checking focus again: a click at a stale
             # position would land in another window.
@@ -188,6 +196,25 @@ try {
         [ClassiVarSmokeWin]::mouse_event(0x04, 0, 0, 0, [UIntPtr]::Zero)
         Start-Sleep -Milliseconds 450
     }
+    # A menu item (the strength menu, the lab menu) may not be exposed as a button,
+    # so it is found by its name alone, newest first, since an open menu is drawn last.
+    function Choose-Menu-Item([string]$name) {
+        Focus-App
+        for ($i = 0; $i -lt 25; $i++) {
+            $cond = New-Object System.Windows.Automation.PropertyCondition(
+                [System.Windows.Automation.AutomationElement]::NameProperty, $name)
+            $all = @((Root).FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond))
+            if ($all.Count -gt 0) { Invoke-Element $all[-1]; return }
+            Start-Sleep -Milliseconds 150
+        }
+        throw "menu item not found: $name"
+    }
+    # Pick a strength from a criterion's strength menu.
+    function Choose-Strength([string]$code, [string]$strength) {
+        Scroll-To-Button "$code strength:*"
+        Click-Button-Like "$code strength:*"
+        Choose-Menu-Item $strength
+    }
     function Click-Button-Like([string]$name) {
         Focus-App
         Invoke-Element (Find-Button-Like $name)
@@ -197,7 +224,13 @@ try {
     function Find-Box([string]$placeholder) {
         $cond = New-Object System.Windows.Automation.PropertyCondition(
             [System.Windows.Automation.AutomationElement]::NameProperty, $placeholder)
-        return (Root).FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)
+        # A box that a click just revealed can take a moment to reach the automation tree.
+        for ($i = 0; $i -lt 10; $i++) {
+            $box = (Root).FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)
+            if ($null -ne $box) { return $box }
+            Start-Sleep -Milliseconds 150
+        }
+        return $null
     }
     function Gene-Box { return Find-Box "Gene symbol" }
     function Set-GeneText([string]$text) { Set-BoxText "Gene symbol" $text }
@@ -210,6 +243,13 @@ try {
     function Set-BoxText([string]$placeholder, [string]$text) {
         Focus-App
         $box = Find-Box $placeholder
+        # Only what is on screen is in the automation tree. The case form sits at
+        # the top of the editor sheet, so a helper's box may be a page further down.
+        for ($i = 0; $null -eq $box -and $i -lt 4; $i++) {
+            Point-At-List
+            Press-Key "{PGDN}"
+            $box = Find-Box $placeholder
+        }
         if ($null -eq $box) { throw "text box not found: $placeholder" }
         $box.SetFocus()
         Start-Sleep -Milliseconds 200
@@ -378,6 +418,7 @@ try {
     Set-BoxText "Validation control count" "12"
     Click-Button-Like "Apply PS3 Moderate*"
     Find-Button-Like "PS3:*applied*" | Out-Null
+    Scroll-To-Button "OddsPath value"
     Click-Button "OddsPath value"
     Set-BoxText "OddsPath value from the assay" "400"
     Find-Button-Like "Apply PS3 Very strong*" | Out-Null
@@ -530,21 +571,16 @@ try {
     # The helper panels above push these rows down, so each click scrolls to its button first.
     Scroll-To-Button "PM1:*not applied*"
     Click-Button-Like "PM1:*not applied*"
-    Scroll-To-Button "PM1 strength: Moderate*"
-    Click-Button-Like "PM1 strength: Moderate*"
+    Choose-Strength "PM1" "Strong"
     $raise = Capture "05d-raise-reason"
     Set-BoxText "Reason for raising the strength" "Hot spot in a well-studied domain"
     Scroll-To-Button "Save the reason and raise PM1*"
     Click-Button-Like "Save the reason and raise PM1*"
     Find-Button-Like "PM1 strength: Strong*" | Out-Null
-    # Strong -> Supporting -> Moderate (the default) need no reason; the next
-    # click raises again and asks. Escape then leaves the strength unchanged.
-    Scroll-To-Button "PM1 strength:*"
-    Click-Button-Like "PM1 strength:*"
-    Click-Button-Like "PM1 strength:*"
+    # Back to the default needs no reason; raising again asks. Escape then leaves the strength unchanged.
+    Choose-Strength "PM1" "Moderate"
     Find-Button-Like "PM1 strength: Moderate*" | Out-Null
-    Scroll-To-Button "PM1 strength:*"
-    Click-Button-Like "PM1 strength:*"
+    Choose-Strength "PM1" "Strong"
     Find-Button-Like "Save the reason and raise PM1*" | Out-Null
     Press-Escape
     Find-Button-Like "PM1 strength: Moderate*" | Out-Null
@@ -552,8 +588,7 @@ try {
         throw "Escape did not close the reason prompt"
     }
     # Clicking the criterion code removes it, and its open reason prompt goes with it.
-    Scroll-To-Button "PM1 strength:*"
-    Click-Button-Like "PM1 strength:*"
+    Choose-Strength "PM1" "Strong"
     Find-Button-Like "Save the reason and raise PM1*" | Out-Null
     Scroll-To-Button "PM1:*applied*"
     Click-Button-Like "PM1:*applied*"

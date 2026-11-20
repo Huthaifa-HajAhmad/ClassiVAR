@@ -52,10 +52,12 @@ ClassiVAR/
 │     └─ src/
 │        ├─ main.rs        checks the rules, starts the app, opens the window
 │        ├─ genes.rs       the gene-symbol fill-in list (typing aid, not a check)
-│        ├─ settings.rs    the one saved preference: light or dark theme
+│        ├─ labs.rs        the lab-name fill-in list: names already in the case, then labs that often submit to ClinVar (typing aid, not a register)
+│        ├─ settings.rs    the saved preferences: light or dark theme, and the picture (dial, column or track)
 │        ├─ status.rs      a message about a file or case action with its kind (done, or needs attention)
 │        ├─ theme.rs       installs the ClassiVAR light and dark themes (`assets/classivar-theme.json`) over the kit's defaults
 │        ├─ design.rs      the colours the app owns, the one job of each, and their contrast tests
+│        ├─ look.rs        the design system: type roles (eyebrow, display, figure), floating panels and their shadows, the segmented control, the status pill, and the built-in font (JetBrains Mono, `assets/fonts/`, SIL Open Font Licence in `OFL.txt`)
 │        ├─ view.rs        the state of the main screen (type `Workbench`), its types and its constructor
 │        └─ view/          what the screen does, one file per concern
 │           ├─ actions.rs, records.rs, gene.rs, confirm.rs, case_io.rs, example.rs   clicks and keys, earlier records, gene lookups, the question window, save and open, the fictional example
@@ -63,9 +65,12 @@ ClassiVAR/
 │           ├─ helper_state.rs  the state of every helper in one `Helpers` value (one small type per helper), and the number parsing
 │           ├─ describe.rs, widgets.rs, file_io.rs, watchers.rs   plain-text descriptions and the points scale, shared drawing pieces, file names and safe writing, input watchers
 │           ├─ headless.rs      tests that draw the real window in GPUI's test platform (no screen, mouse or keyboard); they check that drawing does not panic, plus a few facts about the state
-│           └─ panels.rs, panels/   the drawing, one file per panel: top, gene_cards, records, criteria, criterion_row, hero, lanes, verdict, history, results, helper_bar
+│           └─ panels.rs, panels/   the drawing, one file per panel: top, gene_cards, records, criteria, criterion_row, hero, lanes, verdict, history, results, helper_bar, rail (the case and its reports over time, at the left of a window 1180 px or wider), insights (the three cards under the picture), welcome and welcome_more (the opening screen), frame (the title bar: logo mark, name, where you are), suggest (the floating suggestion list under a text box and the ▾ menu of every choice), record_fields (the lab name box and the year and tier menus)
 │              ├─ the pictures that explain a class (each keeps its layout rules in plain tested functions, with thin drawing on top):
 │              │  ├─ evidence_stack.rs   how the points add up: the order of the steps and the running total (layout only)
+│              │  ├─ picture.rs   the switch between the three pictures, the class readout (class in words, total, distance to the next class, review status) and the keyboard chips
+│              │  ├─ dial.rs, dial_geometry.rs   the dial: class bands on a half circle, one slice per counted criterion, a needle at the total; drawn on a canvas with paths; the angles, slices and click test are plain tested functions. With no evidence it is drawn grey with no needle
+│              │  ├─ column.rs   the column: class bands stacked upright, the blocks stacked from zero, and each earlier report whose class is shown as a slim column with a dot at its total, joined to today
 │              │  ├─ track.rs   the evidence track: class zones, one block per counted criterion, the sliding total marker and the "without this criterion" preview
 │              │  ├─ inspector.rs   the card for the selected block, with the side-by-side preview
 │              │  ├─ combining_table.rs  "What the 2015 table says": every row with the met rows marked, the sentence that names the deciding rows, and the hint on a row that is part of the way there

@@ -18,9 +18,9 @@ impl Workbench {
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
-            .bg(cx.theme().muted)
-            .px_5()
-            .py_4()
+            .px_8()
+            .pt_2()
+            .pb_8()
             .flex()
             .flex_col()
             .gap_6();
@@ -29,10 +29,11 @@ impl Workbench {
         } else {
             self.evidence_body(body, result, variant, cx)
         };
-        div()
+        crate::look::panel(cx)
             .flex_1()
             .min_w_0()
-            .h_full()
+            .min_h_0()
+            .overflow_hidden()
             .flex()
             .flex_col()
             .child(self.result_toolbar(reported, cx))
@@ -41,25 +42,27 @@ impl Workbench {
     }
 
     fn result_toolbar(&self, reported: bool, cx: &mut Context<Self>) -> Div {
+        let picture_shown = !(reported && self.comparison);
         div()
             .flex_none()
             .flex()
             .items_center()
-            .gap_2()
-            .px_5()
-            .py_2()
-            .border_b_1()
-            .border_color(cx.theme().border)
+            .gap_3()
+            .px_6()
+            .pt_4()
+            .pb_2()
             .when(reported, |pane| pane.child(self.result_tabs(cx)))
-            .when(!reported, |pane| pane.child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child("Evidence")))
+            .when(!reported, |pane| pane.child(crate::look::eyebrow("Explanation", cx)))
             .child(div().flex_1())
+            .when(picture_shown, |pane| pane.child(self.picture_switch(cx)))
             .child(
                 div().debug_selector(|| "reading-view".into()).child(
                     Button::new("reading-view")
                         .small()
-                        .outline()
+                        .ghost()
                         .toggled(self.reading)
-                        .label(if self.reading { "Show editor" } else { "Expand explanation" })
+                        .label(if self.reading { "Show editor" } else { "Expand" })
+                        .accessibility_label(if self.reading { "Show editor" } else { "Expand explanation" })
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.reading = !this.reading;
                             cx.notify();
@@ -69,25 +72,21 @@ impl Workbench {
     }
 
     fn result_tabs(&self, cx: &mut Context<Self>) -> Div {
-        let mut tabs = div().flex().gap_2();
+        let mut tabs = Vec::new();
         for (id, label, comparison) in [("view-evidence", "Evidence", false), ("view-compare", "Compare reports", true)]
         {
-            tabs = tabs.child(
-                div().debug_selector(|| id.into()).child(
-                    Button::new(id)
-                        .label(label)
-                        .selected(self.comparison == comparison)
-                        .toggled(self.comparison == comparison)
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.comparison = comparison;
-                            this.result_scroll.set_offset(point(px(0.), px(0.)));
-                            this.preview = false;
-                            cx.notify();
-                        })),
-                ),
-            );
+            tabs.push(div().debug_selector(|| id.into()).child(
+                crate::look::segment(id, label, self.comparison == comparison, cx).on_click(cx.listener(
+                    move |this, _, _, cx| {
+                        this.comparison = comparison;
+                        this.result_scroll.set_offset(point(px(0.), px(0.)));
+                        this.preview = false;
+                        cx.notify();
+                    },
+                )),
+            ));
         }
-        tabs
+        crate::look::segmented(tabs, cx)
     }
 
     fn evidence_body(

@@ -12,32 +12,42 @@
 
 use super::*;
 
+mod column;
 mod combining_table;
 mod criteria;
 mod criterion_row;
+mod dial;
+mod dial_geometry;
 mod evidence_stack;
+mod frame;
 mod gene_cards;
 mod helper_bar;
 mod helpers;
 mod hero;
 mod history;
+mod insights;
 mod inspector;
 mod lanes;
+mod picture;
 mod point_axis;
+mod rail;
+mod record_fields;
 mod records;
 mod report_focus;
 mod results;
 mod strength_ladder;
+mod suggest;
 mod timeline;
 mod top;
 mod track;
 mod verdict;
 mod welcome;
+mod welcome_more;
 mod what_if;
 
 /// A section heading in the results pane.
 fn heading(text: impl Into<SharedString>) -> Div {
-    div().text_lg().font_weight(FontWeight::SEMIBOLD).pb_2().child(text.into())
+    div().text_base().font_weight(FontWeight::SEMIBOLD).pb_3().child(text.into())
 }
 
 impl Workbench {
@@ -98,6 +108,19 @@ impl Workbench {
         let (incomplete, reevaluation) = self.compare_with_records();
         let variant = self.variant_name(cx);
         let (background, foreground) = (cx.theme().background, cx.theme().foreground);
+        let (width, height) = (f32::from(window.viewport_size().width), f32::from(window.viewport_size().height));
+        let (rail, sheet) = (width >= rail::RAIL_FROM, if self.reading { 0. } else { sheet_width(width) });
+        self.rail_shown.set(rail);
+        self.stage_width.set(stage_width(width, rail, sheet));
+        // The top bar, the banner, the stage toolbar and the class readout under the dial take about 330 px.
+        self.stage_height.set(height - 330.);
+        let middle = div().flex_1().min_w_0().h_full().flex().flex_col().child(self.results_panel(
+            &result,
+            reevaluation.as_ref(),
+            &incomplete,
+            variant.as_deref(),
+            cx,
+        ));
 
         div()
             .size_full()
@@ -115,14 +138,17 @@ impl Workbench {
             })
             .child(self.top_bar(cx))
             .children(self.file_status_banner(cx))
-            .when(!self.reading, |frame| frame.child(self.case_panel(cx)))
             .child(
                 div()
                     .flex()
                     .flex_1()
                     .min_h_0()
-                    .child(self.results_panel(&result, reevaluation.as_ref(), &incomplete, variant.as_deref(), cx))
-                    .when(!self.reading, |body| body.child(self.criteria_panel(&result, cx))),
+                    .gap_4()
+                    .px_4()
+                    .pb_4()
+                    .when(rail, |body| body.child(self.rail(variant.as_deref(), cx)))
+                    .child(middle)
+                    .when(!self.reading, |body| body.child(self.criteria_panel(&result, sheet, cx))),
             )
             .children(self.confirm_modal(cx))
             .into_any_element()
@@ -131,19 +157,7 @@ impl Workbench {
 
 impl Render for Workbench {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let frame = gpui_kit::component::TitleBar::new().bg(theme.secondary).text_color(theme.foreground).child(
-            div()
-                .flex()
-                .items_center()
-                .gap_3()
-                .px_3()
-                .child(div().flex().items_end().gap(px(2.)).children(
-                    [7., 12., 17.].map(|height| div().w(px(3.)).h(px(height)).rounded_sm().bg(theme.foreground)),
-                ))
-                .child(div().text_base().font_weight(FontWeight::BOLD).child("ClassiVAR"))
-                .child(div().text_xs().child("Variant evidence workbench")),
-        );
+        let frame = self.frame(cx);
         div()
             .size_full()
             .flex()
@@ -153,6 +167,21 @@ impl Render for Workbench {
     }
 }
 
+/// A section of the explanation inside the stage: a hairline above it and room
+/// around it, rather than another grey box.
 fn explanation_section(cx: &Context<Workbench>) -> Div {
-    div().p_4().rounded_lg().border_1().border_color(cx.theme().border).bg(cx.theme().popover)
+    div().pt_6().border_t_1().border_color(cx.theme().border)
+}
+
+/// The width of the criteria sheet at the right for a window `window` pixels wide.
+fn sheet_width(window: f32) -> f32 {
+    (window * 0.3).clamp(340., 420.)
+}
+
+/// The room left for the picture inside the middle panel.
+fn stage_width(window: f32, rail: bool, sheet: f32) -> f32 {
+    let rail = if rail { rail::RAIL_WIDTH + 16. } else { 0. };
+    let sheet = if sheet > 0. { sheet + 16. } else { 0. };
+    // The page margins (32) and the stage's own padding (64).
+    (window - 32. - rail - sheet - 64.).max(240.)
 }

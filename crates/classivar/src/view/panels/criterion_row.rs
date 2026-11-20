@@ -1,10 +1,12 @@
 //! One row of the criteria list.
 
+use gpui_kit::component::menu::{DropdownMenu, PopupMenuItem};
+
 use super::*;
 
 impl Workbench {
     pub(super) fn criterion_row(&self, c: &'static Criterion, cx: &mut Context<Self>) -> AnyElement {
-        let accent = cx.theme().accent;
+        let applied_fill = cx.theme().muted;
         let choice = self.current().get(&c.code);
         let strength = choice.map(|choice| choice.strength);
         let reason = choice.and_then(|choice| choice.reason.clone());
@@ -19,8 +21,8 @@ impl Workbench {
             .gap_1()
             .px_2()
             .py_1p5()
-            .rounded_md()
-            .when(strength.is_some(), |d| d.bg(accent))
+            .rounded(px(crate::look::CARD_RADIUS))
+            .when(strength.is_some(), |d| d.bg(applied_fill))
             .child(
                 div()
                     .flex()
@@ -49,9 +51,28 @@ impl Workbench {
     /// The criterion's code: applies it, opens its guide, or removes it. It is the keyboard path.
     fn criterion_apply_button(&self, c: &'static Criterion, applied: bool, cx: &mut Context<Self>) -> Div {
         let state = if applied { "applied" } else { "not applied" };
+        let theme = cx.theme();
+        let style = if applied {
+            let fill: Hsla = direction_colour(c.direction).into();
+            ButtonCustomVariant::new(cx)
+                .color(fill)
+                .foreground(direction_ink().into())
+                .hover(fill.opacity(0.88))
+                .active(fill)
+        } else {
+            ButtonCustomVariant::new(cx)
+                .color(theme.transparent)
+                .foreground(theme.foreground)
+                .hover(theme.accent)
+                .active(theme.accent)
+        };
         div().w(px(58.)).flex_none().child(
             Button::new(SharedString::from(format!("apply-{}", c.code)))
-                .label(c.code.clone())
+                .custom(style)
+                .w_full()
+                .rounded(px(7.))
+                .when(!applied, |b| b.border_1().border_color(theme.border))
+                .child(crate::look::figure(11.5).child(c.code.clone()))
                 .accessibility_label(format!("{}: {} ({state})", c.code, c.title))
                 .small()
                 .selected(applied)
@@ -86,27 +107,52 @@ impl Workbench {
             })
     }
 
-    /// The strength button: cycles the strength, or reopens the guide of a guided criterion.
-    fn criterion_strength_button(&self, c: &'static Criterion, strength: Strength, cx: &mut Context<Self>) -> Button {
-        let tooltip = if c.guide.is_empty() {
-            let cap = c
-                .max_strength
-                .map(|limit| format!("Capped at {} by this program. ", limit.label()))
-                .unwrap_or_default();
-            format!("{cap}Click to change the strength")
-        } else {
-            "Click to answer the strength guide again".to_string()
-        };
-        Button::new(SharedString::from(format!("strength-{}", c.code)))
-            .label(strength.label())
+    /// The strength button. A guided criterion reopens its guide; any other opens a
+    /// menu of the strengths it may take here, with the current one ticked.
+    fn criterion_strength_button(
+        &self,
+        c: &'static Criterion,
+        strength: Strength,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let guided = self.editing == Editing::Today && !c.guide.is_empty();
+        let button = Button::new(SharedString::from(format!("strength-{}", c.code)))
+            .label(if guided { strength.label().to_string() } else { format!("{} ▾", strength.label()) })
             .accessibility_label(format!("{} strength: {}. Click to change.", c.code, strength.label()))
             .small()
             .outline()
-            .tooltip(tooltip)
-            .on_click(cx.listener(move |this, _, window, cx| {
-                this.next_strength(c, window, cx);
-                cx.notify();
-            }))
+            .rounded(px(999.));
+        if guided {
+            return button
+                .tooltip("Click to answer the strength guide again")
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    this.next_strength(c, window, cx);
+                    cx.notify();
+                }))
+                .into_any_element();
+        }
+        let cap = c.max_strength.map(|limit| format!("Capped at {} by this program.", limit.label()));
+        let options = self.strength_options(c);
+        let this = cx.entity().downgrade();
+        button
+            .dropdown_menu(move |mut menu, _, _| {
+                if let Some(cap) = &cap {
+                    menu = menu.label(cap.clone());
+                }
+                for option in &options {
+                    let (this, option) = (this.clone(), *option);
+                    menu = menu.item(PopupMenuItem::new(option.label()).checked(option == strength).on_click(
+                        move |_, window, cx| {
+                            let _ = this.update(cx, |this, cx| {
+                                this.choose_strength(c, option, window, cx);
+                                cx.notify();
+                            });
+                        },
+                    ));
+                }
+                menu
+            })
+            .into_any_element()
     }
 
     fn criterion_detail_button(&self, c: &'static Criterion, open: bool, cx: &mut Context<Self>) -> Button {

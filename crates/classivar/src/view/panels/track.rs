@@ -172,7 +172,7 @@ impl Workbench {
     }
 
     /// The first click selects a block; a second click on it turns the preview on or off.
-    fn choose_block(&mut self, code: &str, cx: &mut Context<Self>) {
+    pub(super) fn choose_block(&mut self, code: &str, cx: &mut Context<Self>) {
         if self.inspected.as_deref() == Some(code) {
             self.preview = self.editing == Editing::Today && !self.preview;
         } else {

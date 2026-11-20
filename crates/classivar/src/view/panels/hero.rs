@@ -8,46 +8,46 @@ impl Workbench {
         let muted = cx.theme().muted_foreground;
         // The gene the evidence was checked against, not text still being typed.
         let gene = self.case_gene.clone();
-        let scope = (self.mode == Mode::ReportedVariant).then(|| self.editing_label());
         let title = match variant {
-            Some(name) => div().text_xl().font_weight(FontWeight::BOLD).child(name.to_string()),
-            None if self.example => div().text_xl().font_weight(FontWeight::SEMIBOLD).child("Fictional case"),
-            None => div().text_lg().text_color(muted).child("New assessment"),
+            Some(name) => name.to_string(),
+            None if self.example => "Fictional case".to_string(),
+            None => "New assessment".to_string(),
         };
-        let hero = div()
-            .p_4()
-            .rounded_lg()
-            .border_1()
-            .border_color(cx.theme().border)
-            .bg(cx.theme().popover)
+        // With the rail folded away, the case name moves here as one small line. A
+        // withheld result has no readout, so it says here whose evidence it is.
+        let rail = self.rail_shown.get();
+        let header = div()
             .flex()
-            .flex_col()
+            .flex_wrap()
+            .items_baseline()
             .gap_3()
-            .when_some(scope, |d, scope| {
-                d.child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child(format!("Result for {scope}")))
-            })
-            .child(title)
-            .when(!gene.is_empty(), |d| d.child(div().text_sm().text_color(muted).child(gene)));
+            .when(!rail, |d| d.child(div().text_base().font_weight(FontWeight::SEMIBOLD).child(title)))
+            .when(!rail && !gene.is_empty(), |d| d.child(div().text_sm().text_color(muted).child(gene)))
+            .when(result.class().is_none(), |d| d.child(crate::look::eyebrow(self.scope_words(), cx)));
+        let hero = div().flex().flex_col().gap_4().child(header);
         match result.class() {
             Some(class) => self.hero_class(hero, result, class, cx),
             None if !result.conflicts.is_empty() => hero_conflicts(hero, result, muted),
             None if result.both_sides_met => hero_both_sides(hero, result),
             None if !result.combination_overuse.is_empty() => hero_overuse(hero, result),
-            None => {
-                let card = hero_empty(hero, result, muted);
-                if result.items.is_empty() { card.child(self.category_picker(cx)) } else { card }
+            None if result.items.is_empty() => {
+                let room = (self.stage_width.get(), self.stage_height.get());
+                let dial = div().flex().justify_center().child(self.dial(result, None, room, false, cx));
+                hero_empty(hero.child(dial), result, muted).child(self.category_picker(cx))
             }
+            None => hero_empty(hero, result, muted),
         }
         .into_any_element()
     }
 
     fn category_picker(&self, cx: &mut Context<Self>) -> Div {
-        let mut choices = div().flex().flex_wrap().gap_2();
+        let mut choices = div().flex().flex_wrap().justify_center().gap_2();
         for category in Category::ALL {
             if self.rules.criteria.iter().any(|criterion| criterion.category == category) {
                 choices = choices.child(
                     Button::new(SharedString::from(format!("browse-{}", category.label())))
                         .outline()
+                        .rounded(px(999.))
                         .label(category.label())
                         .selected(self.category == Some(category))
                         .toggled(self.category == Some(category))
@@ -67,69 +67,20 @@ impl Workbench {
     /// track, the selected criterion, and how the 2015 table compares.
     fn hero_class(&self, hero: Div, result: &Assessment, class: Class, cx: &mut Context<Self>) -> Div {
         let muted = cx.theme().muted_foreground;
-        let classic = classic_comparison(result);
         // Stand-alone evidence fixes the class; the points total alone would not.
         let stand_alone = result
             .items
             .iter()
             .any(|i| i.counted && i.direction == Direction::Benign && i.strength == Strength::StandAlone);
-        hero.child(self.class_banner(result, class, cx))
-            .child(self.evidence_track(result, class, cx))
+        hero.child(self.signature(result, class, cx))
             .child(self.inspector(result, cx))
-            .child(div().text_sm().text_color(muted).child(classic))
+            .child(self.insights(result, class, cx))
             .when(stand_alone, |d| {
                 d.child(caption(muted).child(
                     "Stand-alone benign evidence (BA1) fixes the class at Benign, whatever else is applied. The points total is shown for transparency.",
                 ))
             })
             .when(class == Class::Vus, |d| d.child(self.vus_note(result.total_points, result.vus_tier.as_deref(), cx)))
-    }
-
-    /// The class in large type on its own colour, with the rule version and review status, and the total.
-    fn class_banner(&self, result: &Assessment, class: Class, cx: &mut Context<Self>) -> AnyElement {
-        let dark = cx.theme().is_dark();
-        let sign = if result.total_points > 0 { "+" } else { "" };
-        let total = format!("{sign}{}", super::point_axis::points_text(result.total_points));
-        div()
-            .flex()
-            .items_center()
-            .gap_5()
-            .px_5()
-            .py_4()
-            .rounded_xl()
-            .bg(class_fill(class, dark))
-            .text_color(class_ink(class, dark))
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .child(
-                        div()
-                            .text_size(px(34.))
-                            .line_height(px(40.))
-                            .font_weight(FontWeight::BOLD)
-                            .child(class.label()),
-                    )
-                    .when_some(result.vus_tier.clone(), |d, tier| d.child(div().text_base().child(tier)))
-                    .child(div().text_xs().font_weight(FontWeight::SEMIBOLD).child(rules_tag(self.rules))),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .items_end()
-                    .child(div().text_size(px(40.)).line_height(px(44.)).font_weight(FontWeight::BOLD).child(total))
-                    .child(div().text_xs().child(format!("point{}", plural(result.total_points.abs())))),
-            )
-            .with_animation(
-                SharedString::from(format!("banner-{class:?}")),
-                Animation::new(std::time::Duration::from_millis(320)).with_easing(ease_out_quint()),
-                |el, t| el.opacity(0.35 + 0.65 * t),
-            )
-            .into_any_element()
     }
 
     /// Where in the VUS range the points are. The range comes from the rule set.
@@ -228,12 +179,19 @@ fn hero_empty(hero: Div, result: &Assessment, muted: Hsla) -> Div {
     } else {
         "Only criteria that no longer count are applied. Apply at least one that counts."
     };
-    hero.child(div().text_2xl().font_weight(FontWeight::BOLD).text_color(muted).child("No class yet"))
-        .child(div().text_sm().text_color(muted).child(small))
+    hero.child(
+        div()
+            .flex()
+            .flex_col()
+            .items_center()
+            .gap_1()
+            .child(crate::look::display().text_color(muted).child("No class yet"))
+            .child(div().text_sm().text_center().text_color(muted).child(small)),
+    )
 }
 
 /// How the 2015 combining table (with ClinGen's 2020 addition) compares with the points.
-fn classic_comparison(result: &Assessment) -> String {
+pub(super) fn classic_comparison(result: &Assessment) -> String {
     match (result.classic_class, result.frameworks_agree()) {
         (Some(c), Some(true)) => format!("The 2015 table plus ClinGen's 2020 addition also gives {}.", c.label()),
         (Some(c), _) => format!(

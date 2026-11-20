@@ -4,32 +4,18 @@ use super::*;
 
 impl Workbench {
     pub(super) fn top_bar(&self, cx: &mut Context<Self>) -> AnyElement {
-        let theme = cx.theme();
-        let (border, muted, background) = (theme.border, theme.muted_foreground, theme.background);
+        let muted = cx.theme().muted_foreground;
         div()
             .flex()
             .flex_wrap()
             .items_center()
             .gap_3()
-            .px_5()
-            .py_3()
-            .border_b_1()
-            .border_color(border)
-            .bg(background)
+            .px_4()
+            .py_2()
             .child(self.mode_buttons(cx))
             .child(caption(muted).child("Research and learning only"))
             .child(div().flex_1())
-            .child(
-                div()
-                    .px_2()
-                    .py_0p5()
-                    .rounded_sm()
-                    .border_1()
-                    .border_color(border)
-                    .text_xs()
-                    .text_color(muted)
-                    .child(rules_tag(self.rules)),
-            )
+            .child(super::picture::status_pill(self.rules, cx))
             .child(self.file_buttons(cx))
             .child(self.theme_button(cx))
             .child(self.learning_button(cx))
@@ -38,35 +24,33 @@ impl Workbench {
 
     /// New variant, or a variant earlier labs already reported.
     fn mode_buttons(&self, cx: &mut Context<Self>) -> Div {
-        let mode_button = |id: &'static str, label: &'static str, mode: Mode, cx: &mut Context<Self>| {
-            let chosen = self.mode == mode;
-            Button::new(id).label(label).small().selected(chosen).toggled(chosen).on_click(cx.listener(
+        let mut buttons = Vec::new();
+        for (id, label, mode) in [
+            ("mode-new", "New variant", Mode::NewVariant),
+            ("mode-reported", "Reported variant", Mode::ReportedVariant),
+        ] {
+            buttons.push(crate::look::segment(id, label, self.mode == mode, cx).on_click(cx.listener(
                 move |this, _, _, cx| {
                     this.set_mode(mode);
                     cx.notify();
                 },
-            ))
-        };
-        div().flex().gap_1().child(mode_button("mode-new", "New variant", Mode::NewVariant, cx)).child(mode_button(
-            "mode-reported",
-            "Reported variant",
-            Mode::ReportedVariant,
-            cx,
-        ))
+            )));
+        }
+        crate::look::segmented(buttons, cx)
     }
 
     fn file_buttons(&self, cx: &mut Context<Self>) -> Div {
         div()
             .flex()
-            .gap_3()
-            .child(Button::new("save-case").label("Save").accessibility_label("Save case…").small().ghost().on_click(
-                cx.listener(|this, _, _, cx| {
-                    this.save_case(cx);
-                }),
-            ))
+            .gap_2()
             .child(Button::new("open-case").label("Open").accessibility_label("Open case…").small().ghost().on_click(
                 cx.listener(|this, _, window, cx| {
                     this.open_case(window, cx);
+                }),
+            ))
+            .child(Button::new("save-case").label("Save").accessibility_label("Save case…").small().primary().on_click(
+                cx.listener(|this, _, _, cx| {
+                    this.save_case(cx);
                 }),
             ))
     }
@@ -78,14 +62,33 @@ impl Workbench {
             .accessibility_label(if dark { "Theme: dark. Switch to light." } else { "Theme: light. Switch to dark." })
             .toggled(dark)
             .small()
-            .outline()
+            .ghost()
             .on_click(cx.listener(|this, _, window, cx| this.toggle_theme(window, cx)))
     }
 
     fn learning_button(&self, cx: &mut Context<Self>) -> Button {
+        let theme = cx.theme();
+        // A small switch drawn beside the word, so on and off read at a glance.
+        let knob = div()
+            .w(px(22.))
+            .h(px(12.))
+            .p(px(2.))
+            .rounded_full()
+            .flex()
+            .when(self.learning, |track| track.justify_end())
+            .bg(if self.learning { theme.foreground } else { theme.muted })
+            .border_1()
+            .border_color(theme.border)
+            .child(div().size(px(8.)).rounded_full().bg(if self.learning {
+                theme.background
+            } else {
+                theme.muted_foreground
+            }));
         Button::new("learning")
-            .label(if self.learning { "Learning on" } else { "Learning off" })
+            .accessibility_label(if self.learning { "Learning on" } else { "Learning off" })
+            .child(div().flex().items_center().gap_2().child(knob).child("Learning"))
             .small()
+            .ghost()
             .selected(self.learning)
             .toggled(self.learning)
             .on_click(cx.listener(|this, _, _, cx| {
@@ -94,48 +97,38 @@ impl Workbench {
             }))
     }
 
+    /// The case at the top of the editor sheet: variant, gene, the curator's gene
+    /// decision, the gene sources, and the earlier record being edited.
     pub(super) fn case_panel(&self, cx: &mut Context<Self>) -> AnyElement {
-        let theme = cx.theme();
-        let (border, band) = (theme.border, theme.popover);
-        let label = |text: &'static str| {
-            div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(theme.muted_foreground).child(text)
-        };
         let lookups_started = !matches!(self.gene.clingen, Lookup::Idle);
-        // The panel can hold four source cards (up to 360 px) and thirty record
-        // chips. A cap with its own scroll keeps a short window from pushing
-        // the criteria and the result out of reach.
         div()
             .id("case-panel")
-            .max_h(relative(0.42))
-            .overflow_y_scroll()
             .flex()
             .flex_col()
             .gap_3()
-            .px_5()
-            .py_3()
-            .bg(band)
+            .px_2()
+            .pb_4()
             .border_b_1()
-            .border_color(border)
-            .child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .items_center()
-                    .gap_3()
-                    .child(label("Variant"))
-                    .child(div().w(px(300.)).child(Input::new(&self.variant_input).aria_label("Variant name")))
-                    .child(label("Gene"))
-                    .child(div().w(px(200.)).child(Input::new(&self.gene_input).aria_label("Gene symbol")))
-                    .child(Button::new("gene-check").label("Check gene").small().on_click(cx.listener(
-                        |this, _, _, cx| {
+            .border_color(cx.theme().border)
+            .child(crate::look::eyebrow("Case", cx))
+            .child(super::records::form_row(
+                "Variant",
+                div().w_full().child(Input::new(&self.variant_input).aria_label("Variant name")),
+                cx,
+            ))
+            .child(super::records::form_row(
+                "Gene",
+                div().w_full().flex().items_center().gap_2().child(self.gene_box(cx)).child(
+                    Button::new("gene-check").label("Check gene").small().outline().rounded(px(999.)).on_click(
+                        cx.listener(|this, _, _, cx| {
                             this.check_gene(cx);
-                        },
-                    )))
-                    .child(div().flex_1())
-                    .child(self.gene_decision_buttons(cx)),
-            )
-            .children(self.gene_suggestions(cx))
+                        }),
+                    ),
+                ),
+                cx,
+            ))
             .children(self.gene_error.as_ref().map(|error| notice(error.clone(), warning_fill(), warning_ink())))
+            .child(self.gene_decision_buttons(cx))
             .when(lookups_started, |d| d.child(self.gene_summary(cx)))
             .when(lookups_started && self.gene_cards_open, |d| d.child(self.gene_cards(cx)))
             .when(self.mode == Mode::ReportedVariant, |d| d.child(self.records_bar(cx)))
@@ -144,57 +137,44 @@ impl Workbench {
 
     /// The curator's own answer to: does this gene cause this disease?
     fn gene_decision_buttons(&self, cx: &mut Context<Self>) -> Div {
-        let label = div()
-            .text_xs()
-            .font_weight(FontWeight::SEMIBOLD)
-            .text_color(cx.theme().muted_foreground)
-            .child("Gene causes this disease?");
-        let mut decision = div().flex().items_center().gap_2().child(label);
+        let muted = cx.theme().muted_foreground;
+        let mut choices = Vec::new();
         for (choice, text) in [
             (GeneDecision::Established, "Yes"),
             (GeneDecision::NotEstablished, "Doubtful"),
             (GeneDecision::NotDecided, "Not decided"),
         ] {
-            let chosen = self.gene_link == choice;
-            decision = decision.child(
-                Button::new(SharedString::from(format!("gene-decision-{text}")))
-                    .label(text)
-                    .small()
-                    .selected(chosen)
-                    .toggled(chosen)
-                    .on_click(cx.listener(move |this, _, _, cx| {
+            choices.push(
+                crate::look::segment(format!("gene-decision-{text}"), text, self.gene_link == choice, cx).on_click(
+                    cx.listener(move |this, _, _, cx| {
                         this.gene_link = choice;
                         cx.notify();
-                    })),
+                    }),
+                ),
             );
         }
-        decision
+        div()
+            .flex()
+            .flex_wrap()
+            .items_center()
+            .justify_between()
+            .gap_2()
+            .child(caption(muted).child("Gene causes this disease?"))
+            .child(crate::look::segmented(choices, cx))
     }
 
-    /// Symbols that start with what is in the gene box, so the curator can fill
-    /// the field with one click. A typing aid only: it fills the box, and
-    /// "Check gene" (or Enter) starts the lookups.
-    pub(super) fn gene_suggestions(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+    /// The gene box, with matching symbols in a floating list under it. A typing
+    /// aid only: picking a symbol fills the box, and "Check gene" (or Enter) starts the lookups.
+    fn gene_box(&self, cx: &mut Context<Self>) -> Div {
         let typed = self.gene_input.read(cx).value();
-        let matches = crate::genes::suggestions_for(&typed, 6);
-        if matches.is_empty() {
-            return None;
-        }
-        let muted = cx.theme().muted_foreground;
-        let mut row =
-            div().flex().flex_wrap().items_center().gap_2().child(caption(muted).child("Fill in the gene box:"));
-        for symbol in matches {
-            row = row.child(
-                Button::new(SharedString::from(format!("gene-suggestion-{symbol}")))
-                    .label(symbol)
-                    .small()
-                    .outline()
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.gene_input.update(cx, |input, cx| input.set_value(symbol, window, cx));
-                    })),
-            );
-        }
-        row = row.child(caption(muted).child("A short list for typing only, not a check that the gene is right."));
-        Some(row.into_any_element())
+        let matches: Vec<String> = crate::genes::suggestions_for(&typed, 6).into_iter().map(String::from).collect();
+        super::suggest::with_suggestions(
+            "gene-suggestion",
+            Input::new(&self.gene_input).aria_label("Gene symbol"),
+            matches,
+            "For typing only, not a check that the gene is right.",
+            &self.gene_input,
+            cx,
+        )
     }
 }

@@ -169,14 +169,29 @@ impl Workbench {
             self.guide_open = Some(criterion.code.clone());
             return;
         }
-        // Today's limits apply to today's evidence; a record may use what the lab used.
-        let options = match self.editing {
+        let options = self.strength_options(criterion);
+        let at = options.iter().position(|s| *s == current).unwrap_or(0);
+        self.choose_strength(criterion, options[(at + 1) % options.len()], window, cx);
+    }
+
+    /// The strengths the criterion may take in the evidence being edited. Today's
+    /// limits apply to today's evidence; a record may use what the lab used.
+    pub(super) fn strength_options(&self, criterion: &Criterion) -> Vec<Strength> {
+        match self.editing {
             Editing::Today => criterion.allowed_strengths(),
             Editing::Record(_) => criterion.recorded_strengths(),
-        };
-        let at = options.iter().position(|s| *s == current).unwrap_or(0);
-        let next = options[(at + 1) % options.len()];
-        // Raising today's strength above the default needs a written reason first.
+        }
+    }
+
+    /// Set a strength chosen by hand. Raising today's strength above the default
+    /// needs a written reason first, so that case opens the reason box instead.
+    pub(super) fn choose_strength(
+        &mut self,
+        criterion: &Criterion,
+        next: Strength,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.editing == Editing::Today && self.rules.magnitude(next) > self.rules.magnitude(criterion.strength) {
             let earlier = self.today.get(&criterion.code).and_then(|c| c.reason.clone()).unwrap_or_default();
             self.reason_input.update(cx, |input, cx| input.set_value(earlier, window, cx));
