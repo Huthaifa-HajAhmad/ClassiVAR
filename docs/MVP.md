@@ -1,6 +1,8 @@
 # MVP
 
-The smallest version that is useful for real curation and teaches while you use it.
+The workbench explains how chosen evidence leads to a classification and how that evidence compares with an earlier report.
+
+The opening screen offers both workflows and a separate fictional case.
 
 ## In scope
 

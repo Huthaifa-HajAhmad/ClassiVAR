@@ -16,14 +16,8 @@ impl Workbench {
             .border_b_1()
             .border_color(border)
             .bg(background)
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .child(div().text_lg().font_weight(FontWeight::BOLD).child("ClassiVAR"))
-                    .child(caption(muted).child("Research and learning only")),
-            )
             .child(self.mode_buttons(cx))
+            .child(caption(muted).child("Research and learning only"))
             .child(div().flex_1())
             .child(
                 div()
@@ -65,19 +59,19 @@ impl Workbench {
         div()
             .flex()
             .gap_3()
-            .child(Button::new("save-case").label("Save").accessibility_label("Save case…").small().outline().on_click(
+            .child(Button::new("save-case").label("Save").accessibility_label("Save case…").small().ghost().on_click(
                 cx.listener(|this, _, _, cx| {
                     this.save_case(cx);
                 }),
             ))
-            .child(Button::new("open-case").label("Open").accessibility_label("Open case…").small().outline().on_click(
+            .child(Button::new("open-case").label("Open").accessibility_label("Open case…").small().ghost().on_click(
                 cx.listener(|this, _, window, cx| {
                     this.open_case(window, cx);
                 }),
             ))
     }
 
-    fn theme_button(&self, cx: &mut Context<Self>) -> Button {
+    pub(super) fn theme_button(&self, cx: &mut Context<Self>) -> Button {
         let dark = cx.theme().is_dark();
         Button::new("theme-toggle")
             .label(if dark { "Light" } else { "Dark" })
@@ -102,7 +96,7 @@ impl Workbench {
 
     pub(super) fn case_panel(&self, cx: &mut Context<Self>) -> AnyElement {
         let theme = cx.theme();
-        let (border, band) = (theme.border, theme.background);
+        let (border, band) = (theme.border, theme.popover);
         let label = |text: &'static str| {
             div().text_xs().font_weight(FontWeight::SEMIBOLD).text_color(theme.muted_foreground).child(text)
         };

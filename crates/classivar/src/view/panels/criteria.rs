@@ -17,6 +17,17 @@ impl Workbench {
             .flex()
             .flex_col()
             .gap_4()
+            .when_some(self.category, |list, category| {
+                list.child(
+                    Button::new("clear-category")
+                        .small()
+                        .label(format!("{} - Show all criteria", category.label()))
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.category = None;
+                            cx.notify();
+                        })),
+                )
+            })
             .children(self.helper_section(cx))
             .child(self.criteria_group(Direction::Pathogenic, "For disease (pathogenic)", result.pathogenic_points, cx))
             .child(self.criteria_group(Direction::Benign, "Against disease (benign)", result.benign_points, cx));
@@ -24,10 +35,13 @@ impl Workbench {
         div()
             .flex()
             .flex_col()
-            .w(px(480.))
+            .w(relative(0.36))
+            .min_w(px(340.))
+            .max_w(px(465.))
             .h_full()
             .flex_none()
-            .border_r_1()
+            .border_l_1()
+            .bg(cx.theme().popover)
             .border_color(border)
             .child(self.criteria_header(cx))
             .child(list)
@@ -94,7 +108,9 @@ impl Workbench {
                 .child(caption(muted).child(format!("{sign}{} points", points.abs()))),
         );
         let rules = self.rules;
-        for category in Category::ALL {
+        for category in
+            Category::ALL.into_iter().filter(|category| self.category.is_none_or(|chosen| chosen == *category))
+        {
             let in_category: Vec<&'static Criterion> =
                 rules.criteria.iter().filter(|c| c.direction == direction && c.category == category).collect();
             if in_category.is_empty() {

@@ -123,11 +123,10 @@ try {
         [ClassiVarSmokeWin]::ClientToScreen($h, [ref]$origin) | Out-Null
         $top = $origin.Y + 255
         $bottom = $origin.Y + $client.Bottom
-        # The criteria pane is a fixed 480 px wide, so a control to the right of
-        # that line belongs to the result pane, not to the list.
+        $listWidth = [math]::Min(465, [math]::Max(340, $client.Right * 0.36))
         return [pscustomobject]@{
-            Top = $top; Bottom = $bottom; Right = $origin.X + 480
-            PointerX = $origin.X + 200; PointerY = [int](($top + $bottom) / 2)
+            Top = $top; Bottom = $bottom; Left = $origin.X + $client.Right - $listWidth
+            PointerX = $origin.X + $client.Right - 150; PointerY = [int](($top + $bottom) / 2)
         }
     }
     # Page keys scroll the pane under the pointer, so put the pointer over the list first.
@@ -141,7 +140,7 @@ try {
         [ClassiVarSmokeWin]::ClientToScreen($h, [ref]$origin) | Out-Null
         $client = New-Object ClassiVarSmokeWin+RECT
         [ClassiVarSmokeWin]::GetClientRect($h, [ref]$client) | Out-Null
-        [ClassiVarSmokeWin]::SetCursorPos([int]($origin.X + $client.Right - 150), [int]($origin.Y + $y)) | Out-Null
+        [ClassiVarSmokeWin]::SetCursorPos([int]($origin.X + 150), [int]($origin.Y + $y)) | Out-Null
     }
     # A click on a button whose centre is below the window does nothing. Like a
     # person would, scroll the pane the control belongs to (Page Up or Page Down
@@ -156,7 +155,7 @@ try {
             if (($r.Y + $r.Height / 2) -le $area.Bottom) { return }
             # The control may be in the criteria list or in the result pane ("Remove
             # record" is in the history table). Scrolling the wrong pane does nothing.
-            if (($r.X + $r.Width / 2) -le $area.Right) { Point-At-List } else { Point-At-Result $area.PointerY }
+            if (($r.X + $r.Width / 2) -ge $area.Left) { Point-At-List } else { Point-At-Result $area.PointerY }
             Press-Key "{PGDN}"
         }
     }
@@ -261,7 +260,7 @@ try {
         $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
         # A background probe: the result pane's empty bottom-right corner, away
         # from result content, criteria rows and scroll bars.
-        $c = $bmp.GetPixel($r.Right - 60, $r.Bottom - 40)
+        $c = $bmp.GetPixel(60, $r.Bottom - 40)
         $g.Dispose(); $bmp.Dispose()
         $script:shots += $path
         return [pscustomobject]@{ Path = $path; Background = $c }
@@ -275,6 +274,7 @@ try {
     # The first frame can be captured before the window has painted, so wait
     # for a control to appear in the accessibility tree first (it is pushed
     # with the first painted frame), then capture and check the background.
+    Click-Button "Start new variant"
     $null = Find-Button-Like "Save case*"
     $light = Capture "01-light"
     if ($light.Background.R -lt 200) { throw "the app did not start in the light theme" }
@@ -286,6 +286,7 @@ try {
     if ($saved -ne "theme=dark") { throw "the theme choice was not saved (settings: $saved)" }
     Find-Button-Like "Theme: dark. Switch to light.*" | Out-Null
 
+    Click-Button "Evidence helpers"
     Set-GeneText "brc"
     $suggest = Capture "03-suggestions"
     Find-Button "BRCA1" | Out-Null
@@ -711,6 +712,7 @@ try {
     }
     Set-GeneText ""
 
+    Click-Button "Compare reports"
     # The history table: the criterion and Today columns are frozen, and the
     # records between them scroll sideways. The table is plain text, so these are
     # captures for the eye rather than assertions. This one is at the wide window.

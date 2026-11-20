@@ -1,32 +1,35 @@
-//! "How the points add up": each counted criterion is one step that starts where
-//! the one before it ended, on the same point axis as the points scale. The last
-//! step ends at the total, so the learner can see why the class is the class.
+//! How the points add up: each counted criterion is one step that starts where
+//! the one before it ended. The last step ends at the total, so the reader can
+//! see why the class is the class.
 //!
-//! The layout rules (order and running total) live in plain functions that need
-//! no window, so tests can check them. The bars are drawn by `point_axis`.
+//! These are the layout rules only (order and running total), in plain
+//! functions that need no window, so tests can check them. The evidence track
+//! (`track.rs`) draws the steps.
 
-use classivar_core::{Assessment, Direction, Item, Strength};
+use classivar_core::{Direction, Item, Strength};
 
-use super::point_axis::{Bar, axis, points_text, widened};
+#[cfg(test)]
+use super::point_axis::widened;
+use super::point_axis::{Bar, points_text};
 use super::*;
 
 /// One counted criterion on the running total.
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct Step {
-    code: String,
-    direction: Direction,
-    strength: Strength,
+pub(super) struct Step {
+    pub(super) code: String,
+    pub(super) direction: Direction,
+    pub(super) strength: Strength,
     /// Signed: positive for pathogenic evidence, negative for benign.
-    points: i32,
+    pub(super) points: i32,
     /// The running total before this step.
-    from: i32,
+    pub(super) from: i32,
     /// The running total after this step.
-    to: i32,
+    pub(super) to: i32,
 }
 
 impl Step {
     /// "+4" or "−4". Never "0": a counted criterion is worth at least one point.
-    fn change(&self) -> String {
+    pub(super) fn change(&self) -> String {
         let sign = if self.points > 0 { "+" } else { "−" };
         format!("{sign}{}", self.points.unsigned_abs())
     }
@@ -35,7 +38,7 @@ impl Step {
 /// The counted criteria as steps: pathogenic evidence first, the strongest
 /// first, then benign evidence the same way. Criteria that are listed but do
 /// not count add nothing and are left out.
-fn steps(items: &[Item]) -> Vec<Step> {
+pub(super) fn steps(items: &[Item]) -> Vec<Step> {
     let mut counted: Vec<&Item> = items.iter().filter(|item| item.counted).collect();
     // The code breaks ties, so the same evidence always draws the same picture.
     counted.sort_by_key(|item| (item.direction == Direction::Benign, -item.points.abs(), item.code.clone()));
@@ -59,7 +62,7 @@ fn steps(items: &[Item]) -> Vec<Step> {
 
 /// All steps in one sentence, for the line under the picture: the same facts as
 /// the bars, in words.
-fn summary(steps: &[Step]) -> String {
+pub(super) fn summary(steps: &[Step]) -> String {
     let total = steps.last().map_or(0, |step| step.to);
     let parts: Vec<_> =
         steps.iter().map(|step| format!("{} {} → {}", step.code, step.change(), points_text(step.to))).collect();
@@ -67,7 +70,7 @@ fn summary(steps: &[Step]) -> String {
 }
 
 /// The steps as bars on the shared axis: filled, because the evidence is applied.
-fn bars(steps: &[Step]) -> Vec<Bar> {
+pub(super) fn bars(steps: &[Step]) -> Vec<Bar> {
     steps
         .iter()
         .map(|step| Bar {
@@ -81,25 +84,6 @@ fn bars(steps: &[Step]) -> Vec<Bar> {
             neutral: false,
         })
         .collect()
-}
-
-impl Workbench {
-    /// The picture of how the counted criteria add up to the total. It is shown
-    /// only where the points scale is, so it never suggests a class the result
-    /// withholds.
-    pub(super) fn evidence_stack(&self, result: &Assessment, cx: &mut Context<Self>) -> AnyElement {
-        let (border, muted) = (cx.theme().border, cx.theme().muted_foreground);
-        let steps = steps(&result.items);
-        let bars = bars(&steps);
-        let scale = widened(&scale_for(self.rules), &bars);
-        div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(axis("stack-scroll", &scale, &bars, border, muted))
-            .child(caption(muted).child(summary(&steps)))
-            .into_any_element()
-    }
 }
 
 #[cfg(test)]

@@ -1,4 +1,4 @@
-//! The whole right pane, and the screen shown when the evidence cannot be scored.
+//! The explanation pane, and the screen shown when the evidence cannot be scored.
 
 use super::*;
 
@@ -11,32 +11,110 @@ impl Workbench {
         variant: Option<&str>,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let muted = cx.theme().muted_foreground;
         let reported = self.mode == Mode::ReportedVariant;
-        div()
+        let body = div()
             .id("result")
             .track_scroll(&self.result_scroll)
             .flex_1()
-            .min_w_0()
-            .h_full()
+            .min_h_0()
             .overflow_y_scroll()
-            .px_6()
-            .py_5()
+            .bg(cx.theme().muted)
+            .px_5()
+            .py_4()
             .flex()
             .flex_col()
-            .gap_6()
-            // The result comes first on both paths; the verdict and history are commentary on it.
-            .child(self.hero(result, variant, cx))
-            .when(reported, |pane| pane.children(self.reported_sections(reevaluation, incomplete, variant, cx)))
-            .when(result.class().is_some(), |pane| {
-                pane.child(div().child(heading("How the points add up")).child(self.evidence_stack(result, cx)))
+            .gap_6();
+        let details = if reported && self.comparison {
+            body.children(self.reported_sections(reevaluation, incomplete, variant, cx)).into_any_element()
+        } else {
+            self.evidence_body(body, result, variant, cx)
+        };
+        div()
+            .flex_1()
+            .min_w_0()
+            .h_full()
+            .flex()
+            .flex_col()
+            .child(self.result_toolbar(reported, cx))
+            .child(details)
+            .into_any_element()
+    }
+
+    fn result_toolbar(&self, reported: bool, cx: &mut Context<Self>) -> Div {
+        div()
+            .flex_none()
+            .flex()
+            .items_center()
+            .gap_2()
+            .px_5()
+            .py_2()
+            .border_b_1()
+            .border_color(cx.theme().border)
+            .when(reported, |pane| pane.child(self.result_tabs(cx)))
+            .when(!reported, |pane| pane.child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child("Evidence")))
+            .child(div().flex_1())
+            .child(
+                div().debug_selector(|| "reading-view".into()).child(
+                    Button::new("reading-view")
+                        .small()
+                        .outline()
+                        .toggled(self.reading)
+                        .label(if self.reading { "Show editor" } else { "Expand explanation" })
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.reading = !this.reading;
+                            cx.notify();
+                        })),
+                ),
+            )
+    }
+
+    fn result_tabs(&self, cx: &mut Context<Self>) -> Div {
+        let mut tabs = div().flex().gap_2();
+        for (id, label, comparison) in [("view-evidence", "Evidence", false), ("view-compare", "Compare reports", true)]
+        {
+            tabs = tabs.child(
+                div().debug_selector(|| id.into()).child(
+                    Button::new(id)
+                        .label(label)
+                        .selected(self.comparison == comparison)
+                        .toggled(self.comparison == comparison)
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.comparison = comparison;
+                            this.result_scroll.set_offset(point(px(0.), px(0.)));
+                            this.preview = false;
+                            cx.notify();
+                        })),
+                ),
+            );
+        }
+        tabs
+    }
+
+    fn evidence_body(
+        &self,
+        body: Stateful<Div>,
+        result: &Assessment,
+        variant: Option<&str>,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let muted = cx.theme().muted_foreground;
+        body.child(self.hero(result, variant, cx))
+            .when(!result.items.is_empty(), |pane| {
+                pane.child(
+                    explanation_section(cx).child(heading("What it is made of")).child(self.evidence_lanes(result, cx)),
+                )
             })
-            .child(div().child(heading("What it is made of")).child(self.evidence_lanes(result, cx)))
             .when(combining_table::is_shown(result), |pane| {
-                pane.child(div().child(heading("What the 2015 table says")).child(self.combining_table(result, cx)))
+                pane.child(
+                    explanation_section(cx)
+                        .child(heading("What the 2015 table says"))
+                        .child(self.combining_table(result, cx)),
+                )
             })
             .when(result.class().is_some(), |pane| {
-                pane.child(div().child(heading("What would change it")).child(self.what_changes(result, cx)))
+                pane.child(
+                    explanation_section(cx).child(heading("What would change it")).child(self.what_changes(result, cx)),
+                )
             })
             .when(result.class().is_none() && result.has_evidence, |pane| {
                 pane.child(
@@ -46,7 +124,9 @@ impl Workbench {
                         .child("Resolve the withheld result above to see what would change the class."),
                 )
             })
-            .child(div().child(heading("Notes")).child(self.notes(result, variant, cx)))
+            .when(self.has_case_data(cx), |pane| {
+                pane.child(explanation_section(cx).child(heading("Notes")).child(self.notes(result, variant, cx)))
+            })
             .when(result.class().is_some(), |pane| {
                 pane.child(
                     div().child(heading("About these rules")).child(caption(muted).child(rules_about_text(self.rules))),
@@ -65,9 +145,16 @@ impl Workbench {
         cx: &mut Context<Self>,
     ) -> Vec<Div> {
         let border = cx.theme().border;
-        let mut sections = vec![div().child(heading("Verdict")).child(self.verdict_card(reevaluation, incomplete, cx))];
+        let mut sections = vec![div().child(heading("Verdict against the latest report")).child(self.verdict_card(
+            reevaluation.filter(|_| incomplete.is_empty()),
+            incomplete,
+            cx,
+        ))];
         if let Some(re) = reevaluation {
-            if re.verdict.is_some() {
+            if let Some(focus) = self.report_focus(re, cx) {
+                sections.insert(0, focus);
+            }
+            if incomplete.is_empty() && re.verdict.is_some() {
                 sections.push(
                     div().child(heading("What changed since the latest record")).child(self.reasons_list(re, cx)),
                 );

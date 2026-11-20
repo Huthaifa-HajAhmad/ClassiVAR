@@ -59,6 +59,8 @@ impl Workbench {
                     .selected(today_chosen)
                     .toggled(today_chosen)
                     .on_click(cx.listener(|this, _, _, cx| {
+                        this.inspected = None;
+                        this.preview = false;
                         this.editing = Editing::Today;
                         cx.notify();
                     })),
@@ -139,6 +141,9 @@ impl Workbench {
                     .selected(chosen)
                     .toggled(chosen)
                     .on_click(cx.listener(move |this, _, _, cx| {
+                        if this.records[i].class.is_none() {
+                            this.baseline = None;
+                        }
                         this.records[i].class = Some(class);
                         if class != Class::Vus {
                             // A sub-tier only makes sense for a VUS.

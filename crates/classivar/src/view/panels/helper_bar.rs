@@ -131,6 +131,18 @@ impl Workbench {
         if entries.is_empty() {
             return Vec::new();
         }
+        let toggle = Button::new("evidence-tools")
+            .small()
+            .ghost()
+            .label(if self.show_helpers { "Hide evidence helpers" } else { "Evidence helpers" })
+            .toggled(self.show_helpers)
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.show_helpers = !this.show_helpers;
+                cx.notify();
+            }));
+        if !self.show_helpers {
+            return vec![div().child(toggle).into_any_element()];
+        }
         let muted = cx.theme().muted_foreground;
         let mut buttons = div().flex().flex_wrap().gap_2();
         for entry in &entries {
@@ -154,7 +166,7 @@ impl Workbench {
             .flex_col()
             .gap_2()
             .px_2()
-            .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child("Evidence helpers"))
+            .child(div().child(toggle))
             .child(
                 caption(muted)
                     .child("They read published tables and suggest a strength. You still choose what to apply."),

@@ -83,6 +83,7 @@ impl Workbench {
     }
 
     pub(super) fn evidence_mut(&mut self, scope: Editing) -> &mut Evidence {
+        self.preview = false;
         match scope {
             Editing::Today => &mut self.today,
             Editing::Record(i) => &mut self.records[i].evidence,

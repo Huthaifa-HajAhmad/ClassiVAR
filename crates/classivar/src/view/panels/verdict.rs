@@ -20,6 +20,15 @@ impl Workbench {
                     "Choose the class each record reported to get a verdict. Missing for: {}.",
                     incomplete.join(", ")
                 )))
+                .when_some(self.records.iter().position(|r| r.class.is_none()), |card, index| {
+                    card.child(Button::new("edit-incomplete-report").small().label("Edit unfinished report").on_click(
+                        cx.listener(move |this, _, window, cx| {
+                            this.reading = false;
+                            this.show_record(index, window, cx);
+                            cx.notify();
+                        }),
+                    ))
+                })
                 .into_any_element();
         };
         let today = match &re.today {

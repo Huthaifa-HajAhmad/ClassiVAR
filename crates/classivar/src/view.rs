@@ -5,6 +5,7 @@
 //!
 //! The curator decides every criterion; the screen only adds up and explains.
 
+use std::cell::Cell;
 use std::collections::{BTreeMap, HashSet};
 
 use classivar_core::{
@@ -186,6 +187,9 @@ pub struct Workbench {
     /// Which evidence set the criteria list is editing.
     editing: Editing,
     /// When on, every criterion shows its plain-language rule and source.
+    category: Option<Category>,
+    show_helpers: bool,
+    welcome: bool,
     learning: bool,
     variant_input: Entity<InputState>,
     gene_input: Entity<InputState>,
@@ -193,6 +197,13 @@ pub struct Workbench {
     record_name_input: Entity<InputState>,
     /// Scroll state of the criteria list and of the result pane, so the keyboard can scroll them.
     criteria_scroll: ScrollHandle,
+    reading: bool,
+    baseline: Option<usize>,
+    comparison: bool,
+    inspected: Option<String>,
+    preview: bool,
+    /// The total the track marker last slid from and to, so a new total animates from where the marker was.
+    needle: Cell<(i32, i32)>,
     result_scroll: ScrollHandle,
     /// A strength being raised by hand, waiting for its reason.
     raising: Option<Raise>,
@@ -253,11 +264,20 @@ impl Workbench {
             today: Evidence::new(),
             records: Vec::new(),
             editing: Editing::Today,
-            learning: true,
+            category: None,
+            show_helpers: false,
+            welcome: true,
+            learning: false,
             variant_input,
             gene_input,
             record_name_input,
             criteria_scroll: ScrollHandle::new(),
+            reading: false,
+            baseline: None,
+            comparison: false,
+            inspected: None,
+            preview: false,
+            needle: Cell::new((0, 0)),
             result_scroll: ScrollHandle::new(),
             raising: None,
             reason_input,

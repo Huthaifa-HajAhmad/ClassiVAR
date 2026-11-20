@@ -1,5 +1,19 @@
 # Roadmap
 
+## Desktop frame and opening screen
+
+The app draws its own title bar with GPUI Kit. An isolated Windows run verified minimize, maximize and restore without using the active desktop. Launch offers a new assessment, a reported variant, a saved case or a fictional example. An empty assessment can filter the editor by evidence category. Criterion explanations and evidence helpers open on demand.
+
+## Interactive workbench (2026-11-20)
+
+Evidence rows now open the rule, source and recorded reason. A temporary preview scores the current evidence without the selected criterion. Compare reports opens the history and highlights differences for a selected report. The main chart occupies the left pane. Expand explanation hides the editor, and report differences are aligned in three columns. Completed reports can be compared while a draft is unfinished. The overall verdict waits for all reported classes. Next verification is the Windows click-through when the machine is free.
+
+## Evidence track (2026-11-20)
+
+The Evidence view now opens on a class banner (class in large type on its class colour, with the rule version and review status, and the total) and one wide, interactive evidence track that replaces the separate "How the points add up" chart. The track fills the pane at any width. The five class zones are coloured bands, and each counted criterion is a labelled block laid end to end from zero: pathogenic blocks in the upper lane, benign blocks in a lower lane that appears only when both directions have evidence. A marker slides to the new total when evidence changes, and the blocks grow in. Both follow the system's reduced-motion setting. Clicking a block opens its explanation (a card with the direction colour, strength, points, rule summary, reason and source). Clicking it again previews the class without it: the block turns to a dashed outline, a dashed marker shows the preview total, and the card shows "Your evidence → Without X" side by side. Buttons under the track give the same choices from the keyboard. The track is drawn only when a class is shown. Checked by capturing the real window in both themes; the scripted UI smoke test has not been run on this change.
+
+Next, in this order: the same treatment for **Compare reports** (the lab's track drawn above today's, with the changed criteria linked between them); a visual empty state; then the "What it is made of" and "What would change it" sections in the same style.
+
 Written 2026-11-04, after the audit in `docs/AUDIT-2026-11-04.md`. It replaces the "Implementation plan" list in `ARCHITECTURE.md`.
 
 ## Where the project stands

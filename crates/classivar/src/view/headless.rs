@@ -1,15 +1,13 @@
 //! Tests that open the real window in GPUI's headless test platform: nothing
 //! appears on screen and no mouse or keyboard is used, so they can run while the
 //! machine is in use. They draw the real views for the states people reach, so a
-//! panic in a render function shows up here. They only check that drawing does
-//! not panic (and a few facts about the state); they do not check what is on the
-//! screen. They set the state directly; what a click does is still checked by the
-//! Windows smoke script.
+//! panic in a render function shows up here. The navigation test also clicks
+//! the rendered controls using GPUI's simulated pointer.
 //!
 //! Explicit imports on purpose: `use gpui_kit::*` also brings GPUI's `test` macro
 //! into scope, and `#[gpui::test]` then expands into itself without end.
 
-use classivar_core::{Class, RuleSet};
+use classivar_core::{Class, RuleSet, Strength};
 use gpui::{Entity, TestAppContext, VisualTestContext};
 use gpui_kit::component::ThemeMode;
 use gpui_kit::init;
@@ -55,6 +53,8 @@ fn the_example_draws_without_panicking_for_today_and_every_record(cx: &mut TestA
         // Every criterion's "More" panel is open, so the strength ladder is drawn for all of them.
         this.open_details = this.rules.criteria.iter().map(|c| c.code.clone()).collect();
     });
+    draw(cx);
+    workbench.update_in(cx, |this, _, _| this.comparison = true);
     draw(cx);
     let records = workbench.read_with(cx, |this, _| this.records.len());
     assert!(records >= 2, "the example has earlier records to draw");
@@ -107,6 +107,8 @@ fn contradicting_evidence_draws_without_panicking_and_has_no_class(cx: &mut Test
 fn every_helper_open_at_once_draws_without_panicking(cx: &mut TestAppContext) {
     let (workbench, cx) = open(cx, ThemeMode::Light);
     workbench.update_in(cx, |this, _, _| {
+        this.welcome = false;
+        this.show_helpers = true;
         let helpers = &mut this.helpers;
         helpers.predictor.open = true;
         helpers.functional.open = true;
@@ -133,4 +135,95 @@ fn a_pathogenic_result_draws_without_panicking(cx: &mut TestAppContext) {
         this.rules.assess(&super::to_applied(&this.today)).expect("the evidence can be scored").class()
     });
     assert!(matches!(class, Some(Class::Pathogenic | Class::LikelyPathogenic)), "{class:?}");
+}
+
+#[gpui::test]
+fn mixed_evidence_with_a_previewed_block_draws_in_both_themes_and_keeps_the_evidence(cx: &mut TestAppContext) {
+    for theme in [ThemeMode::Light, ThemeMode::Dark] {
+        let (workbench, cx) = open(cx, theme);
+        workbench.update_in(cx, |this, _, _| {
+            for (code, strength) in
+                [("PS1", Strength::Strong), ("PM2", Strength::Supporting), ("BP7", Strength::Supporting)]
+            {
+                this.today.insert(code.into(), Choice::new(strength));
+            }
+            this.inspected = Some("PS1".into());
+            this.preview = true;
+        });
+        draw(cx);
+        workbench.read_with(cx, |this, _| {
+            assert_eq!(this.today.len(), 3, "a preview never removes evidence");
+            assert_eq!(this.needle.get().1, 4, "the marker is heading for the real total, not the preview's");
+        });
+    }
+}
+
+#[gpui::test]
+fn previewing_the_only_criterion_preserves_the_case(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    workbench.update_in(cx, |this, _, _| {
+        this.today.insert("PS1".into(), Choice::new(classivar_core::Strength::Strong));
+        let preview = this.preview_without("PS1").unwrap();
+        assert!(!preview.has_evidence);
+        assert!(preview.class().is_none());
+        assert!(this.today.contains_key("PS1"));
+    });
+}
+
+#[gpui::test]
+fn a_draft_record_leaves_completed_reports_available(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Dark);
+    workbench.update_in(cx, |this, window, cx| {
+        this.load_example(window, cx);
+        this.set_mode(Mode::ReportedVariant);
+        let complete = this.records.len();
+        this.add_record(window, cx);
+        let (missing, comparison) = this.compare_with_records();
+        assert_eq!(missing.len(), 1);
+        assert_eq!(comparison.unwrap().records.len(), complete);
+    });
+}
+
+#[gpui::test]
+fn reading_and_comparison_controls_preserve_the_editing_scope(cx: &mut TestAppContext) {
+    for theme in [ThemeMode::Light, ThemeMode::Dark] {
+        let (workbench, cx) = open(cx, theme);
+        workbench.update_in(cx, |this, window, cx| {
+            this.load_example(window, cx);
+            this.set_mode(Mode::ReportedVariant);
+            this.show_record(0, window, cx);
+        });
+        cx.simulate_resize(gpui::size(gpui::px(960.), gpui::px(600.)));
+        for (control, reading, comparison) in [
+            ("reading-view", true, false),
+            ("view-compare", true, true),
+            ("report-0", true, true),
+            ("view-evidence", true, false),
+            ("reading-view", false, false),
+        ] {
+            draw(cx);
+            let bounds = cx.debug_bounds(control).expect("the control is visible");
+            cx.simulate_click(bounds.center(), Default::default());
+            workbench.read_with(cx, |this, _| {
+                assert_eq!((this.reading, this.comparison), (reading, comparison), "{control}");
+                assert!(this.editing == Editing::Record(0));
+                if control == "report-0" {
+                    assert_eq!(this.baseline, Some(0));
+                }
+            });
+        }
+    }
+}
+
+#[gpui::test]
+fn opening_example_starts_a_fictional_reported_case(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    cx.simulate_resize(gpui::size(gpui::px(960.), gpui::px(600.)));
+    draw(cx);
+    let button = cx.debug_bounds("welcome-example").expect("the example is visible on first launch");
+    cx.simulate_click(button.center(), Default::default());
+    workbench.read_with(cx, |this, _| {
+        assert!(this.example && this.mode == Mode::ReportedVariant);
+        assert_eq!(this.today.len(), 4);
+    });
 }

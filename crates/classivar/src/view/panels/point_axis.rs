@@ -107,7 +107,7 @@ fn ticks(scale: &Scale, muted: Hsla) -> Div {
 
 /// One bar with its label, its note and where it ends. Thin lines mark the class
 /// limits so the bar can be read against them.
-fn bar_row(bar: &Bar, scale: &Scale, border: Hsla, muted: Hsla) -> Div {
+pub(super) fn bar_row(bar: &Bar, scale: &Scale, border: Hsla, muted: Hsla, label: impl IntoElement) -> Div {
     let x_of = |points: i32| (points - scale.min) as f32 * SCALE_UNIT;
     let (left, right) = (bar.from.min(bar.to), bar.from.max(bar.to));
     let mut track = div().relative().flex_none().w(px(x_of(scale.max))).h(px(36.));
@@ -135,7 +135,7 @@ fn bar_row(bar: &Bar, scale: &Scale, border: Hsla, muted: Hsla) -> Div {
                 .flex_none()
                 .flex()
                 .flex_col()
-                .child(div().text_xs().font_weight(FontWeight::BOLD).child(bar.label.clone()))
+                .child(label)
                 .child(caption(muted).child(bar.note.clone())),
         )
         .child(track)
@@ -145,11 +145,78 @@ fn bar_row(bar: &Bar, scale: &Scale, border: Hsla, muted: Hsla) -> Div {
 /// The zones, the point value at each limit, and one row per bar, in a box that
 /// scrolls sideways when the window is narrow.
 pub(super) fn axis(id: &'static str, scale: &Scale, bars: &[Bar], border: Hsla, muted: Hsla) -> AnyElement {
+    axis_rows(
+        id,
+        scale,
+        border,
+        muted,
+        bars.iter().map(|bar| {
+            bar_row(bar, scale, border, muted, div().text_xs().font_weight(FontWeight::BOLD).child(bar.label.clone()))
+        }),
+    )
+}
+
+pub(super) fn axis_rows(
+    id: &'static str,
+    scale: &Scale,
+    border: Hsla,
+    muted: Hsla,
+    bars: impl IntoIterator<Item = impl IntoElement>,
+) -> AnyElement {
     let mut rows = div().flex().flex_col().child(zone_header(scale, border, muted)).child(ticks(scale, muted));
     for bar in bars {
-        rows = rows.child(bar_row(bar, scale, border, muted));
+        rows = rows.child(bar);
     }
     div().id(id).overflow_x_scroll().child(rows).into_any_element()
+}
+
+/// Where `points` sits across a fluid axis (the evidence track): 0.0 at the left edge, 1.0 at the right.
+pub(super) fn fraction(points: i32, scale: &Scale) -> f32 {
+    let span = (scale.max - scale.min).max(1) as f32;
+    ((points - scale.min) as f32 / span).clamp(0.0, 1.0)
+}
+
+/// The class names above their zones; the class shown is in full ink.
+pub(super) fn zone_labels(scale: &Scale, class: Class, ink: Hsla, muted: Hsla) -> Div {
+    let mut row = div().relative().w_full().h(px(18.));
+    for (zone, from, to) in &scale.zones {
+        let (left, right) = (fraction(*from, scale), fraction(*to, scale));
+        let active = *zone == class;
+        row = row.child(
+            div()
+                .absolute()
+                .left(relative(left))
+                .w(relative(right - left))
+                .flex()
+                .justify_center()
+                .overflow_hidden()
+                .text_xs()
+                .text_color(if active { ink } else { muted })
+                .font_weight(if active { FontWeight::BOLD } else { FontWeight::NORMAL })
+                .child(if right - left > 0.12 { zone.label() } else { zone.short() }),
+        );
+    }
+    row
+}
+
+/// The point value at each class limit.
+pub(super) fn tick_row(scale: &Scale, muted: Hsla) -> Div {
+    let mut row = div().relative().w_full().h(px(16.));
+    for (_, from, _) in scale.zones.iter().skip(1) {
+        row = row.child(
+            div()
+                .absolute()
+                .left(relative(fraction(*from, scale)))
+                .ml(px(-12.))
+                .w(px(24.))
+                .flex()
+                .justify_center()
+                .text_xs()
+                .text_color(muted)
+                .child(points_text(*from)),
+        );
+    }
+    row
 }
 
 #[cfg(test)]

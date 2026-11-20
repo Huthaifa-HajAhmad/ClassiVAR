@@ -144,6 +144,7 @@ impl Workbench {
         let latest = self.records.iter().enumerate().max_by_key(|(i, r)| (r.year, *i)).map(|(_, r)| &r.evidence);
         let Some(evidence) = latest else { return };
         let (today, changes) = carry_forward(self.rules, &to_applied(evidence));
+        self.preview = false;
         self.today = today.into_iter().collect();
         if let Some(note) = copy_note(&changes) {
             self.file_status = Some(Status::attention(note));

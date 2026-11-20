@@ -2,7 +2,7 @@
 //!
 //! The screen has four areas: a top bar (what this is, which mode, save and open),
 //! a case panel (variant, gene, gene sources, earlier records), the criteria list on
-//! the left, and the result on the right. The result is the first thing the eye
+//! the right, and the result on the left. The result is the first thing the eye
 //! should land on, so it gets the largest type and the strongest colour on screen.
 //! Yellow is kept for things that block a result; everything else is quiet.
 //!
@@ -21,19 +21,23 @@ mod helper_bar;
 mod helpers;
 mod hero;
 mod history;
+mod inspector;
 mod lanes;
 mod point_axis;
 mod records;
+mod report_focus;
 mod results;
 mod strength_ladder;
 mod timeline;
 mod top;
+mod track;
 mod verdict;
+mod welcome;
 mod what_if;
 
 /// A section heading in the results pane.
 fn heading(text: impl Into<SharedString>) -> Div {
-    div().text_sm().font_weight(FontWeight::SEMIBOLD).pb_2().child(text.into())
+    div().text_lg().font_weight(FontWeight::SEMIBOLD).pb_2().child(text.into())
 }
 
 impl Workbench {
@@ -47,12 +51,11 @@ impl Workbench {
     }
 
     /// The records that still lack a class (they are named in the verdict), and the
-    /// comparison with today's evidence once every record has one. Records without a
-    /// class cannot be compared, so there is no verdict until each has one.
-    fn compare_with_records(&self) -> (Vec<String>, Option<Reevaluation>) {
+    /// comparison for complete records. An unfinished report still blocks the overall verdict.
+    pub(super) fn compare_with_records(&self) -> (Vec<String>, Option<Reevaluation>) {
         let incomplete: Vec<String> =
             self.records.iter().filter(|r| r.class.is_none()).map(|r| format!("{} · {}", r.label, r.year)).collect();
-        if self.mode != Mode::ReportedVariant || !incomplete.is_empty() {
+        if self.mode != Mode::ReportedVariant {
             return (incomplete, None);
         }
         let submissions: Vec<Submission> = self
@@ -74,8 +77,8 @@ impl Workbench {
     }
 }
 
-impl Render for Workbench {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+impl Workbench {
+    fn workspace(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         // While a question waits on screen, it owns the keyboard: the question
         // window takes the focus, and Tab cannot walk out to the controls
         // behind it. Enter and Space keep their normal meaning on whichever
@@ -83,6 +86,9 @@ impl Render for Workbench {
         // Cancel button) is handled by the global key observer.
         if self.confirm.is_some() && !self.confirm_focus.is_focused(window) {
             window.focus(&self.confirm_focus, cx);
+        }
+        if self.welcome && !self.has_case_data(cx) {
+            return self.welcome_screen(cx);
         }
         let modal_open = self.confirm.is_some();
         let result = match self.score_on_screen() {
@@ -109,15 +115,44 @@ impl Render for Workbench {
             })
             .child(self.top_bar(cx))
             .children(self.file_status_banner(cx))
-            .child(self.case_panel(cx))
-            .child(div().flex().flex_1().min_h_0().child(self.criteria_panel(&result, cx)).child(self.results_panel(
-                &result,
-                reevaluation.as_ref(),
-                &incomplete,
-                variant.as_deref(),
-                cx,
-            )))
+            .when(!self.reading, |frame| frame.child(self.case_panel(cx)))
+            .child(
+                div()
+                    .flex()
+                    .flex_1()
+                    .min_h_0()
+                    .child(self.results_panel(&result, reevaluation.as_ref(), &incomplete, variant.as_deref(), cx))
+                    .when(!self.reading, |body| body.child(self.criteria_panel(&result, cx))),
+            )
             .children(self.confirm_modal(cx))
             .into_any_element()
     }
+}
+
+impl Render for Workbench {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+        let frame = gpui_kit::component::TitleBar::new().bg(theme.secondary).text_color(theme.foreground).child(
+            div()
+                .flex()
+                .items_center()
+                .gap_3()
+                .px_3()
+                .child(div().flex().items_end().gap(px(2.)).children(
+                    [7., 12., 17.].map(|height| div().w(px(3.)).h(px(height)).rounded_sm().bg(theme.foreground)),
+                ))
+                .child(div().text_base().font_weight(FontWeight::BOLD).child("ClassiVAR"))
+                .child(div().text_xs().child("Variant evidence workbench")),
+        );
+        div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .child(frame)
+            .child(div().flex_1().min_h_0().child(self.workspace(window, cx)))
+    }
+}
+
+fn explanation_section(cx: &Context<Workbench>) -> Div {
+    div().p_4().rounded_lg().border_1().border_color(cx.theme().border).bg(cx.theme().popover)
 }

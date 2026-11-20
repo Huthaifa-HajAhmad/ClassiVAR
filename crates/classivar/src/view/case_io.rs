@@ -138,6 +138,13 @@ impl Workbench {
 
     /// Replace what is on screen with a case that was already checked by `CaseFile::from_json`.
     pub(super) fn apply_case(&mut self, case: CaseFile, window: &mut Window, cx: &mut Context<Self>) {
+        self.category = None;
+        self.baseline = None;
+        self.reading = false;
+        self.comparison = false;
+        self.inspected = None;
+        self.preview = false;
+        self.welcome = false;
         let (today, changes) = carry_forward(self.rules, &case.today);
         let adjusted = open_notes(&changes);
         self.today = today.into_iter().collect();
@@ -202,6 +209,12 @@ impl Workbench {
 
     /// Forget the whole case: evidence, records, the gene decision and the variant name.
     pub(super) fn clear_case(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.category = None;
+        self.baseline = None;
+        self.reading = false;
+        self.comparison = false;
+        self.inspected = None;
+        self.preview = false;
         self.today.clear();
         self.records.clear();
         self.editing = Editing::Today;

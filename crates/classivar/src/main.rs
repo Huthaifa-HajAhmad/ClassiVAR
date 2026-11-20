@@ -57,7 +57,7 @@ fn main() {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             // Below this width the criteria list and the results no longer fit side by side.
             window_min_size: Some(size(px(960.), px(600.))),
-            ..Default::default()
+            ..gpui_kit::component::TitleBar::window_options()
         };
         open_window(options, cx, |window, cx| cx.new(|cx| Workbench::new(rules, window, cx)))
             .expect("could not open the window");
