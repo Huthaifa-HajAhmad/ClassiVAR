@@ -21,6 +21,7 @@ mod helper_bar;
 mod helpers;
 mod hero;
 mod history;
+mod interactions;
 mod lanes;
 mod point_axis;
 mod records;
