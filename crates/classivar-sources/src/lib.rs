@@ -110,6 +110,14 @@ fn describe(error: ureq::Error) -> SourceError {
     }
 }
 
+/// Where a service can read about this program. It is a project page, not a
+/// person's address: the services ask automated clients to say who they are.
+const PROJECT_URL: &str = "https://github.com/Huthaifa-HajAhmad/ClassiVAR";
+
+fn user_agent() -> String {
+    format!("ClassiVAR/{} (variant curation learning tool; {PROJECT_URL})", env!("CARGO_PKG_VERSION"))
+}
+
 /// One web client setup for every lookup. It gives up after 30 seconds, names
 /// this program in the request, and hands back every HTTP status so the caller
 /// can read the body of a 404 (a status is not treated as a failure here).
@@ -118,11 +126,10 @@ fn http_agent() -> &'static ureq::Agent {
     // one PanelApp search and later lookups do not each open a new connection.
     static AGENT: OnceLock<ureq::Agent> = OnceLock::new();
     AGENT.get_or_init(|| {
-        let user_agent = format!("ClassiVAR/{} (variant curation learning tool)", env!("CARGO_PKG_VERSION"));
         ureq::Agent::config_builder()
             .timeout_global(Some(Duration::from_secs(30)))
             .http_status_as_error(false)
-            .user_agent(user_agent)
+            .user_agent(user_agent())
             .build()
             .into()
     })
@@ -169,6 +176,17 @@ pub(crate) fn get_ok(url: &str, query: &[(&str, &str)], accept: &str, max_bytes:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_user_agent_names_the_program_its_version_and_the_project_page() {
+        let agent = user_agent();
+        assert!(agent.starts_with(&format!("ClassiVAR/{} ", env!("CARGO_PKG_VERSION"))), "{agent}");
+        assert!(
+            agent.contains("https://github.com/Huthaifa-HajAhmad/ClassiVAR"),
+            "a service needs a way to reach the project: {agent}"
+        );
+        assert!(!agent.contains('@'), "no email address in a request header: {agent}");
+    }
 
     #[test]
     fn symbols_are_checked_and_normalised() {
