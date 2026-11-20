@@ -9,6 +9,7 @@ edition = "2024"
 # (rust-toolchain.toml) is the one that is tested.
 rust-version = "1.98"
 publish = false
+license = "MIT OR Apache-2.0"
 
 # Dependencies (the bulk of the 800-odd packages in Cargo.lock, GPUI included)
 # build without debug info in dev and test profiles. Our own crates keep it, so

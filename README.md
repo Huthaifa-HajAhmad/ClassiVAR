@@ -16,3 +16,7 @@ Read next: `AGENTS.md` (how to work here, especially for AI agents), `docs/DEVEL
 Rules live in `rules/acmg-amp-points.toml`. They are built into the program; to try a corrected rule file without rebuilding, run `cargo run -p classivar -- --rules path/to/file.toml`.
 
 CI (`.github/workflows/`) runs the same checks plus `cargo audit` on Windows and macOS (both blocking); the first fully green run was [42086149175](https://github.com/Huthaifa-HajAhmad/ClassiVAR/actions/runs/42086149175).
+
+## Licence
+
+Licensed under either of Apache License 2.0 (`LICENSE-APACHE`) or the MIT licence (`LICENSE-MIT`), at your option. The packages ClassiVAR is built with are listed in `THIRD-PARTY-NOTICES.md` (regenerate with `scripts/third-party-notices.ps1`).
