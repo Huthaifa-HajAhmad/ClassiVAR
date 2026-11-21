@@ -40,9 +40,10 @@ The window was redesigned as "a calm instrument" (a mix of the two directions th
 
 Measured on the last run on `main` before this change (run 44751696812, cache cold): macOS 19.5 min and Windows 13.9 min, almost all of it clippy (6.6 and 3.4 min), tests (7.7 and 5.4 min) and build (3.0 and 3.7 min, macOS and Windows) one after another. Dependency debug info is already off in `Cargo.toml`, so that idea was not needed.
 
-- **Separate jobs.** fmt (once, on Linux), clippy, test and build (each on Windows and macOS) and audit now run side by side. From the cold step times a run should take about as long as the slowest test job (about 5.4 min on Windows and 7.7 min on macOS) instead of the sum. The checks have new names (`clippy (windows-latest)`, and so on); no branch protection depends on the old `check (...)` names.
+- **Separate jobs.** fmt (once, on Linux), clippy, test and build (each on Windows and macOS) and audit now run side by side. A run takes as long as its slowest job instead of the sum of all of them. The checks have new names (`clippy (windows-latest)`, and so on); no branch protection depends on the old `check (...)` names.
 - **Cache saved only from `main`.** Pull requests read the cache and never write one, so they cannot fill the repository's 10 GB cache limit (each cache is about 750 MB). A pull request that changes `Cargo.lock` builds its new dependencies without caching them.
 - **Prebuilt `cargo-audit`.** Installed with a pinned release of `taiki-e/install-action` (checked against the download's checksum) instead of 3 minutes of compiling. This saves runner time, not wall time, because audit ran in parallel anyway.
+- **Measured (run 44883177026, started by hand on the branch, cache cold because the jobs have new names):** the whole run took 10.8 min instead of 19.5. Per job, macOS / Windows: clippy 3.7 / 3.1 min, test 10.2 / 7.7 min, build 10.8 / 7.3 min; fmt 13 s and audit 22 s (it was 3.6 min). The slowest job sets the time: build on macOS.
 - **Not measured yet:** a warm-cache run. The first run of the new jobs on `main` is cold; the second is the first warm one. Put its numbers here.
 - **Left as it was:** macOS stays on the Intel runner (`macos-15-intel`). An Apple-silicon runner is faster but would test a different CPU than the one chosen on 2026-11-05.
 
