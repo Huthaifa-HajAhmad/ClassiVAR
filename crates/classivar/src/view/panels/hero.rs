@@ -1,7 +1,6 @@
-//! The result at the top of the right pane: the class, the points and the scale.
+//! The result at the top of the explanation pane: the class, the points and the evidence track.
 
 use super::*;
-use crate::view::describe::Scale;
 
 impl Workbench {
     /// Who this result is about, the class, the points and where they sit.
@@ -9,76 +8,79 @@ impl Workbench {
         let muted = cx.theme().muted_foreground;
         // The gene the evidence was checked against, not text still being typed.
         let gene = self.case_gene.clone();
-        let scope = (self.mode == Mode::ReportedVariant).then(|| self.editing_label());
         let title = match variant {
-            Some(name) => div().text_xl().font_weight(FontWeight::BOLD).child(name.to_string()),
-            None => div().text_xl().text_color(muted).child("Unnamed variant"),
+            Some(name) => name.to_string(),
+            None if self.example => "Fictional case".to_string(),
+            None => "New assessment".to_string(),
         };
-        let hero = div()
+        // With the rail folded away, the case name moves here as one small line. A
+        // withheld result has no readout, so it says here whose evidence it is.
+        let rail = self.rail_shown.get();
+        let header = div()
             .flex()
-            .flex_col()
+            .flex_wrap()
+            .items_baseline()
             .gap_3()
-            .when_some(scope, |d, scope| {
-                d.child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child(format!("Result for {scope}")))
-            })
-            .child(title)
-            .when(!gene.is_empty(), |d| d.child(div().text_sm().text_color(muted).child(gene)));
+            .when(!rail, |d| d.child(div().text_base().font_weight(FontWeight::SEMIBOLD).child(title)))
+            .when(!rail && !gene.is_empty(), |d| d.child(div().text_sm().text_color(muted).child(gene)))
+            .when(result.class().is_none(), |d| d.child(crate::look::eyebrow(self.scope_words(), cx)));
+        let hero = div().flex().flex_col().gap_4().child(header);
         match result.class() {
             Some(class) => self.hero_class(hero, result, class, cx),
             None if !result.conflicts.is_empty() => hero_conflicts(hero, result, muted),
             None if result.both_sides_met => hero_both_sides(hero, result),
             None if !result.combination_overuse.is_empty() => hero_overuse(hero, result),
+            None if result.items.is_empty() => {
+                let room = (self.stage_width.get(), self.stage_height.get());
+                let dial = div().flex().justify_center().child(self.dial(result, None, room, false, cx));
+                hero_empty(hero.child(dial), result, muted).child(self.category_picker(cx))
+            }
             None => hero_empty(hero, result, muted),
         }
         .into_any_element()
     }
 
-    /// A class is shown: the badge with its review status, the points, the scale, and how the 2015 table compares.
+    fn category_picker(&self, cx: &mut Context<Self>) -> Div {
+        let mut choices = div().flex().flex_wrap().justify_center().gap_2();
+        for category in Category::ALL {
+            if self.rules.criteria.iter().any(|criterion| criterion.category == category) {
+                choices = choices.child(
+                    Button::new(SharedString::from(format!("browse-{}", category.label())))
+                        .outline()
+                        .rounded(px(999.))
+                        .label(category.label())
+                        .selected(self.category == Some(category))
+                        .toggled(self.category == Some(category))
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.category = Some(category);
+                            this.reading = false;
+                            this.criteria_scroll.set_offset(point(px(0.), px(0.)));
+                            cx.notify();
+                        })),
+                );
+            }
+        }
+        choices
+    }
+
+    /// A class is shown: the class banner with its review status, the evidence
+    /// track, the selected criterion, and how the 2015 table compares.
     fn hero_class(&self, hero: Div, result: &Assessment, class: Class, cx: &mut Context<Self>) -> Div {
-        let (border, muted) = (cx.theme().border, cx.theme().muted_foreground);
-        let dark = cx.theme().is_dark();
-        let sign = if result.total_points > 0 { "+" } else { "" };
-        let classic = classic_comparison(result);
+        let muted = cx.theme().muted_foreground;
         // Stand-alone evidence fixes the class; the points total alone would not.
         let stand_alone = result
             .items
             .iter()
             .any(|i| i.counted && i.direction == Direction::Benign && i.strength == Strength::StandAlone);
-        hero.child(
-            div()
-                .flex()
-                .flex_wrap()
-                .items_center()
-                .gap_5()
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .px_4()
-                        .py_3()
-                        .rounded_lg()
-                        .border_1()
-                        .border_color(border)
-                        .bg(class_fill(class, dark))
-                        .text_color(class_ink(class, dark))
-                        .child(div().text_2xl().font_weight(FontWeight::BOLD).child(class.label()))
-                        .child(div().text_xs().child(rules_tag(self.rules))),
-                )
-                .child(div().text_2xl().font_weight(FontWeight::BOLD).child(format!(
-                    "{sign}{} point{}",
-                    result.total_points,
-                    plural(result.total_points.abs())
-                )))
-                .when_some(result.vus_tier.clone(), |row, tier| row.child(div().text_lg().child(tier))),
-        )
-        .child(self.points_scale(result.total_points, class, cx))
-        .child(div().text_sm().text_color(muted).child(classic))
-        .when(stand_alone, |d| {
-            d.child(caption(muted).child(
-                "Stand-alone benign evidence (BA1) fixes the class at Benign, whatever else is applied. The points total is shown for transparency.",
-            ))
-        })
-        .when(class == Class::Vus, |d| d.child(self.vus_note(result.total_points, result.vus_tier.as_deref(), cx)))
+        hero.child(self.signature(result, class, cx))
+            .child(self.inspector(result, cx))
+            .child(self.insights(result, class, cx))
+            .when(stand_alone, |d| {
+                d.child(caption(muted).child(
+                    "Stand-alone benign evidence (BA1) fixes the class at Benign, whatever else is applied. The points total is shown for transparency.",
+                ))
+            })
+            .when(class == Class::Vus, |d| d.child(self.vus_note(result.total_points, result.vus_tier.as_deref(), cx)))
     }
 
     /// Where in the VUS range the points are. The range comes from the rule set.
@@ -106,72 +108,6 @@ impl Workbench {
             ))
             .into_any_element()
     }
-
-    pub(super) fn points_scale(&self, total: i32, active: Class, cx: &mut Context<Self>) -> AnyElement {
-        let foreground = cx.theme().foreground;
-        let scale = scale_for(self.rules);
-        let x_of = |points: i32| (points - scale.min) as f32 * SCALE_UNIT;
-        let marker_x = x_of(total.clamp(scale.min, scale.max - 1)) + SCALE_UNIT / 2.0 - 7.0;
-        let width = (scale.max - scale.min) as f32 * SCALE_UNIT;
-        div()
-            .id("scale-scroll")
-            .overflow_x_scroll()
-            .child(
-                div()
-                    .relative()
-                    .w(px(width))
-                    .h(px(74.))
-                    .child(div().absolute().top(px(0.)).left(px(marker_x)).text_color(foreground).child("▼"))
-                    .child(scale_bar(&scale, active, cx.theme().is_dark(), foreground))
-                    .child(scale_ticks(&scale, width, cx.theme().muted_foreground)),
-            )
-            .into_any_element()
-    }
-}
-
-/// The five class zones side by side, the active class outlined.
-fn scale_bar(scale: &Scale, active: Class, dark: bool, foreground: Hsla) -> Div {
-    let mut bar = div().flex().absolute().top(px(18.)).left(px(0.));
-    for (class, from, to) in &scale.zones {
-        let is_active = *class == active;
-        let fill = class_fill(*class, dark);
-        bar = bar.child(
-            div()
-                .w(px((to - from) as f32 * SCALE_UNIT))
-                .h(px(32.))
-                .flex()
-                .items_center()
-                .justify_center()
-                .overflow_hidden()
-                .bg(fill)
-                .text_color(class_ink(*class, dark))
-                .text_xs()
-                .font_weight(if is_active { FontWeight::BOLD } else { FontWeight::NORMAL })
-                .border_2()
-                .border_color(if is_active { foreground } else { fill.into() })
-                .child(class.short()),
-        );
-    }
-    bar
-}
-
-/// The point value where each zone after the first starts.
-fn scale_ticks(scale: &Scale, width: f32, muted: Hsla) -> Div {
-    let mut ticks = div().absolute().top(px(54.)).left(px(0.)).w(px(width));
-    for edge in scale.zones.iter().skip(1).map(|(_, from, _)| *from) {
-        ticks = ticks.child(
-            div()
-                .absolute()
-                .left(px((edge - scale.min) as f32 * SCALE_UNIT - 10.))
-                .w(px(20.))
-                .flex()
-                .justify_center()
-                .text_xs()
-                .text_color(muted)
-                .child(edge.to_string()),
-        );
-    }
-    ticks
 }
 
 /// Criteria that contradict each other: no class until one of each pair is removed.
@@ -239,16 +175,23 @@ fn hero_overuse(hero: Div, result: &Assessment) -> Div {
 /// Nothing counts yet, so there is no class to show.
 fn hero_empty(hero: Div, result: &Assessment, muted: Hsla) -> Div {
     let small = if result.items.is_empty() {
-        "Apply criteria on the left. A class appears once at least one criterion counts."
+        "Choose an evidence category to browse its criteria. A class appears once you apply evidence that counts."
     } else {
         "Only criteria that no longer count are applied. Apply at least one that counts."
     };
-    hero.child(div().text_2xl().font_weight(FontWeight::BOLD).text_color(muted).child("No class yet"))
-        .child(div().text_sm().text_color(muted).child(small))
+    hero.child(
+        div()
+            .flex()
+            .flex_col()
+            .items_center()
+            .gap_1()
+            .child(crate::look::display().text_color(muted).child("No class yet"))
+            .child(div().text_sm().text_center().text_color(muted).child(small)),
+    )
 }
 
 /// How the 2015 combining table (with ClinGen's 2020 addition) compares with the points.
-fn classic_comparison(result: &Assessment) -> String {
+pub(super) fn classic_comparison(result: &Assessment) -> String {
     match (result.classic_class, result.frameworks_agree()) {
         (Some(c), Some(true)) => format!("The 2015 table plus ClinGen's 2020 addition also gives {}.", c.label()),
         (Some(c), _) => format!(

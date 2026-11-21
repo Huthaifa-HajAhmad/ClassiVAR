@@ -1,5 +1,9 @@
 # Variant curation workbench: design
 
+A shared application title bar surrounds the opening screen and case workspace. The opening screen shows a fictional example scored with the loaded rules.
+
+The current workbench puts the explanation on the left and the evidence editor on the right. Expand explanation gives the chart the full workspace. Compare reports starts with the selected report and the current evidence. See [the evidence workbench design](evidence-workbench.md).
+
 Date: 2026-11-03. Status: draft, waiting for the user's approval. Working title only.
 
 Labels used below: **[User]** a decision the user made. **[My call]** my proposal, not yet agreed. **[Builder]** left to whoever plans and builds it.

@@ -4,8 +4,7 @@ use super::*;
 use classivar_core::rules::StrengthGuide;
 
 impl Workbench {
-    pub(super) fn criteria_panel(&self, result: &Assessment, cx: &mut Context<Self>) -> AnyElement {
-        let border = cx.theme().border;
+    pub(super) fn criteria_panel(&self, result: &Assessment, width: f32, cx: &mut Context<Self>) -> AnyElement {
         let list = div()
             .id("criteria")
             .track_scroll(&self.criteria_scroll)
@@ -17,18 +16,29 @@ impl Workbench {
             .flex()
             .flex_col()
             .gap_4()
+            .child(self.case_panel(cx))
+            .when_some(self.category, |list, category| {
+                list.child(
+                    Button::new("clear-category")
+                        .small()
+                        .label(format!("{} - Show all criteria", category.label()))
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.category = None;
+                            cx.notify();
+                        })),
+                )
+            })
             .children(self.helper_section(cx))
             .child(self.criteria_group(Direction::Pathogenic, "For disease (pathogenic)", result.pathogenic_points, cx))
             .child(self.criteria_group(Direction::Benign, "Against disease (benign)", result.benign_points, cx));
 
-        div()
+        crate::look::panel(cx)
             .flex()
             .flex_col()
-            .w(px(480.))
+            .w(px(width))
             .h_full()
             .flex_none()
-            .border_r_1()
-            .border_color(border)
+            .overflow_hidden()
             .child(self.criteria_header(cx))
             .child(list)
             .into_any_element()
@@ -53,22 +63,20 @@ impl Workbench {
             .justify_between()
             .gap_2()
             .px_5()
-            .py_3()
+            .pt_4()
+            .pb_3()
             .border_b_1()
             .border_color(border)
             .child(
                 div()
                     .flex()
                     .flex_col()
-                    .child(
-                        div()
-                            .text_sm()
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child(format!("Criteria · {}", self.editing_label())),
-                    )
+                    .gap_0p5()
+                    .child(crate::look::eyebrow(self.editing_label(), cx))
+                    .child(div().text_lg().font_weight(FontWeight::SEMIBOLD).child("Evidence"))
                     .child(caption(muted).child(count)),
             )
-            .child(Button::new("clear").label(clear_label).small().outline().on_click(cx.listener(|this, _, _, cx| {
+            .child(Button::new("clear").label(clear_label).small().ghost().on_click(cx.listener(|this, _, _, cx| {
                 if !this.current().is_empty() {
                     this.ask(Confirm::Clear(this.editing));
                 }
@@ -88,19 +96,21 @@ impl Workbench {
                 .gap_2()
                 .px_2()
                 .pb_1()
-                .child(div().w(px(10.)).h(px(10.)).rounded_sm().bg(direction_colour(direction)))
-                .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child(title))
+                .child(div().size(px(8.)).rounded_full().bg(direction_colour(direction)))
+                .child(div().text_base().font_weight(FontWeight::SEMIBOLD).child(title))
                 .child(div().flex_1())
-                .child(caption(muted).child(format!("{sign}{} points", points.abs()))),
+                .child(crate::look::figure(12.).text_color(muted).child(format!("{sign}{} pts", points.abs()))),
         );
         let rules = self.rules;
-        for category in Category::ALL {
+        for category in
+            Category::ALL.into_iter().filter(|category| self.category.is_none_or(|chosen| chosen == *category))
+        {
             let in_category: Vec<&'static Criterion> =
                 rules.criteria.iter().filter(|c| c.direction == direction && c.category == category).collect();
             if in_category.is_empty() {
                 continue;
             }
-            group = group.child(div().px_2().pt_2().text_xs().text_color(muted).child(category.label()));
+            group = group.child(div().px_2().pt_3().pb_1().child(crate::look::eyebrow(category.label(), cx)));
             for c in in_category {
                 group = group.child(self.criterion_row(c, cx));
             }

@@ -134,6 +134,13 @@ impl Workbench {
 
     /// Replace what is on screen with a case that was already checked by `CaseFile::from_json`.
     pub(super) fn apply_case(&mut self, case: CaseFile, window: &mut Window, cx: &mut Context<Self>) {
+        self.category = None;
+        self.baseline = None;
+        self.reading = false;
+        self.comparison = false;
+        self.inspected = None;
+        self.preview = false;
+        self.welcome = false;
         let (today, changes) = carry_forward(self.rules, &case.today);
         let adjusted = open_notes(&changes);
         self.today = today.into_iter().collect();
@@ -183,25 +190,44 @@ impl Workbench {
         };
         Some(
             div()
-                .flex()
-                .flex_wrap()
-                .items_center()
-                .gap_3()
                 .px_4()
-                .py_1()
-                .child(notice(status.text.clone(), fill, ink))
-                .child(Button::new("file-status-dismiss").label("Dismiss").small().outline().on_click(cx.listener(
-                    |this, _, _, cx| {
-                        this.file_status = None;
-                        cx.notify();
-                    },
-                )))
+                .pb_3()
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_3()
+                        .pl_4()
+                        .pr_1()
+                        .py_1()
+                        .rounded(px(crate::look::CARD_RADIUS))
+                        .bg(fill)
+                        .text_color(ink)
+                        .child(div().flex_1().text_sm().child(status.text.clone()))
+                        .child(
+                            Button::new("file-status-dismiss")
+                                .label("Dismiss")
+                                .small()
+                                .ghost()
+                                .text_color(ink)
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.file_status = None;
+                                    cx.notify();
+                                })),
+                        ),
+                )
                 .into_any_element(),
         )
     }
 
     /// Forget the whole case: evidence, records, the gene decision and the variant name.
     pub(super) fn clear_case(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.category = None;
+        self.baseline = None;
+        self.reading = false;
+        self.comparison = false;
+        self.inspected = None;
+        self.preview = false;
         self.today.clear();
         self.records.clear();
         self.editing = Editing::Today;

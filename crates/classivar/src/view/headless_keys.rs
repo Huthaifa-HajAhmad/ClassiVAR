@@ -12,6 +12,14 @@ use gpui_kit::component::ThemeMode;
 use super::headless::{draw, open};
 use super::{Confirm, Workbench};
 
+/// A window past the opening screen, where the editor and its text boxes are.
+fn open_editor(cx: &mut TestAppContext) -> (Entity<Workbench>, &mut VisualTestContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    workbench.update_in(cx, |this, _, _| this.welcome = false);
+    draw(cx);
+    (workbench, cx)
+}
+
 /// Press a key, then draw, as a real session does between key presses.
 fn press(cx: &mut VisualTestContext, keys: &str) {
     cx.simulate_keystrokes(keys);
@@ -47,7 +55,7 @@ fn ask_to_load_the_example(workbench: &Entity<Workbench>, cx: &mut VisualTestCon
 
 #[gpui::test]
 fn tab_and_shift_tab_stay_inside_a_question_and_reach_both_answers(cx: &mut TestAppContext) {
-    let (workbench, cx) = open(cx, ThemeMode::Light);
+    let (workbench, cx) = open_editor(cx);
     let question = ask_to_load_the_example(&workbench, cx);
     assert!(question_holds_focus(&question, cx), "a question takes the keyboard when it opens");
 
@@ -65,7 +73,7 @@ fn tab_and_shift_tab_stay_inside_a_question_and_reach_both_answers(cx: &mut Test
 
 #[gpui::test]
 fn the_keyboard_alone_can_cancel_or_confirm_a_question(cx: &mut TestAppContext) {
-    let (workbench, cx) = open(cx, ThemeMode::Light);
+    let (workbench, cx) = open_editor(cx);
 
     ask_to_load_the_example(&workbench, cx);
     press(cx, "tab"); // Cancel is the first answer
@@ -95,7 +103,7 @@ fn tab_starts_from_a_fresh_window_and_from_after_a_question_closes(cx: &mut Test
 
 #[gpui::test]
 fn the_tab_order_reaches_both_text_boxes_and_a_stop_for_every_criterion(cx: &mut TestAppContext) {
-    let (workbench, cx) = open(cx, ThemeMode::Light);
+    let (workbench, cx) = open_editor(cx);
     draw(cx);
     let (variant, gene, criteria) = workbench.read_with(cx, |this, app| {
         (
@@ -120,7 +128,7 @@ fn the_tab_order_reaches_both_text_boxes_and_a_stop_for_every_criterion(cx: &mut
 
 #[gpui::test]
 fn a_question_opened_while_a_page_control_has_the_focus_takes_it(cx: &mut TestAppContext) {
-    let (workbench, cx) = open(cx, ThemeMode::Light);
+    let (workbench, cx) = open_editor(cx);
     draw(cx);
     press(cx, "tab");
     press(cx, "tab");
@@ -133,7 +141,7 @@ fn a_question_opened_while_a_page_control_has_the_focus_takes_it(cx: &mut TestAp
 
 #[gpui::test]
 fn escape_cancels_a_question_even_while_an_answer_has_the_focus(cx: &mut TestAppContext) {
-    let (workbench, cx) = open(cx, ThemeMode::Light);
+    let (workbench, cx) = open_editor(cx);
     ask_to_load_the_example(&workbench, cx);
     press(cx, "tab");
     press(cx, "tab"); // on "Yes, continue"

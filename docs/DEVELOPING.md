@@ -160,4 +160,4 @@ Before asking for review:
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs fmt, clippy, tests and build on Windows **and** macOS — both block a merge since the first green macOS build (run 42086149175) — plus `cargo audit`. `.github/workflows/live-sources.yml` runs the live source tests weekly. Run [42086149175](https://github.com/Huthaifa-HajAhmad/ClassiVAR/actions/runs/42086149175) on 2026-11-05 was the first fully green run; put the newest green run URL in `docs/ROADMAP.md` under D3.
+`.github/workflows/ci.yml` runs fmt (once), clippy, tests and build (each on Windows **and** macOS — both block a merge since the first green macOS build, run 42086149175) and `cargo audit` as separate jobs that run side by side, so a run takes as long as its slowest job. Only runs on `main` save the build cache; pull requests read it. `.github/workflows/live-sources.yml` runs the live source tests weekly. Run [42086149175](https://github.com/Huthaifa-HajAhmad/ClassiVAR/actions/runs/42086149175) on 2026-11-05 was the first fully green run; put the newest green run URL in `docs/ROADMAP.md` under D3.

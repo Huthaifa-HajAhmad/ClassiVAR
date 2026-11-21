@@ -35,6 +35,7 @@ impl Workbench {
             ));
             return;
         }
+        self.welcome = false;
         self.records = EXAMPLE_RECORDS
             .iter()
             .map(|(label, year, class, list)| Record {
@@ -49,10 +50,16 @@ impl Workbench {
         self.editing = Editing::Today;
         // Flag the case as fictional: a checked gene starts a real case, so the
         // curator is asked first, and Save refuses until the example is cleared.
+        self.category = None;
+        self.baseline = None;
+        self.reading = false;
+        self.comparison = false;
+        self.inspected = None;
+        self.preview = false;
         self.example = true;
         self.forget_saved();
         self.file_status = Some(Status::attention(
-            "Loaded the fictional example. The criteria here are the demo's, not a real variant: checking a gene asks to start a real case, and Save refuses until the example is cleared.",
+            "Fictional case. Explore the evidence and compare its two reports. Clear the example before saving a real case.",
         ));
         // The example is fictional: it must not inherit the gene or variant that
         // happened to be on screen, or the class would be attributed to them.

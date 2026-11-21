@@ -3,6 +3,11 @@
 # including the macOS build, so the macOS job now blocks a merge like the
 # Windows one (the app still needs its first run and install on macOS, see
 # ROADMAP D4).
+#
+# The checks run as separate jobs, side by side, so a run takes as long as its
+# slowest check and not the sum of all of them. Each job keeps its own build
+# cache. Only runs on main save a cache; pull requests read main's cache, so
+# they cannot fill the repository's 10 GB cache limit.
 name: ci
 
 on:
@@ -22,7 +27,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
+  # Formatting does not depend on the system, so it runs once, and fast.
+  fmt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      # Shows the toolchain pinned in rust-toolchain.toml; the first cargo command installs it if missing.
+      - run: rustup show
+      - run: cargo fmt --all --check
+
+  # Each of these three runs on Windows and on macOS. They are separate jobs so they run at the same time.
+  clippy:
     strategy:
       fail-fast: false
       matrix:
@@ -31,20 +47,51 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      # Shows the toolchain pinned in rust-toolchain.toml; the first cargo command installs it if missing.
       - run: rustup show
       # Keeps the built dependencies between runs (the GPUI tree is large). Actions are pinned to a commit, not a moving tag.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-      - run: cargo fmt --all --check
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
-      - run: cargo test --workspace --locked
-      - run: cargo build --workspace --locked
-  audit:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      # The version is pinned so the audit does not change without a commit; rust-cache keeps the installed binary.
+      - run: rustup show
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-      - run: cargo install cargo-audit --locked --version 0.23.0
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo test --workspace --locked
+
+  # Builds and links the real program, which the test run does not do.
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - run: rustup show
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo build --workspace --locked
+
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      # A ready-made program of a pinned version (it checks the download), so nothing is compiled here.
+      - uses: taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f # v2.90.6
+        with:
+          tool: cargo-audit@0.23.0
       - run: cargo audit

@@ -131,9 +131,59 @@ impl Workbench {
         if entries.is_empty() {
             return Vec::new();
         }
+        let toggle = self.helpers_toggle(entries.len(), cx);
+        if !self.show_helpers {
+            return vec![div().child(toggle).into_any_element()];
+        }
         let muted = cx.theme().muted_foreground;
+        let bar = div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .px_2()
+            .child(div().child(toggle))
+            .child(
+                caption(muted)
+                    .child("They read published tables and suggest a strength. You still choose what to apply."),
+            )
+            .child(self.helper_buttons(&entries, cx))
+            .into_any_element();
+        let mut out = vec![bar];
+        out.extend(entries.iter().filter(|entry| entry.open).map(|entry| (entry.panel)(self, cx)));
+        out
+    }
+
+    /// The button that opens and closes the bar of helpers; `count` is how many apply.
+    fn helpers_toggle(&self, count: usize, cx: &mut Context<Self>) -> Button {
+        let label = if self.show_helpers { "Hide evidence helpers" } else { "Evidence helpers" };
+        let count = format!("{} {}", count, if self.show_helpers { "▴" } else { "▾" });
+        Button::new("evidence-tools")
+            .small()
+            .ghost()
+            .w_full()
+            .rounded(px(crate::look::CARD_RADIUS))
+            .bg(cx.theme().muted)
+            .accessibility_label(label)
+            .child(
+                div()
+                    .w_full()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child(label))
+                    .child(crate::look::figure(11.).text_color(cx.theme().muted_foreground).child(count)),
+            )
+            .toggled(self.show_helpers)
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.show_helpers = !this.show_helpers;
+                cx.notify();
+            }))
+    }
+
+    /// One toggle button per helper.
+    fn helper_buttons(&self, entries: &[Entry], cx: &mut Context<Self>) -> Div {
         let mut buttons = div().flex().flex_wrap().gap_2();
-        for entry in &entries {
+        for entry in entries {
             let (toggle, open) = (entry.toggle, entry.open);
             buttons = buttons.child(
                 Button::new(SharedString::from(format!("{}-toggle", entry.key)))
@@ -141,6 +191,7 @@ impl Workbench {
                     .accessibility_label(format!("Open the {}", entry.what))
                     .small()
                     .outline()
+                    .rounded(px(999.))
                     .selected(open)
                     .toggled(open)
                     .on_click(cx.listener(move |this, _, _, cx| {
@@ -149,20 +200,6 @@ impl Workbench {
                     })),
             );
         }
-        let bar = div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .px_2()
-            .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child("Evidence helpers"))
-            .child(
-                caption(muted)
-                    .child("They read published tables and suggest a strength. You still choose what to apply."),
-            )
-            .child(buttons)
-            .into_any_element();
-        let mut out = vec![bar];
-        out.extend(entries.iter().filter(|entry| entry.open).map(|entry| (entry.panel)(self, cx)));
-        out
+        buttons
     }
 }

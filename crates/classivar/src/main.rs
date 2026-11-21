@@ -1,5 +1,7 @@
 mod design;
 mod genes;
+mod labs;
+mod look;
 mod settings;
 mod status;
 mod theme;
@@ -50,6 +52,7 @@ fn main() {
     };
     application().with_assets(assets::Assets).run(move |cx| {
         init(cx);
+        look::install_fonts(cx);
         // Start in the theme last chosen on this machine (light if there is no choice).
         theme::install(settings::load_theme(), cx);
         let bounds = Bounds::centered(None, size(px(1240.), px(900.)), cx);
@@ -57,7 +60,7 @@ fn main() {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             // Below this width the criteria list and the results no longer fit side by side.
             window_min_size: Some(size(px(960.), px(600.))),
-            ..Default::default()
+            ..gpui_kit::component::TitleBar::window_options()
         };
         open_window(options, cx, |window, cx| cx.new(|cx| Workbench::new(rules, window, cx)))
             .expect("could not open the window");

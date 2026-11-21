@@ -4,6 +4,14 @@ use super::*;
 
 impl Workbench {
     pub(super) fn set_mode(&mut self, mode: Mode) {
+        self.welcome = false;
+        self.category = None;
+        self.baseline = None;
+        self.reading = false;
+        self.comparison = false;
+        self.inspected = None;
+        self.hovered = None;
+        self.preview = false;
         self.mode = mode;
         if mode == Mode::NewVariant {
             self.editing = Editing::Today;
@@ -14,6 +22,8 @@ impl Workbench {
     pub(super) fn show_record(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
         let Some(record) = self.records.get(index) else { return };
         let name = record.label.clone();
+        self.inspected = None;
+        self.preview = false;
         self.editing = Editing::Record(index);
         self.record_name_input.update(cx, |input, cx| input.set_value(name, window, cx));
     }
@@ -39,6 +49,8 @@ impl Workbench {
         if index >= self.records.len() {
             return;
         }
+        self.category = None;
+        self.baseline = None;
         self.records.remove(index);
         // Stay next to the record that took its place, rather than jumping away.
         if self.records.is_empty() {

@@ -5,7 +5,9 @@
 //!
 //! The curator decides every criterion; the screen only adds up and explains.
 
+use std::cell::Cell;
 use std::collections::{BTreeMap, HashSet};
+use std::rc::Rc;
 
 use classivar_core::{
     Applied, Assessment, CaseFile, Category, Class, Consistency, Criterion, Direction, GeneDecision, MAX_LAB_CHARS,
@@ -22,7 +24,7 @@ use classivar_sources::{
 };
 use gpui_kit::component::{
     ActiveTheme, Disableable, Selectable, Sizable, Theme, ThemeMode,
-    button::{Button, ButtonVariants},
+    button::{Button, ButtonCustomVariant, ButtonVariants},
     input::{Input, InputEvent, InputState},
 };
 use gpui_kit::prelude::FluentBuilder;
@@ -63,12 +65,6 @@ use evidence::{carry_forward, evidence_of, open_notes, to_applied};
 use file_io::{default_save_folder, suggested_file_name, write_case};
 use watchers::{repaint_on_change, watch_close, watch_gene_box, watch_keys, watch_record_name};
 use widgets::{class_badge, notice};
-
-/// Width of one point in the evidence lanes.
-const POINT_WIDTH: f32 = 36.0;
-/// Width of one point on the points scale. Chosen so the whole scale fits the
-/// result pane at the 960 px minimum window width.
-const SCALE_UNIT: f32 = 20.0;
 
 /// The largest a case file may be before it is refused without reading it.
 const MAX_CASE_BYTES: u64 = 4 * 1024 * 1024;
@@ -191,6 +187,9 @@ pub struct Workbench {
     /// Which evidence set the criteria list is editing.
     editing: Editing,
     /// When on, every criterion shows its plain-language rule and source.
+    category: Option<Category>,
+    show_helpers: bool,
+    welcome: bool,
     learning: bool,
     variant_input: Entity<InputState>,
     gene_input: Entity<InputState>,
@@ -198,7 +197,27 @@ pub struct Workbench {
     record_name_input: Entity<InputState>,
     /// Scroll state of the criteria list and of the result pane, so the keyboard can scroll them.
     criteria_scroll: ScrollHandle,
+    reading: bool,
+    baseline: Option<usize>,
+    comparison: bool,
+    inspected: Option<String>,
+    /// The criterion under the pointer on the dial, the column or the track, for its hover card.
+    /// Dropped when the picture, the tab or the mode changes.
+    hovered: Option<String>,
+    preview: bool,
+    /// The total the track marker last slid from and to, so a new total animates from where the marker was.
+    needle: Cell<(i32, i32)>,
     result_scroll: ScrollHandle,
+    /// The picture that explains the class: a dial, a column or a track.
+    picture: crate::settings::Picture,
+    /// Where the dial was last painted, so a click can find the slice under the pointer.
+    dial_frame: Rc<Cell<Option<Point<Pixels>>>>,
+    /// The width of the middle panel at the last layout, so the dial can size itself.
+    stage_width: Cell<f32>,
+    /// The height the dial may use at the last layout, so the class below it stays in view.
+    stage_height: Cell<f32>,
+    /// Whether the window is wide enough for the reports rail at the left.
+    rail_shown: Cell<bool>,
     /// A strength being raised by hand, waiting for its reason.
     raising: Option<Raise>,
     /// The box where the reason for a raised strength is typed.
@@ -263,12 +282,27 @@ impl Workbench {
             today: Evidence::new(),
             records: Vec::new(),
             editing: Editing::Today,
-            learning: true,
+            category: None,
+            show_helpers: false,
+            welcome: true,
+            learning: false,
             variant_input,
             gene_input,
             record_name_input,
             criteria_scroll: ScrollHandle::new(),
+            reading: false,
+            baseline: None,
+            comparison: false,
+            inspected: None,
+            hovered: None,
+            preview: false,
+            needle: Cell::new((0, 0)),
             result_scroll: ScrollHandle::new(),
+            picture: crate::settings::load_picture(),
+            dial_frame: Rc::new(Cell::new(None)),
+            stage_width: Cell::new(640.),
+            stage_height: Cell::new(330.),
+            rail_shown: Cell::new(false),
             raising: None,
             reason_input,
             helpers,
