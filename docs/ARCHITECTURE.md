@@ -26,7 +26,7 @@ ClassiVAR/
 ├─ Cargo.toml              workspace
 ├─ Cargo.lock              tracked in git: reproducible builds
 ├─ rust-toolchain.toml     pinned Rust version
-├─ .github/workflows/      ci.yml (fmt, clippy, test, build, audit); live-sources.yml (weekly)
+├─ .github/workflows/      ci.yml (fmt, clippy, test, build and audit as separate jobs that run side by side); live-sources.yml (weekly)
 ├─ rustfmt.toml
 ├─ AGENTS.md               how an AI agent or new contributor works here
 ├─ scripts/                check.ps1, check.sh, gui-smoke.ps1 (Windows)

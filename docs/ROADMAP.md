@@ -36,6 +36,16 @@ The window was redesigned as "a calm instrument" (a mix of the two directions th
 - **Smoke script.** It now uses the toggle action for pressed-state buttons, waits for a box a click just revealed, scrolls the sheet when a box is a page down, picks strengths from the strength menu (`Choose-Strength`), and scrolls to the OddsPath button before clicking it. **`scripts/gui-smoke.ps1` passes** on this build (run 2026-11-20 with the user's permission).
 - **Next:** the 2015 table section and the lanes still use their older drawing inside the new sections; a hover tooltip on dial slices.
 
+## CI time (2026-11-21)
+
+Measured on the last run on `main` before this change (run 44751696812, cache cold): macOS 19.5 min and Windows 13.9 min, almost all of it clippy (6.6 and 3.4 min), tests (7.7 and 5.4 min) and build (3.0 and 3.7 min, macOS and Windows) one after another. Dependency debug info is already off in `Cargo.toml`, so that idea was not needed.
+
+- **Separate jobs.** fmt (once, on Linux), clippy, test and build (each on Windows and macOS) and audit now run side by side. From the cold step times a run should take about as long as the slowest test job (about 5.4 min on Windows and 7.7 min on macOS) instead of the sum. The checks have new names (`clippy (windows-latest)`, and so on); no branch protection depends on the old `check (...)` names.
+- **Cache saved only from `main`.** Pull requests read the cache and never write one, so they cannot fill the repository's 10 GB cache limit (each cache is about 750 MB). A pull request that changes `Cargo.lock` builds its new dependencies without caching them.
+- **Prebuilt `cargo-audit`.** Installed with a pinned release of `taiki-e/install-action` (checked against the download's checksum) instead of 3 minutes of compiling. This saves runner time, not wall time, because audit ran in parallel anyway.
+- **Not measured yet:** a warm-cache run. The first run of the new jobs on `main` is cold; the second is the first warm one. Put its numbers here.
+- **Left as it was:** macOS stays on the Intel runner (`macos-15-intel`). An Apple-silicon runner is faster but would test a different CPU than the one chosen on 2026-11-05.
+
 ## Section redesign and hover cards (2026-11-20, third round)
 
 No clinical rule, number or behaviour changed. Every class still carries `UNVERIFIED rules vX`, a withheld class still draws no class, and the sections keep the conditions they had.
