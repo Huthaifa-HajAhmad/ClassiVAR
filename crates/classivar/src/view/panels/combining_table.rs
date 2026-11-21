@@ -1,5 +1,5 @@
 //! "What the 2015 table says": every row of the ACMG/AMP 2015 combining table
-//! (with ClinGen's 2020 addition), grouped by class, with the rows the evidence
+//! (with the ClinGen 2020 and Pejaver 2022 additions), grouped by class, with the rows the evidence
 //! meets marked. It shows the second way to reach a class, next to the points.
 //!
 //! The sentence that says which rows are met is a plain function with tests;
@@ -16,7 +16,7 @@ const GROUPS: [Class; 4] = [Class::Pathogenic, Class::LikelyPathogenic, Class::B
 
 /// One met row in words, for example "≥2 Strong (Pathogenic)".
 fn met_text(row: &TableRow) -> String {
-    let addition = if row.clingen_2020_addition { ", ClinGen 2020 addition" } else { "" };
+    let addition = row.added_by.map(|by| format!(", {by} addition")).unwrap_or_default();
     format!("{} ({}{addition})", row.text(), row.class.label())
 }
 
@@ -35,12 +35,10 @@ pub(super) fn is_shown(result: &Assessment) -> bool {
 /// version of the picture. When the class is withheld it says so instead of
 /// naming what the table gives.
 fn summary(result: &Assessment) -> String {
-    const NO_ROW: &str = "The 2015 table has no row for Moderate or Very strong benign evidence";
+    // The table is drawn only with counted, consistent evidence, which always has a table class.
+    let class = result.classic_class.unwrap_or(Class::Vus);
     if result.table_rows.is_empty() {
-        return match result.classic_class {
-            Some(class) => format!("No row is met, so the 2015 table gives {}.", class.label()),
-            None => format!("{NO_ROW}, so it gives no class."),
-        };
+        return format!("No row is met, so the 2015 table gives {}.", class.label());
     }
     // Rows are listed strongest first, so the first met row on a side gives that side's class.
     // A weaker row on the same side (Likely pathogenic next to Pathogenic) adds nothing to
@@ -51,10 +49,6 @@ fn summary(result: &Assessment) -> String {
         Direction::Benign => Some(row.class) == benign_class,
     };
     let met: Vec<_> = result.table_rows.iter().filter(deciding).map(|row| met_text(row)).collect();
-    // Some rows are met, but a strength in use has no row, so the table cannot give one class.
-    let Some(class) = result.classic_class else {
-        return format!("{NO_ROW}, so it cannot combine the two sides. Met: {}.", met.join("; "));
-    };
     let both_sides = pathogenic_class.is_some() && benign_class.is_some();
     let note = if both_sides { " Rows are met on both sides, which the 2015 guidance calls uncertain." } else { "" };
     let ending = match result.class() {
@@ -118,8 +112,7 @@ fn table_line(row: &TableRow, met: bool, hint: Option<String>, counts: &Counts, 
         div().size(px(18.)).flex_none().flex().items_center().justify_center().rounded_full().when(met, |mark| {
             mark.bg(colour).text_color(direction_ink()).text_xs().font_weight(FontWeight::BOLD).child("✓")
         });
-    let notes: Vec<String> =
-        row.clingen_2020_addition.then(|| "added by ClinGen in 2020".to_string()).into_iter().chain(hint).collect();
+    let notes: Vec<String> = row.added_by.map(|by| format!("added by {by}")).into_iter().chain(hint).collect();
     let words = div()
         .flex_1()
         .min_w_0()
@@ -246,28 +239,25 @@ mod tests {
     }
 
     #[test]
-    fn a_strength_the_table_lacks_a_row_for_does_not_hide_the_rows_that_are_met() {
-        // Benign evidence at Moderate has no row in the 2015 table, so the table cannot
-        // combine the two sides. The two Strong pathogenic criteria still meet a row,
-        // and the sentence must not say that nothing is met.
+    fn moderate_benign_evidence_meets_the_row_pejaver_added_and_the_sentence_names_it() {
+        let result = assessed(&[Applied::new("BP4", Strength::Moderate)]);
+        let sentence = summary(&result);
+        assert!(sentence.contains("≥1 Moderate (Likely benign, Pejaver 2022 addition)"), "{sentence}");
+        assert!(sentence.ends_with("The 2015 table gives Likely benign."), "{sentence}");
+    }
+
+    #[test]
+    fn moderate_benign_against_a_confident_pathogenic_side_names_both_rows_and_no_class() {
         let result = assessed(&[
             Applied::new("PS1", Strength::Strong),
             Applied::new("PS2", Strength::Strong),
             Applied::new("BP4", Strength::Moderate),
         ]);
-        assert_eq!(result.classic_class, None);
-        assert!(result.class().is_some() && !result.table_rows.is_empty());
+        assert!(is_shown(&result), "both sides met is the one withheld case the table explains");
         let sentence = summary(&result);
-        assert!(sentence.contains("cannot combine the two sides"), "{sentence}");
         assert!(sentence.contains("≥2 Strong (Pathogenic)"), "{sentence}");
-        assert!(!sentence.contains("gives no class"), "{sentence}");
-    }
-
-    #[test]
-    fn with_no_row_met_and_a_strength_the_table_lacks_the_sentence_says_it_gives_no_class() {
-        let result = assessed(&[Applied::new("BP4", Strength::Moderate)]);
-        assert!(result.table_rows.is_empty());
-        assert!(summary(&result).contains("gives no class"));
+        assert!(sentence.contains("Pejaver 2022 addition"), "{sentence}");
+        assert!(sentence.ends_with("this needs expert judgment."), "{sentence}");
     }
 
     #[test]
@@ -409,7 +399,7 @@ mod tests {
         let rules = RuleSet::builtin().unwrap();
         let situation = rules.criterion("PVS1").unwrap().situation_for(Strength::VeryStrong).unwrap().to_string();
         let result = assessed(&[
-            Applied::guided("PVS1", Strength::VeryStrong, situation),
+            Applied::guided("PVS1", Strength::VeryStrong, situation).with_gene_level("established"),
             Applied::new("PM2", Strength::Supporting),
         ]);
         assert_eq!(
@@ -429,14 +419,5 @@ mod tests {
         let text = summary(&result);
         assert!(text.contains("Rows are met on both sides, which the 2015 guidance calls uncertain."), "{text}");
         assert!(text.ends_with("The 2015 table gives Uncertain significance (VUS)."), "{text}");
-    }
-
-    #[test]
-    fn a_strength_the_table_does_not_cover_says_so() {
-        let result = assessed(&[Applied::new("BP4", Strength::Moderate)]);
-        assert_eq!(
-            summary(&result),
-            "The 2015 table has no row for Moderate or Very strong benign evidence, so it gives no class."
-        );
     }
 }

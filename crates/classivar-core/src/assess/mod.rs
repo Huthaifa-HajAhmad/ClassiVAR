@@ -3,6 +3,7 @@
 //! only adds up and explains; it never picks criteria itself.
 
 mod classic;
+mod gene_limit;
 mod item;
 mod pairs;
 #[cfg(test)]
@@ -28,6 +29,10 @@ pub struct Applied {
     /// files have no field and load with `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub situation: Option<String>,
+    /// The gene-level answer (PVS1: Abou Tayoun 2018, Table 1) that lowered the
+    /// guide's strength, when the criterion has that question. Old files have none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gene_level: Option<String>,
     /// Why the curator chose this strength, in their own words or from a helper
     /// (for example "REVEL 0.95, Pejaver 2022"). Old files have no field.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -40,12 +45,18 @@ pub const MAX_REASON_CHARS: usize = 500;
 impl Applied {
     /// A criterion applied without a guide answer.
     pub fn new(code: impl Into<String>, strength: Strength) -> Self {
-        Self { code: code.into(), strength, situation: None, reason: None }
+        Self { code: code.into(), strength, situation: None, gene_level: None, reason: None }
     }
 
     /// A criterion whose strength came from a named guide situation.
     pub fn guided(code: impl Into<String>, strength: Strength, situation: impl Into<String>) -> Self {
-        Self { code: code.into(), strength, situation: Some(situation.into()), reason: None }
+        Self { code: code.into(), strength, situation: Some(situation.into()), gene_level: None, reason: None }
+    }
+
+    /// The same criterion with its gene-level answer.
+    pub fn with_gene_level(mut self, gene_level: impl Into<String>) -> Self {
+        self.gene_level = Some(gene_level.into());
+        self
     }
 
     /// The same criterion with the reason for its strength.
@@ -135,9 +146,8 @@ pub struct Assessment {
     pub total_points: i32,
     /// What the points alone give. Use `class()` to know whether to show it.
     pub points_class: Class,
-    /// The 2015 combining table (with the ClinGen 2020 addition, see `classic_class`).
-    /// None if there is no evidence, the evidence contradicts itself, or it uses
-    /// a strength the table does not cover (for example moderate benign evidence).
+    /// The 2015 combining table (with the ClinGen 2020 and Pejaver 2022 additions, see `combining_table`).
+    /// None if there is no evidence or the evidence contradicts itself.
     pub classic_class: Option<Class>,
     /// The rows of the 2015 table that the counted evidence meets, strongest
     /// first. Empty when none is met (the table then gives VUS). Unlike
@@ -159,13 +169,23 @@ pub struct Assessment {
     pub to_upgrade: Option<NextClass>,
     /// How many more points of benign evidence reach the next class down.
     pub to_downgrade: Option<NextClass>,
+    /// The gene's link to the disease is not established, so a pathogenic class
+    /// is shown as VUS (see `gene_limit`). Set by `in_gene_of_uncertain_significance`.
+    pub gene_of_uncertain_significance: bool,
 }
 
 impl Assessment {
     /// The class to show, or None when there is nothing to classify (no evidence),
     /// the evidence contradicts itself, it meets rules on both sides, or a pair
-    /// exceeds its combined limit.
+    /// exceeds its combined limit. In a gene of uncertain significance a
+    /// pathogenic class is shown as VUS.
     pub fn class(&self) -> Option<Class> {
+        let class = self.class_before_gene_limit()?;
+        Some(if self.gene_of_uncertain_significance && class > Class::Vus { Class::Vus } else { class })
+    }
+
+    /// The class the evidence gives before the gene link is considered.
+    pub fn class_before_gene_limit(&self) -> Option<Class> {
         (self.has_evidence
             && self.conflicts.is_empty()
             && !(self.both_sides_met && self.points_class != Class::Vus)
@@ -191,6 +211,8 @@ pub enum AssessError {
     GuideMismatch { code: String, situation: String },
     #[error("criterion {code} has a strength guide; a new assessment must answer it")]
     GuideAnswerRequired { code: String },
+    #[error("criterion {code} has a gene-level question; a new assessment must answer it")]
+    GeneLevelRequired { code: String },
     #[error("criterion {code}: the reason is empty or longer than {MAX_REASON_CHARS} characters")]
     BadReason { code: String },
 }
@@ -230,7 +252,7 @@ impl RuleSet {
         let mut assessment = Assessment {
             rule_set: self.reference(),
             // Contradictory evidence gets no class from either method.
-            classic_class: if has_evidence && conflicts.is_empty() { classic_class(&items, &table_rows) } else { None },
+            classic_class: (has_evidence && conflicts.is_empty()).then(|| classic_class(&table_rows)),
             table_rows,
             has_evidence,
             pathogenic_points,
@@ -240,10 +262,15 @@ impl RuleSet {
             vus_tier: None,
             conflicts,
             combination_overuse: self.combination_overuse(&items),
-            both_sides_met: pathogenic_side.is_some() && benign_side.is_some(),
+            // BA1 against pathogenic evidence: withheld when a pathogenic rule is met, or when the
+            // pathogenic points alone reach Likely pathogenic (two Very Strong criteria meet no 2015 row).
+            both_sides_met: (pathogenic_side.is_some() && benign_side.is_some())
+                || (has_stand_alone_benign(&items)
+                    && self.class_min(Class::LikelyPathogenic).is_some_and(|min| pathogenic_points >= min)),
             warnings,
             to_upgrade: None,
             to_downgrade: None,
+            gene_of_uncertain_significance: false,
             items,
         };
         // A withheld class has no "next class": the hint would contradict the banner.

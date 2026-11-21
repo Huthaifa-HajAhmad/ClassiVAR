@@ -93,7 +93,8 @@ fn apply_all(this: &mut Workbench) {
                 this.today.insert(c.code.clone(), Choice::new(c.strength));
             }
             (false, Some((strength, id))) => {
-                this.today.insert(c.code.clone(), Choice::guided(strength, id));
+                let level = c.gene_level.first().map(|level| level.id.clone());
+                this.today.insert(c.code.clone(), Choice::guided(strength, id, level));
             }
             (false, None) => {}
         }
@@ -125,6 +126,16 @@ fn every_helper_open_at_once_draws_without_panicking(cx: &mut TestAppContext) {
         helpers.pm3.open = true;
         helpers.ba1_open = true;
         helpers.de_novo.open = true;
+        helpers.population.open = true;
+        helpers.population.absent = true;
+    });
+    draw(cx);
+    // The population helper with numbers typed: its findings and Apply buttons draw too.
+    workbench.update_in(cx, |this, window, cx| {
+        for (input, text) in this.helpers.population.inputs.iter().zip(["0.06", "30000", "0.05", "500", "0.5", "0.02"])
+        {
+            input.update(cx, |input, cx| input.set_value(text, window, cx));
+        }
     });
     draw(cx);
 }
@@ -161,7 +172,7 @@ fn mixed_evidence_with_a_previewed_block_draws_in_both_themes_and_keeps_the_evid
         draw(cx);
         workbench.read_with(cx, |this, _| {
             assert_eq!(this.today.len(), 3, "a preview never removes evidence");
-            assert_eq!(this.needle.get().1, 4, "the marker is heading for the real total, not the preview's");
+            assert_eq!(this.stage.needle.get().1, 4, "the marker is heading for the real total, not the preview's");
         });
     }
 }
@@ -265,7 +276,7 @@ fn every_picture_draws_with_a_previewed_block_in_both_themes_and_at_both_window_
                 draw(cx);
                 workbench.read_with(cx, |this, _| {
                     assert_eq!(this.today.len(), 4, "a preview never removes evidence");
-                    assert_eq!(this.rail_shown.get(), size.0 >= 1180., "the rail folds away in a narrow window");
+                    assert_eq!(this.stage.rail_shown.get(), size.0 >= 1180., "the rail folds away in a narrow window");
                 });
             }
         }
@@ -314,7 +325,8 @@ fn hovering_a_dial_slice_or_a_column_or_track_block_shows_its_card_and_leaving_h
     workbench.update_in(cx, |this, _, _| this.picture = Picture::Column);
     draw(cx);
     // Two earlier reports do not fit beside the readout here, so the column sits below it: scroll to it.
-    workbench.update_in(cx, |this, _, _| this.result_scroll.set_offset(gpui::point(gpui::px(0.), gpui::px(-300.))));
+    workbench
+        .update_in(cx, |this, _, _| this.handles.result_scroll.set_offset(gpui::point(gpui::px(0.), gpui::px(-300.))));
     draw(cx);
     let block = cx.debug_bounds("column-PM5").expect("the column has a PM5 block");
     cx.simulate_mouse_move(block.center(), None, Default::default());
@@ -351,12 +363,14 @@ fn choosing_a_stronger_strength_from_the_menu_asks_for_a_reason_and_a_weaker_one
 ) {
     let (workbench, cx) = example_at(cx, ThemeMode::Light, (1240., 900.));
     workbench.update_in(cx, |this, window, cx| {
-        let pm5 = this.rules.criterion("PM5").expect("PM5 exists");
-        this.choose_strength(pm5, Strength::Strong, window, cx);
-        assert!(this.raising.as_ref().is_some_and(|raise| raise.code == "PM5"), "a raise waits for its reason");
-        assert_eq!(this.today["PM5"].strength, Strength::Moderate, "nothing changes before the reason");
+        let pm2 = this.rules.criterion("PM2").expect("PM2 exists").clone();
+        assert!(pm2.allowed_strengths().contains(&Strength::Moderate), "the raise must be one the menu offers");
+        this.choose_strength(&pm2, Strength::Moderate, window, cx);
+        assert!(this.raising.as_ref().is_some_and(|raise| raise.code == "PM2"), "a raise waits for its reason");
+        assert_eq!(this.today["PM2"].strength, Strength::Supporting, "nothing changes before the reason");
         this.raising = None;
-        this.choose_strength(pm5, Strength::Supporting, window, cx);
+        let pm5 = this.rules.criterion("PM5").expect("PM5 exists").clone();
+        this.choose_strength(&pm5, Strength::Supporting, window, cx);
         assert_eq!(this.today["PM5"].strength, Strength::Supporting);
         assert!(this.raising.is_none());
     });
@@ -388,7 +402,7 @@ fn a_change_after_saving_is_noticed_and_undoing_it_is_noticed_too(cx: &mut TestA
         assert!(this.has_unsaved_changes(cx), "a different strength is a change");
         apply_default(this, "PM2");
 
-        this.variant_input.update(cx, |input, cx| input.set_value("NM_000000.1:c.1A>G", window, cx));
+        this.boxes.variant.update(cx, |input, cx| input.set_value("NM_000000.1:c.1A>G", window, cx));
         assert!(this.has_unsaved_changes(cx), "the variant name is part of the case");
     });
     draw(cx);

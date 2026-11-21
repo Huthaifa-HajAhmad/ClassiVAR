@@ -24,6 +24,10 @@ impl Workbench {
                     .into_any_element();
             }
         };
+        if re.verdict == Some(Verdict::DifferentCondition) {
+            let text = "Every record classified the variant for a different condition than this case, so none is compared. Check the case's condition, or add a record for it.";
+            return card.child(warn(text.to_string())).into_any_element();
+        }
         let latest = re.latest_index.map(|i| &re.records[i]);
         let (Some(verdict), Some(latest), Some(today_class)) = (re.verdict, latest, today.class()) else {
             let hint = self.no_verdict_hint(today);
@@ -125,6 +129,7 @@ impl Workbench {
                     )
                 }
                 Reason::TierChanged { from, to } => format!("The record named {from}. Today's evidence falls in {to}."),
+                Reason::GeneLinkNotEstablished => "You marked the gene-disease link as not established, so today's pathogenic class is shown as VUS (Richards 2015: variants in a gene of uncertain significance are classified as uncertain).".to_string(),
             };
             list = list.child(div().flex().gap_2().child("•").child(div().flex_1().min_w_0().child(text)));
         }
@@ -140,6 +145,7 @@ fn verdict_title(verdict: Verdict) -> (&'static str, &'static str) {
         Verdict::DowngradeCandidate => ("↓", "Downgrade candidate"),
         Verdict::FrameworkDiffers => ("≠", "Same evidence, different class"),
         Verdict::RecordInconsistent => ("?", "The latest record does not fit its own evidence"),
+        Verdict::DifferentCondition => ("≠", "The records are for other conditions"),
     }
 }
 
@@ -161,6 +167,9 @@ fn verdict_detail(verdict: Verdict, latest: &Rescored, today: &Assessment, today
             today_class.label(),
             today.total_points
         ),
+        Verdict::DifferentCondition => {
+            format!("{latest_summary} Records for other conditions are shown but not compared.")
+        }
         Verdict::RecordInconsistent => {
             let own = latest.assessment.as_ref().ok();
             format!(

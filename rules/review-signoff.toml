@@ -1,0 +1,487 @@
+# Per-entry review sign-off for rules/acmg-amp-points.toml.
+#
+# kind = "ai" is a review by an AI model. It is recorded so a human reviewer
+# can see what was checked, against what, and what was not. It never makes the
+# rule file "reviewed": [meta].status may say reviewed only when every entry
+# has a human sign-off (the test `signoff` enforces both).
+# verdict: "matches source", "matches source, reading noted", "not checked".
+
+[[signoff]]
+item = "points"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "not checked"
+note = "Tavtigian 2020 values (1/2/4/8) are the widely published ones, but the paper was not re-read in this review."
+
+[[signoff]]
+item = "class_min_points"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "not checked"
+note = "P >= 10, LP 6-9, VUS 0-5, LB -1 to -6, B <= -7: consistent with Tavtigian 2020 as summarised elsewhere; the paper was not re-read."
+
+[[signoff]]
+item = "combining_table"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source, reading noted"
+checked_against = "Richards 2015 Table 5 (PMC4544753 text); ClinGen PM2 v1.0 PDF; Pejaver 2022 Discussion"
+note = "Every 2015 row matches. The ClinGen 2020 row (VS + 1 Supporting = LP) is in the PM2 PDF. The Pejaver 2022 row is written for BP4_Moderate; applying it to any Moderate benign evidence is this reviewer's reading."
+
+[[signoff]]
+item = "vus_tiers"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "not checked"
+note = "Mighton 2026 is paywalled and was not read. No tier ranges are used, so no class depends on it."
+
+[[signoff]]
+item = "guide:PVS1"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source"
+checked_against = "Abou Tayoun 2018 (PMC6185798 text), Figure 1 text and Table footnotes"
+note = "NMD rule (last exon or last 50 nt of the penultimate exon), in-frame branch, start-loss and duplication answers match the text. The figure itself is an image and was not read."
+
+[[signoff]]
+item = "gene_level:PVS1"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source, reading noted"
+checked_against = "Abou Tayoun 2018, Table 1 (PMC text)"
+note = "Four rows match Table 1. Readings: '>10%' as in the table; below Supporting means no PVS1; the step lowers the final strength, as the table says ('Decrease final strength')."
+
+[[signoff]]
+item = "predictor:revel"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source"
+checked_against = "Bergquist 2025, Table 1 (reprints Pejaver 2022 rows; PDF read)"
+note = "Supporting 0.644, Moderate 0.773, Strong 0.932; benign 0.290 / 0.183 / 0.016 / 0.003."
+
+[[signoff]]
+item = "predictor:bayesdel-noaf"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source"
+checked_against = "Bergquist 2025, Table 1"
+note = "0.13 / 0.27 / 0.50; benign -0.18 / -0.36."
+
+[[signoff]]
+item = "predictor:mutpred2"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source"
+checked_against = "Bergquist 2025, Table 1"
+note = "0.737 / 0.829 / 0.932; benign 0.391 / 0.197 / 0.010."
+
+[[signoff]]
+item = "predictor:vest4"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source"
+checked_against = "Bergquist 2025, Table 1"
+note = "0.764 / 0.861 / 0.965; benign 0.449 / 0.302."
+
+[[signoff]]
+item = "predictor:alphamissense"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source"
+checked_against = "Bergquist 2025, Table 1 (PDF read 2026-11-21)"
+note = "0.792 / 0.906 / 0.990; benign 0.169 / 0.099. 3-point band counted as Moderate."
+
+[[signoff]]
+item = "predictor:varity-r"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source"
+checked_against = "Bergquist 2025, Table 1 (PDF read 2026-11-21)"
+note = "0.675 / 0.842 / 0.965; benign 0.251 / 0.116 / 0.036."
+
+[[signoff]]
+item = "predictor:spliceai"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source"
+checked_against = "Walker 2023, Table 1 (PMC10357475 text)"
+note = "<= 0.1 BP4 (LR 0.17), >= 0.2 PP3 (LR 15.99), applied at Supporting."
+
+[[signoff]]
+item = "functional"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source"
+checked_against = "Brnich 2019 (PMC6938631 text), step 3 and Table 3"
+note = "OddsPath limits 2.1 / 4.3 / 18.7 / 350 and 0.48 / 0.23 / 0.053 match. Controls: Supporting with experimental controls and 10 or fewer validation controls; Moderate with 11 or more including both kinds."
+
+[[signoff]]
+item = "locus_evidence"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "not checked"
+note = "ClinGen 2024 Tables 2 to 4 were not re-read in this review."
+
+[[signoff]]
+item = "non_segregation"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "not checked"
+note = "ClinGen 2024 BS4 wording was not re-read in this review."
+
+[[signoff]]
+item = "de_novo"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source, reading noted"
+checked_against = "ClinGen SVI de novo v1.1 PDF (read 2026-11-21)"
+note = "Table 1 points (2/1, 1/0.5, 0.5/0.25, 0/0) and Table 2 thresholds (0.5/1/2/4) match. The footnote 'maximum allowable value of 1' is read as a limit on that row's total."
+
+[[signoff]]
+item = "pm3"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source"
+checked_against = "ClinGen SVI PM3 v1.0 PDF, Tables 1 and 2 (read 2026-11-21)"
+note = "P or LP confirmed in trans 1.0; unknown phase 0.5 (P) / 0.25 (LP); homozygous 0.5, max 1.0; VUS in trans 0.25, max 0.5; thresholds 0.5/1/2/4."
+
+[[signoff]]
+item = "population"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source, reading noted"
+checked_against = "Ghosh 2018 (PMC6188666); Whiffin 2017 (PMC5563454, formula images); ClinGen PM2 v1.0 PDF; Richards 2015 Table 3"
+note = "BA1 wording and 2,000 alleles match Ghosh. Whiffin's printed dominant formula has no 1/2 but its worked example (4.0e-5) uses it; the example is followed. Recessive formula reproduces 2.42e-3. PM2 v1.0 gives no recessive frequency limit, so only a gene limit is used."
+
+[[signoff]]
+item = "ba1_exceptions"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source, reading noted"
+checked_against = "Ghosh 2018, Table 1 and text"
+note = "Nine variants as in the paper; allele ids and ClinVar ids were not each re-checked against the live ClinGen page."
+
+[[signoff]]
+item = "exclusive:PP3/BP4"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source"
+checked_against = "Richards 2015 (computational evidence)"
+
+[[signoff]]
+item = "exclusive:PM2/BA1"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source"
+checked_against = "Richards 2015 definitions"
+note = "Logically exclusive."
+
+[[signoff]]
+item = "exclusive:PM2/BS1"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source"
+checked_against = "Richards 2015 definitions"
+note = "Logically exclusive."
+
+[[signoff]]
+item = "exclusive:PVS1/PM4"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "not checked"
+note = "Abou Tayoun 2018 statement not re-located in this review."
+
+[[signoff]]
+item = "exclusive:PS3/BS3"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source"
+checked_against = "Richards 2015 definitions"
+
+[[signoff]]
+item = "cap:PP1/PP4"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "not checked"
+note = "ClinGen 2024 combined limit not re-read in this review."
+
+[[signoff]]
+item = "cap:PM1/PP3"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source"
+checked_against = "Pejaver 2022 Discussion (PMC9748256 text)"
+note = "'limit the sum of the evidence strength of PP3 and PM1 to strong'."
+
+[[signoff]]
+item = "criterion:PVS1"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source, reading noted"
+checked_against = "Abou Tayoun 2018; Richards 2015"
+note = "No cap: the guide and gene-level answers set the strength."
+
+[[signoff]]
+item = "criterion:PS1"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source, reading noted"
+checked_against = "Walker 2023, Table 2"
+note = "Lower PS1 levels for splicing noted."
+
+[[signoff]]
+item = "criterion:PS2"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source"
+checked_against = "ClinGen SVI de novo v1.1"
+
+[[signoff]]
+item = "criterion:PS3"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source"
+checked_against = "Brnich 2019"
+note = "Very Strong by OddsPath above 350."
+
+[[signoff]]
+item = "criterion:PS4"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source, reading noted"
+checked_against = "Richards 2015 Tables 3 and 4 (definitions); published ceilings test"
+note = "Ceiling is the 2015 strength or the published route named in `no_criterion_can_be_raised_above_its_published_ceiling`. Summary wording was not re-checked line by line."
+
+[[signoff]]
+item = "criterion:PM1"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source, reading noted"
+checked_against = "Richards 2015 Tables 3 and 4 (definitions); published ceilings test"
+note = "Ceiling is the 2015 strength or the published route named in `no_criterion_can_be_raised_above_its_published_ceiling`. Summary wording was not re-checked line by line."
+
+[[signoff]]
+item = "criterion:PM2"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source"
+checked_against = "ClinGen PM2 v1.0 PDF"
+note = "Supporting by default, Moderate as the 2015 level."
+
+[[signoff]]
+item = "criterion:PM3"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source"
+checked_against = "ClinGen SVI PM3 v1.0, Table 2"
+note = "Very Strong at 4 points."
+
+[[signoff]]
+item = "criterion:PM4"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source, reading noted"
+checked_against = "Richards 2015 Tables 3 and 4 (definitions); published ceilings test"
+note = "Ceiling is the 2015 strength or the published route named in `no_criterion_can_be_raised_above_its_published_ceiling`. Summary wording was not re-checked line by line."
+
+[[signoff]]
+item = "criterion:PM5"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source, reading noted"
+checked_against = "Richards 2015 Tables 3 and 4 (definitions); published ceilings test"
+note = "Ceiling is the 2015 strength or the published route named in `no_criterion_can_be_raised_above_its_published_ceiling`. Summary wording was not re-checked line by line."
+
+[[signoff]]
+item = "criterion:PM6"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source"
+checked_against = "ClinGen SVI de novo v1.1, Table 2"
+note = "No cap: Table 2 lists PM6_VeryStrong."
+
+[[signoff]]
+item = "criterion:PP1"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "not checked"
+note = "Depends on ClinGen 2024, not re-read in this review."
+
+[[signoff]]
+item = "criterion:PP2"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source, reading noted"
+checked_against = "Richards 2015 Tables 3 and 4 (definitions); published ceilings test"
+note = "Ceiling is the 2015 strength or the published route named in `no_criterion_can_be_raised_above_its_published_ceiling`. Summary wording was not re-checked line by line."
+
+[[signoff]]
+item = "criterion:PP3"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source"
+checked_against = "Pejaver 2022 / Bergquist 2025"
+note = "Strong ceiling."
+
+[[signoff]]
+item = "criterion:PP4"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "not checked"
+note = "Depends on ClinGen 2024, not re-read in this review."
+
+[[signoff]]
+item = "criterion:PP5"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "not checked"
+note = "Discouraged (ClinGen 2018) and not counted; the 2018 paper was not re-read."
+
+[[signoff]]
+item = "criterion:BA1"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source"
+checked_against = "Ghosh 2018 (PMC text)"
+note = "Summary uses the Ghosh 2018 wording."
+
+[[signoff]]
+item = "criterion:BS1"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source, reading noted"
+checked_against = "Richards 2015 Tables 3 and 4 (definitions); published ceilings test"
+note = "Ceiling is the 2015 strength or the published route named in `no_criterion_can_be_raised_above_its_published_ceiling`. Summary wording was not re-checked line by line."
+
+[[signoff]]
+item = "criterion:BS2"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source, reading noted"
+checked_against = "Richards 2015 Tables 3 and 4 (definitions); published ceilings test"
+note = "Ceiling is the 2015 strength or the published route named in `no_criterion_can_be_raised_above_its_published_ceiling`. Summary wording was not re-checked line by line."
+
+[[signoff]]
+item = "criterion:BS3"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source"
+checked_against = "Brnich 2019"
+note = "Strong by OddsPath below 0.053."
+
+[[signoff]]
+item = "criterion:BS4"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "not checked"
+note = "Depends on ClinGen 2024, not re-read in this review."
+
+[[signoff]]
+item = "criterion:BP1"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source, reading noted"
+checked_against = "Richards 2015 Tables 3 and 4 (definitions); published ceilings test"
+note = "Ceiling is the 2015 strength or the published route named in `no_criterion_can_be_raised_above_its_published_ceiling`. Summary wording was not re-checked line by line."
+
+[[signoff]]
+item = "criterion:BP2"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source, reading noted"
+checked_against = "Richards 2015 Tables 3 and 4 (definitions); published ceilings test"
+note = "Ceiling is the 2015 strength or the published route named in `no_criterion_can_be_raised_above_its_published_ceiling`. Summary wording was not re-checked line by line."
+
+[[signoff]]
+item = "criterion:BP3"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source, reading noted"
+checked_against = "Richards 2015 Tables 3 and 4 (definitions); published ceilings test"
+note = "Ceiling is the 2015 strength or the published route named in `no_criterion_can_be_raised_above_its_published_ceiling`. Summary wording was not re-checked line by line."
+
+[[signoff]]
+item = "criterion:BP4"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source"
+checked_against = "Pejaver 2022 Discussion"
+note = "Moderate ceiling ('moderate for benignity')."
+
+[[signoff]]
+item = "criterion:BP5"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source, reading noted"
+checked_against = "Richards 2015 Tables 3 and 4 (definitions); published ceilings test"
+note = "Ceiling is the 2015 strength or the published route named in `no_criterion_can_be_raised_above_its_published_ceiling`. Summary wording was not re-checked line by line."
+
+[[signoff]]
+item = "criterion:BP6"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "not checked"
+note = "Discouraged (ClinGen 2018) and not counted; the 2018 paper was not re-read."
+
+[[signoff]]
+item = "criterion:BP7"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-21"
+verdict = "matches source"
+checked_against = "Walker 2023 (PMC text)"
+note = "Supporting or Strong (RNA) only; intronic extension at +7/-21 noted."

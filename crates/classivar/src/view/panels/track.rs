@@ -134,7 +134,7 @@ impl Workbench {
             .flex()
             .flex_col()
             .gap_1()
-            .child(zone_labels(&scale, class, (ink, muted), Some(self.stage_width.get())))
+            .child(zone_labels(&scale, class, (ink, muted), Some(self.stage.width.get())))
             .child(div().relative().child(band).children(tip))
             .child(tick_row(&scale, muted))
             .child(self.track_buttons(&steps, cx))
@@ -198,10 +198,10 @@ impl Workbench {
 
     /// The total: a line through the band with the points on a label, sliding from the last total shown.
     fn marker(&self, total: i32, scale: &Scale, height: f32, (ink, paper): (Hsla, Hsla)) -> AnyElement {
-        let (mut from, shown) = self.needle.get();
+        let (mut from, shown) = self.stage.needle.get();
         if shown != total {
             from = shown;
-            self.needle.set((shown, total));
+            self.stage.needle.set((shown, total));
         }
         let (start, end) = (fraction(from, scale), fraction(total, scale));
         marker_shape(signed(total), end, height, ink, |pill| pill.bg(ink).text_color(paper))

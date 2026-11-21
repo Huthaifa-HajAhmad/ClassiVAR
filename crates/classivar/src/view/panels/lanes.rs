@@ -49,7 +49,7 @@ impl Workbench {
                 "You have not confirmed that this gene causes the disease. ACMG/AMP criteria assume it does.".to_string(),
             ),
             GeneDecision::NotEstablished => texts.push(
-                "You marked the gene-disease link as doubtful. ACMG/AMP criteria do not apply without it; treat any class with great care.".to_string(),
+                "You marked the gene-disease link as doubtful. In a gene of uncertain significance a pathogenic result is shown as VUS (Richards 2015); the points still show what the evidence adds up to.".to_string(),
             ),
         }
         texts.extend(result.warnings.iter().map(|w| warning_text(w, |s| self.rules.magnitude(s))));

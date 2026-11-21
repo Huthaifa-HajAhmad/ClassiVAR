@@ -119,8 +119,21 @@ impl Workbench {
         table.into_iter().filter_map(|(applies, entry)| applies.then_some(entry)).collect()
     }
 
+    /// The population frequency helper (BA1, BS1, PM2), first: population evidence is read first.
+    fn population_entry(&self) -> Option<Entry> {
+        (self.editing == Editing::Today && self.rules.population.is_some()).then(|| {
+            Entry::new(
+                ("population", "Population frequency", "population frequency helper"),
+                self.helpers.population.open,
+                |this| this.helpers.population.open = !this.helpers.population.open,
+                Self::population_helper,
+            )
+        })
+    }
+
     fn helper_entries(&self) -> Vec<Entry> {
-        let mut entries = self.evidence_entries();
+        let mut entries: Vec<Entry> = self.population_entry().into_iter().collect();
+        entries.extend(self.evidence_entries());
         entries.extend(self.patient_entries());
         entries
     }

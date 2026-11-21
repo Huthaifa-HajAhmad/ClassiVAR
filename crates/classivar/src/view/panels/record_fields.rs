@@ -7,7 +7,7 @@ use super::*;
 impl Workbench {
     /// The record's name box, with lab names in a floating list while typing and a menu of every name.
     pub(super) fn lab_box(&self, i: usize, cx: &mut Context<Self>) -> Div {
-        let typed = self.record_name_input.read(cx).value();
+        let typed = self.boxes.record_name.read(cx).value();
         let in_case: Vec<&str> = self
             .records
             .iter()
@@ -21,7 +21,7 @@ impl Workbench {
             ("In this case", in_case.iter().map(|name| name.to_string()).collect()),
             ("Often in ClinVar", crate::labs::suggestions_for("", &[], usize::MAX)),
         ];
-        let field = Input::new(&self.record_name_input).aria_label("Lab or source name");
+        let field = Input::new(&self.boxes.record_name).aria_label("Lab or source name");
         div()
             .flex_1()
             .flex()
@@ -32,10 +32,10 @@ impl Workbench {
                 field,
                 typing,
                 "For typing only: any name can be used.",
-                &self.record_name_input,
+                &self.boxes.record_name,
                 cx,
             ))
-            .child(super::suggest::choice_menu("lab-menu", "Choose a lab name", groups, &self.record_name_input, cx))
+            .child(super::suggest::choice_menu("lab-menu", "Choose a lab name", groups, &self.boxes.record_name, cx))
     }
 
     /// The record's year as a menu of years, newest first. The − and + beside it reach the rest of the range.

@@ -238,6 +238,7 @@ mod tests {
             reported_class: class,
             reported_tier: None,
             rule_set: None,
+            condition: classivar_core::ConditionMatch::Same,
             criteria: list.iter().map(|(code, strength)| Applied::new(*code, *strength)).collect(),
         }
     }

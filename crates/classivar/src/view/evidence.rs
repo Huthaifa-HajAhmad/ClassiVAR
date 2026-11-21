@@ -9,6 +9,7 @@ pub(super) fn to_applied(evidence: &Evidence) -> Vec<Applied> {
             code: code.clone(),
             strength: choice.strength,
             situation: choice.situation.clone(),
+            gene_level: choice.gene_level.clone(),
             reason: choice.reason.clone(),
         })
         .collect()
@@ -32,6 +33,9 @@ pub(super) enum Change {
     /// strength, so it was rebuilt: exactly one answer sets the strength. The curator should
     /// check it. A saved answer that still fits is kept and is not a change.
     GuideRebuilt(String),
+    /// The criterion asks a gene-level question first (PVS1) and the evidence
+    /// has no answer to it, so the curator must answer. It is never assumed.
+    NeedsGeneLevel(String),
 }
 
 /// Bring evidence onto today's rules: lower a strength above today's limit, leave
@@ -54,17 +58,17 @@ pub(super) fn carry_forward(rules: &RuleSet, list: &[Applied]) -> (Vec<(String, 
             changes.push(Change::Lowered { code: applied.code.clone(), to: highest });
             highest
         };
+        let level = applied.gene_level.as_deref().filter(|id| criterion.gene_level_option(id).is_some());
+        if !criterion.gene_level.is_empty() && level.is_none() {
+            changes.push(Change::NeedsGeneLevel(applied.code.clone()));
+            continue;
+        }
         let situation = if criterion.guide.is_empty() {
             None
         } else {
-            let saved = applied
-                .situation
-                .as_deref()
-                .filter(|s| criterion.guide.iter().any(|g| g.id == *s && g.strength == Some(strength)));
-            match saved
-                .map(|kept| (kept, false))
-                .or_else(|| criterion.unique_situation_for(strength).map(|built| (built, true)))
-            {
+            let fits = |id: &str| criterion.strength_for(id, level) == Some(strength);
+            let saved = applied.situation.as_deref().filter(|s| fits(s));
+            match saved.map(|kept| (kept, false)).or_else(|| unique_fit(criterion, &fits).map(|built| (built, true))) {
                 Some((situation, rebuilt)) => {
                     if rebuilt {
                         changes.push(Change::GuideRebuilt(applied.code.clone()));
@@ -78,9 +82,17 @@ pub(super) fn carry_forward(rules: &RuleSet, list: &[Applied]) -> (Vec<(String, 
             }
         };
         let reason = applied.reason.clone().filter(|_| strength == applied.strength).map(bounded_reason);
-        out.push((applied.code.clone(), Choice { strength, situation, reason }));
+        out.push((applied.code.clone(), Choice { strength, situation, gene_level: level.map(str::to_string), reason }));
     }
     (out, changes)
+}
+
+/// The one guide answer that fits, or None when none or several do. Rebuilding
+/// an answer from several would invent a reason nobody gave.
+fn unique_fit<'a>(criterion: &'a Criterion, fits: &impl Fn(&str) -> bool) -> Option<&'a str> {
+    let mut matches = criterion.guide.iter().filter(|g| fits(&g.id));
+    let first = matches.next()?;
+    matches.next().is_none().then_some(first.id.as_str())
 }
 
 /// What to tell the curator after a case was opened. A guide answer that was kept is
@@ -92,6 +104,9 @@ pub(super) fn open_notes(changes: &[Change]) -> Vec<String> {
             Change::Lowered { code, to } => Some(format!("{code} lowered to {}.", to.label())),
             Change::Dropped(code) => Some(format!("{code} (criterion no longer exists, dropped)")),
             Change::NeedsGuide(code) => Some(format!("{code} needs its strength guide answered again.")),
+            Change::NeedsGeneLevel(code) => {
+                Some(format!("{code} needs its gene-level question answered (new in rules 0.14)."))
+            }
             Change::GuideRebuilt(_) => None,
         })
         .collect()
@@ -112,6 +127,7 @@ pub(super) fn copy_note(changes: &[Change]) -> Option<String> {
         .filter_map(|c| match c {
             Change::Dropped(code) => Some(format!("{code} (criterion no longer exists)")),
             Change::NeedsGuide(code) => Some(format!("{code} needs the guide answered again")),
+            Change::NeedsGeneLevel(code) => Some(format!("{code} needs its gene-level question answered")),
             _ => None,
         })
         .collect();
@@ -170,7 +186,10 @@ mod tests {
         // has two guide answers, so the criterion asks again instead of guessing.
         let (today, changes) = carry_forward(
             rules(),
-            &[Applied::new("PP3", Strength::VeryStrong), Applied::new("PVS1", Strength::VeryStrong)],
+            &[
+                Applied::new("PP3", Strength::VeryStrong),
+                Applied::new("PVS1", Strength::VeryStrong).with_gene_level("established"),
+            ],
         );
         let today: std::collections::BTreeMap<_, _> = today.into_iter().collect();
         assert_eq!(today["PP3"].strength, Strength::Strong, "today's cap lowers the saved strength");
@@ -192,7 +211,10 @@ mod tests {
         // unique, so a missing answer is rebuilt as the same one.
         let (today, changes) = carry_forward(
             rules(),
-            &[Applied::new("PVS1", Strength::Supporting), Applied::guided("PVS1", Strength::Supporting, situation)],
+            &[
+                Applied::new("PVS1", Strength::Supporting).with_gene_level("established"),
+                Applied::guided("PVS1", Strength::Supporting, situation).with_gene_level("established"),
+            ],
         );
         assert_eq!(today.len(), 2);
         assert!(today.iter().all(|(code, choice)| code == "PVS1" && choice.situation.is_some()));
@@ -202,10 +224,14 @@ mod tests {
     #[test]
     fn a_kept_guide_answer_is_no_change_and_a_rebuilt_one_asks_to_be_checked() {
         let situation = rules().criterion("PVS1").unwrap().situation_for(Strength::Supporting).unwrap().to_string();
-        let (_, kept) = carry_forward(rules(), &[Applied::guided("PVS1", Strength::Supporting, situation)]);
+        let (_, kept) = carry_forward(
+            rules(),
+            &[Applied::guided("PVS1", Strength::Supporting, situation).with_gene_level("established")],
+        );
         assert!(kept.is_empty(), "{kept:?}");
         assert_eq!(copy_note(&kept), None, "nothing to re-answer when the saved answer still fits");
-        let (_, rebuilt) = carry_forward(rules(), &[Applied::new("PVS1", Strength::Supporting)]);
+        let (_, rebuilt) =
+            carry_forward(rules(), &[Applied::new("PVS1", Strength::Supporting).with_gene_level("established")]);
         assert_eq!(rebuilt, vec![Change::GuideRebuilt("PVS1".into())]);
         assert!(copy_note(&rebuilt).unwrap().contains("Check the strength of PVS1"));
     }
@@ -235,9 +261,9 @@ mod tests {
             rules(),
             &[
                 Applied::new("PP3", Strength::VeryStrong),
-                Applied::new("PVS1", Strength::VeryStrong),
+                Applied::new("PVS1", Strength::VeryStrong).with_gene_level("established"),
                 Applied::guided("PVS1x", Strength::Supporting, situation.clone()),
-                Applied::new("PVS1", Strength::Supporting),
+                Applied::new("PVS1", Strength::Supporting).with_gene_level("established"),
             ],
         );
         let note = copy_note(&changes).unwrap();
@@ -248,5 +274,22 @@ mod tests {
         );
         assert!(note.contains("Check the strength of PVS1"), "{note}");
         assert_eq!(copy_note(&[]), None);
+    }
+
+    #[test]
+    fn a_pvs1_saved_before_the_gene_level_question_is_set_aside_and_said() {
+        // Rules 0.14 ask Abou Tayoun's Table 1 first. A PVS1 saved without that answer
+        // keeps no strength today: the answer is never assumed.
+        let old = Applied::guided("PVS1", Strength::VeryStrong, "nmd");
+        let (today, changes) = carry_forward(rules(), &[old]);
+        assert!(today.is_empty());
+        assert_eq!(changes, vec![Change::NeedsGeneLevel("PVS1".into())]);
+        assert!(open_notes(&changes)[0].contains("gene-level question"));
+        assert!(copy_note(&changes).unwrap().contains("PVS1 needs its gene-level question answered"));
+        // With the answer, the lowered strength is kept.
+        let lowered = Applied::guided("PVS1", Strength::Strong, "nmd").with_gene_level("lower_one");
+        let (today, changes) = carry_forward(rules(), &[lowered]);
+        assert_eq!((today[0].1.strength, today[0].1.gene_level.as_deref()), (Strength::Strong, Some("lower_one")));
+        assert!(changes.is_empty(), "{changes:?}");
     }
 }

@@ -13,6 +13,9 @@ mod functional;
 mod locus;
 mod locus_read;
 mod pm3;
+mod population;
+
+pub(in crate::view) use population::POPULATION_BOXES;
 mod predictor;
 mod raise;
 mod segregation;

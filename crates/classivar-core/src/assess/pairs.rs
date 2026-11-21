@@ -8,12 +8,28 @@ use crate::rules::RuleSet;
 use super::{CombinationOveruse, Conflict, Item, Warning};
 
 /// Pairs of criteria that may count one observation twice, and what to tell the curator.
-const DOUBLE_COUNTED: [(&str, &str, &str); 3] = [
+const DOUBLE_COUNTED: [(&str, &str, &str); 5] = [
     // Abou Tayoun 2018: for a splice variant, the splicing prediction is already part of PVS1.
     (
         "PVS1",
         "PP3",
         "If PVS1 describes a splice variant, its effect is already counted; do not also count PP3 for the same prediction.",
+    ),
+    // Brnich 2019: the aggregate strength of PVS1 and PS3, when the functional data
+    // support PVS1, "needs additional data"; Walker 2023: PS3 is for assays whose
+    // effect is not directly captured by an RNA splicing assay.
+    (
+        "PVS1",
+        "PS3",
+        "If the assay only shows the loss of function PVS1 already counts (for example an RNA splicing assay), count it once, with PVS1 (Walker 2023). Brnich 2019 says the combined strength is not settled.",
+    ),
+    // A program caution, not a 2015 rule: both rest on known pathogenic variants at
+    // one residue. Expert panels do apply both, usually at reduced strengths (ClinGen
+    // ERepo, 2026-11-21: 18 classifications from 8 panels), so the class is shown.
+    (
+        "PS1",
+        "PM5",
+        "Both rest on known pathogenic variants at the same amino acid. Expert panels sometimes use both at reduced strengths; make sure they rest on different variants, or count the residue once.",
     ),
     // ClinGen SVI v1.1, Table 2: PS2 and PM6 are alternative codes for one de novo total.
     (

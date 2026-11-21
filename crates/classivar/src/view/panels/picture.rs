@@ -40,7 +40,7 @@ impl Workbench {
 
     /// The class in the chosen picture, the readout, and the buttons that select a block.
     pub(super) fn signature(&self, result: &Assessment, class: Class, cx: &mut Context<Self>) -> Div {
-        let (width, height) = (self.stage_width.get(), self.stage_height.get());
+        let (width, height) = (self.stage.width.get(), self.stage.height.get());
         let centred = self.picture == Picture::Dial;
         let readout = self.readout(result, class, centred, cx);
         let picture = match self.picture {

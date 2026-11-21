@@ -10,9 +10,9 @@ use std::collections::{BTreeMap, HashSet};
 use std::rc::Rc;
 
 use classivar_core::{
-    Applied, Assessment, CaseFile, Category, Class, Consistency, Criterion, Direction, GeneDecision, MAX_LAB_CHARS,
-    MAX_REASON_CHARS, MAX_RECORDS, MAX_VARIANT_CHARS, Reason, Reevaluation, RuleSet, SavedRecord, Strength, Submission,
-    Verdict, Warning, rules::ReviewStatus,
+    Applied, Assessment, CaseFile, Category, Class, Condition, Consistency, Criterion, Direction, GeneDecision,
+    MAX_LAB_CHARS, MAX_REASON_CHARS, MAX_RECORDS, MAX_VARIANT_CHARS, Reason, RecordSource, Reevaluation, RuleSet,
+    SavedRecord, Strength, Submission, Verdict, Warning, rules::ReviewStatus,
 };
 use std::path::PathBuf;
 
@@ -38,6 +38,7 @@ use crate::status::{Status, Tone};
 
 mod actions;
 mod case_io;
+mod clinvar_records;
 mod confirm;
 mod describe;
 mod evidence;
@@ -47,15 +48,25 @@ mod gene;
 #[cfg(test)]
 mod headless;
 #[cfg(test)]
+mod headless_case;
+#[cfg(test)]
 mod headless_keys;
 mod helper_state;
 
 use helper_state::{AssayRoute, Helpers, PhenotypeGenes, new_box};
 mod panels;
 mod records;
+mod rules_window;
+mod types;
 mod unsaved;
+mod variant;
+mod variant_state;
 mod watchers;
 mod widgets;
+
+use types::*;
+
+use variant_state::VariantState;
 
 use describe::{
     CARD_LINES, describe_clingen, describe_g2p, describe_panelapp, discouraged_row_note, plural, rules_about_text,
@@ -65,118 +76,6 @@ use evidence::{carry_forward, evidence_of, open_notes, to_applied};
 use file_io::{default_save_folder, suggested_file_name, write_case};
 use watchers::{repaint_on_change, watch_close, watch_gene_box, watch_keys, watch_record_name};
 use widgets::{class_badge, notice};
-
-/// The largest a case file may be before it is refused without reading it.
-const MAX_CASE_BYTES: u64 = 4 * 1024 * 1024;
-/// What a record is called when its name box is empty.
-const UNNAMED_RECORD: &str = "Unnamed record";
-
-/// One criterion as the curator applied it: the strength, and the guide answer
-/// that set it when a guide was used. The answer is saved with the case so the
-/// reason for a strength is not lost.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Choice {
-    strength: Strength,
-    situation: Option<String>,
-    /// Why the curator chose this strength (typed by them, or filled in by a helper).
-    reason: Option<String>,
-}
-
-impl Choice {
-    fn new(strength: Strength) -> Self {
-        Self { strength, situation: None, reason: None }
-    }
-
-    fn guided(strength: Strength, situation: String) -> Self {
-        Self { strength, situation: Some(situation), reason: None }
-    }
-
-    fn with_reason(strength: Strength, reason: String) -> Self {
-        Self { strength, situation: None, reason: Some(bounded_reason(reason)) }
-    }
-}
-
-/// A reason cut to the length the engine accepts, with a marker when something
-/// was left out. A reason longer than the limit makes the whole evidence
-/// unscorable, and the helpers build their reasons out of rule-file text,
-/// which has no length limit of its own.
-fn bounded_reason(reason: String) -> String {
-    if reason.chars().count() <= MAX_REASON_CHARS {
-        return reason;
-    }
-    let kept: String = reason.chars().take(MAX_REASON_CHARS - 3).collect();
-    format!("{kept}...")
-}
-
-/// A strength the curator is raising above its default, and has not yet explained.
-struct Raise {
-    code: String,
-    to: Strength,
-}
-
-type Evidence = BTreeMap<String, Choice>;
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Mode {
-    NewVariant,
-    ReportedVariant,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Editing {
-    Today,
-    Record(usize),
-}
-
-/// What an earlier record (for example a lab in ClinVar) said and used.
-struct Record {
-    label: String,
-    year: u16,
-    /// None until the curator says what the record reported.
-    class: Option<Class>,
-    /// The VUS sub-tier the record named, if any (only meaningful when `class` is a VUS).
-    tier: Option<String>,
-    evidence: Evidence,
-}
-
-/// A step that throws work away. It waits for a click on "Yes" first.
-#[derive(Clone, PartialEq, Eq)]
-enum Confirm {
-    Clear(Editing),
-    StartFromLatest,
-    LoadExample,
-    /// Check another gene, which starts a new case.
-    NewGene(String),
-    /// Remove an earlier record and its evidence.
-    RemoveRecord(usize, String),
-    /// Open a case file over the work on screen.
-    OpenCase(Box<CaseFile>),
-    /// Close the window although the case changed since it was saved.
-    CloseWindow,
-}
-
-/// Where one lookup stands.
-enum Lookup<T> {
-    Idle,
-    Loading,
-    Done(Fetched<T>),
-    /// The lookup did not work. This is never shown as "nothing found".
-    Failed(String),
-}
-
-/// What the four gene sources said about the gene the curator asked about.
-struct GeneChecks {
-    england: Lookup<PanelAppGene>,
-    australia: Lookup<PanelAppGene>,
-    g2p: Lookup<G2pGene>,
-    clingen: Lookup<ClinGenGene>,
-}
-
-impl GeneChecks {
-    fn idle() -> Self {
-        Self { england: Lookup::Idle, australia: Lookup::Idle, g2p: Lookup::Idle, clingen: Lookup::Idle }
-    }
-}
 
 pub struct Workbench {
     rules: &'static RuleSet,
@@ -191,12 +90,12 @@ pub struct Workbench {
     show_helpers: bool,
     welcome: bool,
     learning: bool,
-    variant_input: Entity<InputState>,
-    gene_input: Entity<InputState>,
-    /// The name box for the earlier record being edited (the lab or source).
-    record_name_input: Entity<InputState>,
-    /// Scroll state of the criteria list and of the result pane, so the keyboard can scroll them.
-    criteria_scroll: ScrollHandle,
+    /// The text boxes of the case form and the reason prompt.
+    boxes: Boxes,
+    /// Scroll and focus handles the keyboard paths use.
+    handles: Handles,
+    /// What the picture remembers between draws.
+    stage: StageMemory,
     reading: bool,
     baseline: Option<usize>,
     comparison: bool,
@@ -205,26 +104,15 @@ pub struct Workbench {
     /// Dropped when the picture, the tab or the mode changes.
     hovered: Option<String>,
     preview: bool,
-    /// The total the track marker last slid from and to, so a new total animates from where the marker was.
-    needle: Cell<(i32, i32)>,
-    result_scroll: ScrollHandle,
     /// The picture that explains the class: a dial, a column or a track.
     picture: crate::settings::Picture,
-    /// Where the dial was last painted, so a click can find the slice under the pointer.
-    dial_frame: Rc<Cell<Option<Point<Pixels>>>>,
-    /// The width of the middle panel at the last layout, so the dial can size itself.
-    stage_width: Cell<f32>,
-    /// The height the dial may use at the last layout, so the class below it stays in view.
-    stage_height: Cell<f32>,
-    /// Whether the window is wide enough for the reports rail at the left.
-    rail_shown: Cell<bool>,
     /// A strength being raised by hand, waiting for its reason.
     raising: Option<Raise>,
-    /// The box where the reason for a raised strength is typed.
-    reason_input: Entity<InputState>,
     /// The evidence helpers: which are open, and what is typed in them.
     helpers: Helpers,
     gene: GeneChecks,
+    /// The variant check, the identity and the condition of the case.
+    variant: VariantState,
     /// Why the gene box was not checked (empty or not a symbol), shown under the row.
     gene_error: Option<String>,
     /// The gene this case is about: the last one checked.
@@ -240,14 +128,11 @@ pub struct Workbench {
     open_details: HashSet<String>,
     /// The criterion whose strength guide is waiting for an answer.
     guide_open: Option<String>,
+    /// The gene-level answer chosen in the open guide, before its situation is chosen.
+    guide_gene_level: Option<String>,
     gene_link: GeneDecision,
     /// Confirm modal state: `None` when no question is waiting.
     confirm: Option<Confirm>,
-    /// The confirmation window holds the keyboard focus while it is open, so a
-    /// stray Tab or Enter cannot reach the controls behind the question.
-    confirm_focus: FocusHandle,
-    /// Holds the focus when no control does, so Tab always has a place to start from.
-    page_focus: FocusHandle,
     /// The result of the last save or open, shown until the curator dismisses it.
     file_status: Option<Status>,
     /// The case as last saved or opened, to tell whether it has changed since (see `unsaved.rs`).
@@ -264,18 +149,11 @@ pub struct Workbench {
 impl Workbench {
     pub fn new(rules: &'static RuleSet, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let mut subscriptions = Vec::new();
-        // The result title and the notes read the variant box, so typing there
-        // must repaint the workbench, not only the input.
-        let variant_input = new_box("Variant, e.g. NM_007294.4:c.5266dup", &mut subscriptions, window, cx);
-        let reason_input = new_box("Why is this stronger than the default?", &mut subscriptions, window, cx);
-        let gene_input = cx.new(|cx| InputState::new(window, cx).placeholder("Gene symbol, e.g. BRCA1"));
-        subscriptions.push(watch_gene_box(&gene_input, window, cx));
-        let record_name_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("Lab or source, e.g. Lab A (ClinVar)"));
-        subscriptions.push(watch_record_name(&record_name_input, window, cx));
+        let boxes = Boxes::new(&mut subscriptions, window, cx);
         subscriptions.push(watch_keys(cx));
         watch_close(window, cx);
         let helpers = Helpers::new(rules, &mut subscriptions, window, cx);
+        let variant = VariantState::new(&mut subscriptions, window, cx);
         Self {
             rules,
             mode: Mode::NewVariant,
@@ -286,27 +164,20 @@ impl Workbench {
             show_helpers: false,
             welcome: true,
             learning: false,
-            variant_input,
-            gene_input,
-            record_name_input,
-            criteria_scroll: ScrollHandle::new(),
+            boxes,
+            handles: Handles::new(cx),
+            stage: StageMemory::new(),
             reading: false,
             baseline: None,
             comparison: false,
             inspected: None,
             hovered: None,
             preview: false,
-            needle: Cell::new((0, 0)),
-            result_scroll: ScrollHandle::new(),
             picture: crate::settings::load_picture(),
-            dial_frame: Rc::new(Cell::new(None)),
-            stage_width: Cell::new(640.),
-            stage_height: Cell::new(330.),
-            rail_shown: Cell::new(false),
             raising: None,
-            reason_input,
             helpers,
             gene: GeneChecks::idle(),
+            variant,
             gene_error: None,
             case_gene: String::new(),
             example: false,
@@ -314,10 +185,9 @@ impl Workbench {
             expanded_cards: HashSet::new(),
             open_details: HashSet::new(),
             guide_open: None,
+            guide_gene_level: None,
             gene_link: GeneDecision::NotDecided,
             confirm: None,
-            confirm_focus: cx.focus_handle(),
-            page_focus: cx.focus_handle(),
             file_status: None,
             saved_case: None,
             next_record: 1,
@@ -347,8 +217,7 @@ mod tests {
         assert!(reason.chars().count() <= MAX_REASON_CHARS, "{}", reason.chars().count());
         assert!(reason.ends_with("..."), "the cut is marked");
         // The engine must accept what the screen builds.
-        let applied =
-            Applied { code: "PM2".into(), strength: Strength::Supporting, situation: None, reason: Some(reason) };
+        let applied = Applied::new("PM2", Strength::Supporting).with_reason(reason);
         let rules = RuleSet::builtin().expect("the built-in rules are valid");
         assert!(rules.assess(&[applied]).is_ok());
     }

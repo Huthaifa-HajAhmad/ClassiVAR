@@ -8,7 +8,9 @@
 //! Lookups block while they wait for the network. Call them from a background
 //! thread, not from the screen.
 
+pub mod allele_registry;
 pub mod clingen;
+pub mod clinvar;
 mod date;
 pub mod g2p;
 pub mod panelapp;
@@ -59,6 +61,8 @@ pub enum SourceError {
     TooLarge(u64),
     #[error("the service sent an answer this program does not understand: {0}")]
     Unexpected(String),
+    #[error("the service refused it: {0}")]
+    Refused(String),
 }
 
 /// Is this text shaped like a gene symbol? Letters, digits and hyphens, up to 20

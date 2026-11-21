@@ -16,6 +16,19 @@ pub struct StrengthGuide {
     pub strength: Option<Strength>,
 }
 
+/// One answer to the gene-level question that comes before a guide (PVS1:
+/// Abou Tayoun 2018, Table 1). It lowers the strength the guide gives.
+#[derive(Debug, Clone, Deserialize)]
+pub struct GeneLevel {
+    /// Stable id saved with the case. Keep it unchanged when the wording changes.
+    pub id: String,
+    pub short: String,
+    pub situation: String,
+    /// How many levels the guide's strength is lowered. None: the criterion
+    /// does not apply at all for this gene.
+    pub steps: Option<u8>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct Criterion {
     pub code: String,
@@ -25,6 +38,11 @@ pub struct Criterion {
     /// The highest strength a curator may choose. Empty means no limit beyond
     /// "very strong" (and "stand-alone" for BA1).
     pub max_strength: Option<Strength>,
+    /// The exact strengths a curator may choose, weakest first, when the
+    /// published levels have a gap (BP7: Supporting from predictions, Strong
+    /// from an RNA assay, no Moderate). Empty means every step up to `max_strength`.
+    #[serde(default)]
+    pub levels: Vec<Strength>,
     pub category: Category,
     pub title: String,
     pub summary: String,
@@ -42,12 +60,20 @@ pub struct Criterion {
     pub guide: Vec<StrengthGuide>,
     /// The source of the guide. Required when there is a guide.
     pub guide_source: Option<String>,
+    /// The gene-level question asked before the guide, when the rule file has one.
+    #[serde(default)]
+    pub gene_level: Vec<GeneLevel>,
+    /// The source of the gene-level question. Required when there is one.
+    pub gene_level_source: Option<String>,
 }
 
 impl Criterion {
     /// The strengths a curator may choose for this criterion, weakest first.
     /// "Stand-alone" is only offered to a criterion whose default is stand-alone (BA1).
     pub fn allowed_strengths(&self) -> Vec<Strength> {
+        if !self.levels.is_empty() {
+            return self.levels.clone();
+        }
         let mut list = self.recorded_strengths();
         if let Some(limit) = self.max_strength
             && let Some(at) = list.iter().position(|s| *s == limit)
@@ -88,6 +114,24 @@ impl Criterion {
         let mut matches = self.guide.iter().filter(|g| g.strength == Some(strength));
         let first = matches.next()?;
         matches.next().is_none().then_some(first.id.as_str())
+    }
+
+    /// The gene-level answer with this id.
+    pub fn gene_level_option(&self, id: &str) -> Option<&GeneLevel> {
+        self.gene_level.iter().find(|g| g.id == id)
+    }
+
+    /// The strength a guide answer and a gene-level answer give together: the
+    /// guide's strength lowered by the gene-level step. None when the criterion
+    /// does not apply (either answer says so, or the step goes below Supporting).
+    /// Without a gene-level question, the guide's strength.
+    pub fn strength_for(&self, situation: &str, gene_level: Option<&str>) -> Option<Strength> {
+        let guided = self.guide_option(situation)?.strength?;
+        if self.gene_level.is_empty() {
+            return Some(guided);
+        }
+        let steps = self.gene_level_option(gene_level?)?.steps?;
+        guided.lowered(steps)
     }
 
     /// The guide option with this id, for display and validation.

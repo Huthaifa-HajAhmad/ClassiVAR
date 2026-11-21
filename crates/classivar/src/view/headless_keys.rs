@@ -39,7 +39,7 @@ fn focused(cx: &mut VisualTestContext) -> Option<FocusHandle> {
 }
 
 fn question_window(workbench: &Entity<Workbench>, cx: &mut VisualTestContext) -> FocusHandle {
-    workbench.read_with(cx, |this, _| this.confirm_focus.clone())
+    workbench.read_with(cx, |this, _| this.handles.confirm_focus.clone())
 }
 
 fn question_holds_focus(question: &FocusHandle, cx: &mut VisualTestContext) -> bool {
@@ -107,8 +107,8 @@ fn the_tab_order_reaches_both_text_boxes_and_a_stop_for_every_criterion(cx: &mut
     draw(cx);
     let (variant, gene, criteria) = workbench.read_with(cx, |this, app| {
         (
-            this.variant_input.read(app).focus_handle(app),
-            this.gene_input.read(app).focus_handle(app),
+            this.boxes.variant.read(app).focus_handle(app),
+            this.boxes.gene.read(app).focus_handle(app),
             this.rules.criteria.len(),
         )
     });

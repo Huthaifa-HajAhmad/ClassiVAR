@@ -46,18 +46,29 @@ pub struct Predictor {
     pub benign: Vec<Cutoff>,
 }
 
+/// What the curator knows about how an assay was validated (Brnich 2019, step 3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AssayValidation {
+    /// The assay includes normal (wild-type) and abnormal (null) experimental
+    /// controls, and technical or biological replicates. Without them, Brnich
+    /// says functional evidence should not be applied.
+    pub experimental_controls: bool,
+    /// Validation controls: variants classified pathogenic or likely pathogenic
+    /// without functional data.
+    pub pathogenic_controls: u32,
+    /// Validation controls classified benign or likely benign without functional data.
+    pub benign_controls: u32,
+}
+
 /// How strong functional-assay evidence is (Brnich 2019). Without a statistical
 /// analysis, the number of validation controls decides: at most `Moderate`. With
 /// one, the OddsPath value decides, and its limits are crossed strictly.
 #[derive(Debug, Clone, Deserialize)]
 pub struct FunctionalRules {
     pub source: String,
-    /// An assay needs at least this many validation controls to give any evidence.
-    /// Brnich 2019's Supporting level assumes experimental controls, so 0 gives none.
-    pub controls_supporting_min: u32,
-    /// An assay with at least this many validation controls (a mix of pathogenic
-    /// and benign variants) reaches Moderate; one with fewer (but at least
-    /// `controls_supporting_min`) reaches Supporting.
+    /// An assay with at least this many validation controls, at least one
+    /// pathogenic and one benign, reaches Moderate. With fewer (or only one kind)
+    /// it reaches Supporting, provided it has experimental controls and replicates.
     pub controls_moderate_min: u32,
     /// OddsPath strictly above `at` reaches the strength (PS3). Weakest first.
     pub pathogenic: Vec<Cutoff>,

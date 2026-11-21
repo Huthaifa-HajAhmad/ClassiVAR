@@ -100,9 +100,9 @@ fn sentence(c: &Criterion, rungs: &[Rung], scope: Editing) -> String {
     }
     match c.max_strength {
         Some(limit) if today && rungs.iter().any(|rung| rung.above_limit) => {
-            parts.push(format!("This program stops at {}.", limit.label()));
+            parts.push(format!("These rules stop at {}.", limit.label()));
         }
-        Some(_) if !today => parts.push("Today's program limit does not apply to a record.".to_string()),
+        Some(_) if !today => parts.push("Today's limit does not apply to a record.".to_string()),
         _ => {}
     }
     if rungs.iter().any(|rung| !rung.counted) {
@@ -207,15 +207,15 @@ mod tests {
     }
 
     #[test]
-    fn the_steps_above_this_programs_limit_are_kept_and_marked() {
-        let c = rules().criterion("PM6").expect("PM6 exists");
-        let limit = c.max_strength.expect("PM6 has a program limit");
-        let (rungs, text) = rungs_of("PM6", None);
+    fn the_steps_above_the_rules_limit_are_kept_and_marked() {
+        let c = rules().criterion("PM5").expect("PM5 exists");
+        let limit = c.max_strength.expect("PM5 has a limit");
+        let (rungs, text) = rungs_of("PM5", None);
         for rung in &rungs {
             assert_eq!(rung.above_limit, !c.allowed_strengths().contains(&rung.strength));
         }
         assert!(rungs.iter().any(|r| r.above_limit), "the limit must cut something off");
-        assert!(text.contains(&format!("This program stops at {}.", limit.label())), "{text}");
+        assert!(text.contains(&format!("These rules stop at {}.", limit.label())), "{text}");
     }
 
     #[test]
@@ -282,12 +282,12 @@ mod tests {
     }
 
     #[test]
-    fn a_record_is_not_bound_by_todays_program_limit() {
+    fn a_record_is_not_bound_by_todays_limit() {
         // The strength button of a record cycles through every strength a lab could use.
-        let (rungs, text) = rungs_in("PM6", Editing::Record(0), None);
+        let (rungs, text) = rungs_in("PM5", Editing::Record(0), None);
         assert!(rungs.iter().all(|r| !r.above_limit), "no step is above a limit in a record");
-        assert!(!text.contains("This program stops at"), "{text}");
-        assert!(text.contains("Today's program limit does not apply to a record."), "{text}");
+        assert!(!text.contains("These rules stop at"), "{text}");
+        assert!(text.contains("Today's limit does not apply to a record."), "{text}");
     }
 
     #[test]

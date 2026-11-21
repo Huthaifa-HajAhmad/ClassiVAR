@@ -13,6 +13,64 @@ fn no_supporting_criterion_can_reach_very_strong() {
     assert!(pp2.recorded_strengths().contains(&Strength::VeryStrong));
 }
 
+/// The strongest level a curator may choose for each criterion in the generic
+/// rule file, and the published route that allows it. A level above this needs a
+/// gene-specific rule file (an expert panel specification), not a typed reason.
+const PUBLISHED_CEILINGS: [(&str, Strength, &str); 26] = [
+    ("PVS1", Strength::VeryStrong, "Abou Tayoun 2018 tree"),
+    ("PS1", Strength::Strong, "Richards 2015"),
+    ("PS2", Strength::VeryStrong, "ClinGen SVI de novo v1.1, Table 2"),
+    ("PS3", Strength::VeryStrong, "Brnich 2019, OddsPath above 350"),
+    ("PS4", Strength::Strong, "Richards 2015"),
+    ("PM1", Strength::Moderate, "Richards 2015"),
+    ("PM2", Strength::Moderate, "Richards 2015 (ClinGen 2020 lowered the default)"),
+    ("PM3", Strength::VeryStrong, "ClinGen SVI PM3 v1.0, Table 2"),
+    ("PM4", Strength::Moderate, "Richards 2015"),
+    ("PM5", Strength::Moderate, "Richards 2015"),
+    ("PM6", Strength::VeryStrong, "ClinGen SVI de novo v1.1, Table 2"),
+    ("PP1", Strength::Strong, "ClinGen 2024, Table 4"),
+    ("PP2", Strength::Supporting, "Richards 2015"),
+    ("PP3", Strength::Strong, "Pejaver 2022"),
+    ("PP4", Strength::Strong, "ClinGen 2024, Table 4"),
+    ("BA1", Strength::StandAlone, "Richards 2015"),
+    ("BS1", Strength::Strong, "Richards 2015"),
+    ("BS2", Strength::Strong, "Richards 2015"),
+    ("BS3", Strength::Strong, "Brnich 2019"),
+    ("BS4", Strength::Strong, "ClinGen 2024"),
+    ("BP1", Strength::Supporting, "Richards 2015"),
+    ("BP2", Strength::Supporting, "Richards 2015"),
+    ("BP3", Strength::Supporting, "Richards 2015"),
+    ("BP4", Strength::Moderate, "Pejaver 2022"),
+    ("BP5", Strength::Supporting, "Richards 2015"),
+    ("BP7", Strength::Strong, "Walker 2023, BP7_Strong (RNA)"),
+];
+
+#[test]
+fn no_criterion_can_be_raised_above_its_published_ceiling() {
+    let rules = RuleSet::builtin().unwrap();
+    for (code, ceiling, route) in PUBLISHED_CEILINGS {
+        let allowed = rules.criterion(code).unwrap().allowed_strengths();
+        assert_eq!(allowed.last(), Some(&ceiling), "{code}: the strongest choice must be the one {route} supports");
+    }
+}
+
+#[test]
+fn bp7_offers_only_its_two_published_levels() {
+    // Walker 2023: BP7 at Supporting from predictions, BP7_Strong (RNA) from an
+    // assay. No source gives a Moderate BP7, so the menu must not offer one.
+    let bp7 = RuleSet::builtin().unwrap().criterion("BP7").unwrap().clone();
+    assert_eq!(bp7.allowed_strengths(), [Strength::Supporting, Strength::Strong]);
+    assert_eq!(bp7.recorded_strengths(), [Strength::Supporting, Strength::Moderate, Strength::Strong]);
+}
+
+#[test]
+fn listed_levels_must_be_readable_and_include_the_default() {
+    let line = "levels = [\"supporting\", \"strong\"]";
+    assert!(edited(line, "levels = [\"strong\"]").is_err(), "the default (Supporting) must be a level");
+    assert!(edited(line, "levels = [\"supporting\", \"very_strong\"]").is_err(), "no Very Strong benign level");
+    assert!(edited(line, "levels = [\"strong\", \"supporting\"]").is_err(), "weakest first");
+}
+
 #[test]
 fn benign_evidence_has_no_very_strong_level() {
     // The 2015 table has no very strong benign row. BA1 is the one stand-alone exception.
@@ -193,7 +251,7 @@ fn a_cap_that_is_not_a_recorded_strength_is_rejected() {
 
 #[test]
 fn an_empty_guide_situation_is_rejected() {
-    let line = "situation = \"Whole-gene deletion, where loss of function is an established disease mechanism. Abou Tayoun 2018 says a full-gene deletion of a known haploinsufficient gene warrants Pathogenic even though PVS1 alone is 8 points, so check the rest of the evidence.\"";
+    let line = "situation = \"Start-loss, no transcript uses an alternative start codon, and no pathogenic variants lie before the next in-frame methionine.\"";
     assert!(matches!(edited(line, "situation = \"\""), Err(RuleError::BadSituation { .. })));
 }
 
@@ -217,4 +275,16 @@ fn original_strength_must_be_a_different_recorded_strength() {
         edited("original_strength = \"moderate\"", "original_strength = \"supporting\""),
         Err(RuleError::BadOriginalStrength { .. })
     ));
+}
+
+#[test]
+fn a_gene_level_question_needs_a_guide_a_source_and_a_level_that_keeps_the_strength() {
+    assert!(edited("gene_level_source = \"abou-tayoun2018\"", "gene_level_source = \"nowhere\"").is_err());
+    assert!(edited("steps = 0", "steps = 1").is_err(), "one answer must keep the guide's strength");
+    assert!(edited("steps = 2", "steps = 4").is_err(), "four steps go past Supporting");
+    assert!(edited("id = \"lower_two\"", "id = \"lower_one\"").is_err(), "ids must differ");
+    let pvs1 = RuleSet::builtin().unwrap().criterion("PVS1").unwrap().clone();
+    assert_eq!(pvs1.strength_for("nmd", Some("lower_one")), Some(Strength::Strong));
+    assert_eq!(pvs1.strength_for("nmd", None), None, "the answer is needed");
+    assert_eq!(pvs1.strength_for("not_applicable", Some("established")), None);
 }

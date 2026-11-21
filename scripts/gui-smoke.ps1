@@ -335,13 +335,17 @@ try {
     $value = (Gene-Box).GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value
     if ($value -ne "BRCA1") { throw "the suggestion did not fill the gene box (got '$value')" }
 
-    # PVS1 now asks which situation fits instead of applying Very strong.
+    # PVS1 asks the gene-level question (Abou Tayoun 2018, Table 1) first, then which situation fits.
     Click-Button-Like "PVS1:*not applied*"
-    if (@(Names | Where-Object { $_ -like "PVS1 Very strong:*" }).Count -eq 0) {
+    if (@(Names | Where-Object { $_ -like "PVS1 gene level:*" }).Count -eq 0) {
         # A double click toggles the guide closed; retry once so a stray repeat
         # from the automation does not fail the run.
         Click-Button-Like "PVS1:*not applied*"
     }
+    if (@(Names | Where-Object { $_ -like "PVS1 Very strong:*" }).Count -ne 0) {
+        throw "the PVS1 situations showed before the gene-level question was answered"
+    }
+    Click-Button "PVS1 gene level: LoF mechanism established"
     $guide = Capture "04-pvs1-guide"
     Find-Button-Like "PVS1 does not apply:*" | Out-Null
     Find-Button-Like "PVS1 Very strong:*" | Out-Null
@@ -354,6 +358,7 @@ try {
         throw "Escape applied PVS1 instead of just closing the guide"
     }
     Click-Button-Like "PVS1:*not applied*"
+    Click-Button "PVS1 gene level: LoF mechanism established"
     Find-Button-Like "PVS1 Very strong:*" | Out-Null
     # The first option is visible without scrolling; later ones may be below the fold.
     Click-Button-Like "PVS1 Very strong:*"
@@ -415,7 +420,9 @@ try {
 
     # The functional helper: controls route, then the OddsPath route.
     Click-Button "Open the functional evidence helper"
-    Set-BoxText "Validation control count" "12"
+    Click-Button "Confirm the assay has normal and abnormal experimental controls and replicates"
+    Set-BoxText "Pathogenic validation control count" "6"
+    Set-BoxText "Benign validation control count" "6"
     Click-Button-Like "Apply PS3 Moderate*"
     Find-Button-Like "PS3:*applied*" | Out-Null
     Scroll-To-Button "OddsPath value"

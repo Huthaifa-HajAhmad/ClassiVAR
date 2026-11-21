@@ -8,6 +8,10 @@ fn rules() -> &'static RuleSet {
 fn applied(list: &[(&str, Strength)]) -> Vec<Applied> {
     list.iter()
         .map(|(code, strength)| match rules().criterion(code).and_then(|c| c.situation_for(*strength)) {
+            // PVS1 also answers the gene-level question; "established" keeps the guide's strength.
+            Some(situation) if !rules().criterion(code).unwrap().gene_level.is_empty() => {
+                Applied::guided(*code, *strength, situation).with_gene_level("established")
+            }
             Some(situation) => Applied::guided(*code, *strength, situation),
             None => Applied::new(*code, *strength),
         })
@@ -21,8 +25,14 @@ fn record(label: &str, year: u16, class: Class, list: &[(&str, Strength)]) -> Su
         reported_class: class,
         reported_tier: None,
         rule_set: None,
+        condition: ConditionMatch::Same,
         criteria: applied(list),
     }
+}
+
+fn for_other_condition(mut submission: Submission) -> Submission {
+    submission.condition = ConditionMatch::Different;
+    submission
 }
 
 /// The fictional variant from the design sketch.
@@ -96,7 +106,7 @@ fn no_verdict_without_records_or_without_todays_evidence() {
 
 #[test]
 fn contradicting_evidence_today_gives_no_verdict() {
-    let r = rules().reevaluate(&sketch_records(), &applied(&[("PS1", Strong), ("PM5", Moderate)]));
+    let r = rules().reevaluate(&sketch_records(), &applied(&[("PS3", Strong), ("BS3", Strong)]));
     assert_eq!(r.verdict, None);
 }
 
@@ -171,7 +181,7 @@ fn a_changed_rule_set_alone_is_not_an_upgrade() {
 
 #[test]
 fn contradictory_evidence_in_a_record_is_not_checked() {
-    let records = vec![record("Lab A", 2020, Class::LikelyPathogenic, &[("PS1", Strong), ("PM5", Moderate)])];
+    let records = vec![record("Lab A", 2020, Class::LikelyPathogenic, &[("PS3", Strong), ("BS3", Strong)])];
     let r = rules().reevaluate(&records, &[]);
     assert_eq!(r.records[0].consistency(), Consistency::NotChecked);
 }
@@ -199,4 +209,43 @@ fn bad_evidence_in_one_record_does_not_hide_the_others() {
     assert!(r.records[1].assessment.is_ok());
     assert_eq!(r.records[0].consistency(), Consistency::NotChecked);
     assert_eq!(r.verdict, Some(Verdict::Holds));
+}
+
+#[test]
+fn a_record_for_another_condition_is_never_the_one_compared() {
+    let today = applied(&[("PS3", Strong), ("PM1", Moderate), ("PP3", Supporting)]);
+    let records = [
+        record("Lab A", 2019, Class::LikelyPathogenic, &[("PS3", Strong), ("PM1", Moderate), ("PP3", Supporting)]),
+        // Newer, but classified for another disease (for example CBAVD, not cystic fibrosis).
+        for_other_condition(record("Lab B", 2024, Class::Benign, &[("BS1", Strong), ("BS2", Strong)])),
+    ];
+    let re = rules().reevaluate(&records, &today);
+    assert_eq!(re.latest_index, Some(0), "the latest record for the same condition");
+    assert_eq!(re.verdict, Some(Verdict::Holds));
+    assert_eq!(re.records[1].condition, ConditionMatch::Different);
+}
+
+#[test]
+fn with_only_records_for_other_conditions_there_is_nothing_to_compare() {
+    let today = applied(&[("PS3", Strong)]);
+    let records = [for_other_condition(record("Lab B", 2024, Class::Benign, &[("BS1", Strong)]))];
+    let re = rules().reevaluate(&records, &today);
+    assert_eq!(re.latest_index, None);
+    assert_eq!(re.verdict, Some(Verdict::DifferentCondition));
+    assert!(re.reasons.is_empty());
+}
+
+#[test]
+fn a_gene_link_that_is_not_established_lowers_today_and_says_why() {
+    // Same evidence as the lab, but the curator says the gene-disease link is not
+    // established: today is VUS (Richards 2015, genes of uncertain significance).
+    let evidence = [("PS3", Strong), ("PM1", Moderate), ("PP3", Supporting)];
+    let records = [record("Lab A", 2019, Class::LikelyPathogenic, &evidence)];
+    let re = rules().reevaluate_in(&records, &applied(&evidence), GeneDecision::NotEstablished);
+    assert_eq!(re.today.as_ref().unwrap().class(), Some(Class::Vus));
+    assert!(re.reasons.contains(&Reason::GeneLinkNotEstablished));
+    assert_eq!(re.verdict, Some(Verdict::DowngradeCandidate), "a fact changed, not the method");
+    // Not decided is not "not established": the class stands, with the screen's note.
+    let re = rules().reevaluate_in(&records, &applied(&evidence), GeneDecision::NotDecided);
+    assert_eq!(re.verdict, Some(Verdict::Holds));
 }

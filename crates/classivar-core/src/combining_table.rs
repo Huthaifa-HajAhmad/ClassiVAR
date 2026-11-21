@@ -1,7 +1,13 @@
 //! The ACMG/AMP 2015 combining table (Richards et al., Table 5) as data, plus
-//! one addition: ClinGen's PM2 recommendation of 4 September 2020 lowered PM2 to
-//! Supporting and, so that PVS1 + PM2 stays Likely pathogenic, added the rule
-//! "one Very Strong + one Supporting = Likely pathogenic" (`clingen_2020_addition`).
+//! two additions, each marked with `added_by`:
+//! - ClinGen's PM2 recommendation of 4 September 2020 lowered PM2 to Supporting
+//!   and, so that PVS1 + PM2 stays Likely pathogenic, added "one Very Strong +
+//!   one Supporting = Likely pathogenic".
+//! - Pejaver 2022 (Discussion) introduced BP4 at Moderate, which the 2015 table
+//!   has no row for, and allowed it to invoke the "likely benign" rules alone or
+//!   with one Strong benign criterion. This file applies that to any Moderate
+//!   benign evidence (BS3 at Moderate from an assay has the same weight): one
+//!   Moderate benign criterion gives Likely benign.
 //!
 //! Each row names the evidence it needs. Keeping the rows as a list, instead of
 //! one long condition, lets the screen show which row the evidence meets. The
@@ -25,8 +31,8 @@ pub struct TableRow {
     pub class: Class,
     /// Every need must be met for the row to apply.
     pub needs: &'static [Need],
-    /// True for the one row that is not in the 2015 paper.
-    pub clingen_2020_addition: bool,
+    /// Who added the row, for the rows that are not in the 2015 paper.
+    pub added_by: Option<&'static str>,
 }
 
 impl TableRow {
@@ -60,6 +66,7 @@ pub struct Counts {
     pub supporting: usize,
     pub stand_alone_benign: usize,
     pub strong_benign: usize,
+    pub moderate_benign: usize,
     pub supporting_benign: usize,
 }
 
@@ -74,6 +81,7 @@ impl Counts {
                 (Direction::Pathogenic, Strength::Supporting) => counts.supporting += 1,
                 (Direction::Benign, Strength::StandAlone) => counts.stand_alone_benign += 1,
                 (Direction::Benign, Strength::Strong) => counts.strong_benign += 1,
+                (Direction::Benign, Strength::Moderate) => counts.moderate_benign += 1,
                 (Direction::Benign, Strength::Supporting) => counts.supporting_benign += 1,
                 _ => {}
             }
@@ -89,6 +97,7 @@ impl Counts {
             (Direction::Pathogenic, Strength::Supporting) => self.supporting,
             (Direction::Benign, Strength::StandAlone) => self.stand_alone_benign,
             (Direction::Benign, Strength::Strong) => self.strong_benign,
+            (Direction::Benign, Strength::Moderate) => self.moderate_benign,
             (Direction::Benign, Strength::Supporting) => self.supporting_benign,
             _ => 0,
         }
@@ -100,7 +109,7 @@ const fn need(strength: Strength, at_least: usize) -> Need {
 }
 
 const fn row(side: Direction, class: Class, needs: &'static [Need]) -> TableRow {
-    TableRow { side, class, needs, clingen_2020_addition: false }
+    TableRow { side, class, needs, added_by: None }
 }
 
 /// The table, strongest class first on each side. `sides` relies on that order.
@@ -118,7 +127,12 @@ pub static ROWS: &[TableRow] = {
         row(For, Pathogenic, &[need(S, 1), need(M, 2), need(P, 2)]),
         row(For, Pathogenic, &[need(S, 1), need(M, 1), need(P, 4)]),
         row(For, LikelyPathogenic, &[need(VS, 1), need(M, 1)]),
-        TableRow { side: For, class: LikelyPathogenic, needs: &[need(VS, 1), need(P, 1)], clingen_2020_addition: true },
+        TableRow {
+            side: For,
+            class: LikelyPathogenic,
+            needs: &[need(VS, 1), need(P, 1)],
+            added_by: Some("ClinGen 2020"),
+        },
         row(For, LikelyPathogenic, &[need(S, 1), need(M, 1)]),
         row(For, LikelyPathogenic, &[need(S, 1), need(P, 2)]),
         row(For, LikelyPathogenic, &[need(M, 3)]),
@@ -128,6 +142,7 @@ pub static ROWS: &[TableRow] = {
         row(Against, Benign, &[need(S, 2)]),
         row(Against, LikelyBenign, &[need(S, 1), need(P, 1)]),
         row(Against, LikelyBenign, &[need(P, 2)]),
+        TableRow { side: Against, class: LikelyBenign, needs: &[need(M, 1)], added_by: Some("Pejaver 2022") },
     ]
 };
 
@@ -154,7 +169,7 @@ mod tests {
     /// The conditions the engine used before the table became data, copied as they were.
     fn old_sides(c: &Counts) -> (Option<Class>, Option<Class>) {
         let (pvs, ps, pm, pp) = (c.very_strong, c.strong, c.moderate, c.supporting);
-        let (ba, bs, bp) = (c.stand_alone_benign, c.strong_benign, c.supporting_benign);
+        let (ba, bs, bm, bp) = (c.stand_alone_benign, c.strong_benign, c.moderate_benign, c.supporting_benign);
         let pathogenic = (pvs >= 1 && (ps >= 1 || pm >= 2 || (pm >= 1 && pp >= 1) || pp >= 2))
             || ps >= 2
             || (ps >= 1 && (pm >= 3 || (pm >= 2 && pp >= 2) || (pm >= 1 && pp >= 4)));
@@ -166,7 +181,8 @@ mod tests {
             || (pm >= 2 && pp >= 2)
             || (pm >= 1 && pp >= 4);
         let benign = ba >= 1 || bs >= 2;
-        let likely_benign = (bs >= 1 && bp >= 1) || bp >= 2;
+        // The last condition is the Pejaver 2022 addition; the rest are the 2015 rules as they were.
+        let likely_benign = (bs >= 1 && bp >= 1) || bp >= 2 || bm >= 1;
         let pathogenic_class = match (pathogenic, likely_pathogenic) {
             (true, _) => Some(Class::Pathogenic),
             (false, true) => Some(Class::LikelyPathogenic),
@@ -183,7 +199,7 @@ mod tests {
     #[test]
     fn the_rows_give_the_same_classes_as_the_old_conditions_for_every_count() {
         let mut checked = 0;
-        for n in 0..5usize.pow(7) {
+        for n in 0..5usize.pow(8) {
             let digit = |place: u32| (n / 5usize.pow(place)) % 5;
             let counts = Counts {
                 very_strong: digit(0),
@@ -193,11 +209,12 @@ mod tests {
                 stand_alone_benign: digit(4),
                 strong_benign: digit(5),
                 supporting_benign: digit(6),
+                moderate_benign: digit(7),
             };
             assert_eq!(sides(&met_by(&counts)), old_sides(&counts), "{counts:?}");
             checked += 1;
         }
-        assert_eq!(checked, 78_125);
+        assert_eq!(checked, 390_625);
     }
 
     #[test]
@@ -224,11 +241,12 @@ mod tests {
         for (i, row) in ROWS.iter().enumerate() {
             assert!(ROWS[i + 1..].iter().all(|other| other != row), "{} appears twice", row.text());
         }
-        assert_eq!(ROWS.iter().filter(|row| row.clingen_2020_addition).count(), 1);
+        let added: Vec<_> = ROWS.iter().filter_map(|row| row.added_by).collect();
+        assert_eq!(added, ["ClinGen 2020", "Pejaver 2022"]);
     }
 
     fn row_with(text: &str) -> &'static TableRow {
-        ROWS.iter().find(|row| row.text() == text && !row.clingen_2020_addition).expect(text)
+        ROWS.iter().find(|row| row.text() == text && row.added_by.is_none()).expect(text)
     }
 
     #[test]
@@ -245,7 +263,7 @@ mod tests {
 
     #[test]
     fn adding_exactly_the_shortfall_meets_the_row_and_nothing_less_does() {
-        for n in 0..3usize.pow(7) {
+        for n in 0..3usize.pow(8) {
             let digit = |place: u32| (n / 3usize.pow(place)) % 3;
             let counts = Counts {
                 very_strong: digit(0),
@@ -255,6 +273,7 @@ mod tests {
                 stand_alone_benign: digit(4),
                 strong_benign: digit(5),
                 supporting_benign: digit(6),
+                moderate_benign: digit(7),
             };
             for row in ROWS {
                 let short = row.shortfall(&counts);
@@ -268,6 +287,7 @@ mod tests {
                         (Direction::Pathogenic, Strength::Supporting) => more.supporting += need.at_least,
                         (Direction::Benign, Strength::StandAlone) => more.stand_alone_benign += need.at_least,
                         (Direction::Benign, Strength::Strong) => more.strong_benign += need.at_least,
+                        (Direction::Benign, Strength::Moderate) => more.moderate_benign += need.at_least,
                         (Direction::Benign, Strength::Supporting) => more.supporting_benign += need.at_least,
                         _ => unreachable!("the table has no such row"),
                     }
@@ -279,7 +299,8 @@ mod tests {
 
     #[test]
     fn a_row_reads_in_words() {
-        let row = ROWS.iter().find(|row| row.clingen_2020_addition).expect("the 2020 addition is in the table");
+        let row =
+            ROWS.iter().find(|row| row.added_by == Some("ClinGen 2020")).expect("the 2020 addition is in the table");
         assert_eq!(row.text(), "≥1 Very strong + ≥1 Supporting");
         assert_eq!(row.class, Class::LikelyPathogenic);
     }

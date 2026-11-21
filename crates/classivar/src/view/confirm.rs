@@ -33,7 +33,7 @@ impl Workbench {
         if matches!(self.confirm, Some(Confirm::NewGene(_))) {
             // Put the old gene back in the box, so the box and the case agree.
             let old = self.case_gene.clone();
-            self.gene_input.update(cx, |input, cx| input.set_value(old, window, cx));
+            self.boxes.gene.update(cx, |input, cx| input.set_value(old, window, cx));
         }
         self.confirm = None;
         cx.notify();
@@ -121,7 +121,7 @@ impl Workbench {
                 .p_4()
                 .bg(scrim())
                 .child(card)
-                .focus_trap("confirm-trap", &self.confirm_focus)
+                .focus_trap("confirm-trap", &self.handles.confirm_focus)
                 .into_any_element(),
         )
     }

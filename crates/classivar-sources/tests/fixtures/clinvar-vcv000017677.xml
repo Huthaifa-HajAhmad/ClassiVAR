@@ -1,0 +1,138 @@
+<?xml version='1.0' encoding='utf-8'?>
+<ClinVarResult-Set><VariationArchive VariationID="17677" VariationName="NM_007294.4(BRCA1):c.5266dup (p.Gln1756fs)" VariationType="Duplication" Accession="VCV000017677" Version="178" RecordType="classified" NumberOfSubmissions="102" NumberOfSubmitters="93" DateLastUpdated="2026-11-14" DateCreated="2013-10-01" MostRecentSubmission="2026-11-14">
+  <RecordStatus>current</RecordStatus>
+  <Species>Homo sapiens</Species>
+  <ClassifiedRecord>
+    <ClinicalAssertionList>
+      <ClinicalAssertion ID="382133" SubmissionDate="2015-02-11" ContributesToAggregateClassification="false" DateLastUpdated="2015-03-03" DateCreated="2015-03-03">
+        <ClinVarSubmissionID localKey="NM_007294.3:c.5266dupC|OMIM:604370" />
+        <ClinVarAccession Accession="SCV000212010" DateUpdated="2015-03-03" DateCreated="2015-03-03" Type="SCV" Version="1" SubmitterName="Institute of Human Genetics, Medical University Innsbruck" OrgID="320418" OrganizationCategory="laboratory" />
+        <RecordStatus>current</RecordStatus>
+        <Classification DateLastEvaluated="2015-02-11">
+          <ReviewStatus>no assertion criteria provided</ReviewStatus>
+          <GermlineClassification>Pathogenic</GermlineClassification>
+        </Classification>
+        <Assertion>variation to disease</Assertion>
+        <TraitSet Type="Disease">
+          <Trait Type="Disease">
+            <Name>
+              <ElementValue Type="Preferred">Breast-ovarian cancer, familial 1</ElementValue>
+            </Name>
+            <XRef DB="OMIM" ID="604370" Type="MIM" />
+          </Trait>
+        </TraitSet>
+        <StudyName>BRCA-Tyrol</StudyName>
+        <StudyDescription>BRCA-mutation spectrum Western Austria</StudyDescription>
+        <Comment>BRCA-mutation spectrum Western Austria</Comment>
+        </ClinicalAssertion>
+      <ClinicalAssertion ID="507638" SubmissionDate="2024-04-19" ContributesToAggregateClassification="false" DateLastUpdated="2024-04-20" DateCreated="2016-05-29">
+        <ClinVarSubmissionID localKey="61162016|Orphanet:ORPHA145" submittedAssembly="GRCh38" />
+        <ClinVarAccession Accession="SCV000271320" DateUpdated="2024-04-20" DateCreated="2016-05-29" Type="SCV" Version="5" SubmitterName="Laboratory for Molecular Medicine, Mass General Brigham Personalized Medicine" OrgID="21766" OrganizationCategory="laboratory" />
+        <RecordStatus>current</RecordStatus>
+        <Classification DateLastEvaluated="2022-11-23">
+          <ReviewStatus>criteria provided, single submitter</ReviewStatus>
+          <GermlineClassification>Pathogenic</GermlineClassification>
+          <Citation>
+            <ID Source="PubMed">22185575</ID>
+          </Citation>
+          <Citation>
+            <ID Source="PubMed">9042909</ID>
+          </Citation>
+          <Comment>The p.Gln1756ProfsX74 variant in BRCA1 (also referred to as p.Gln1777fs) is a founder variant in the Ashkenazi Jewish population and has been reported in &gt;1000 individuals with BRCA1-associated cancers (Abeliovich 1997 PMID: 9042909, Elwad 2011 PMID: 22185575, Breast Cancer Information Core (BIC) database). This variant has also been identified in 0.2% (24/103702) Ashkenazi Jewish and 0.02% (25/129200) of European chromosomes by gnomAD (http://gnomad.broadinstitute.org). This variant is predicted to cause a frameshift, which alters the protein’s amino acid sequence beginning at position 1756 and leads to a premature termination codon 74 amino acids downstream. This alteration is then predicted to lead to a truncated or absent protein. Heterozygous loss of function of the BRCA1 gene is an established disease mechanism in hereditary breast and ovarian cancer (HBOC). Furthermore, the p.Gln1756ProfsX74 variant was classified as Pathogenic on April 22, 2016 by the ClinGen-approved ENIGMA expert panel (ClinVar ID 17677). In summary, this variant meets criteria to be classified as pathogenic for autosomal dominant HBOC. ACMG/AMP Criteria applied: PS4, PVS1.</Comment>
+        </Classification>
+        <Assertion>variation to disease</Assertion>
+        <TraitSet Type="Disease">
+          <Trait Type="Disease">
+            <XRef DB="Orphanet" ID="ORPHA145" />
+          </Trait>
+        </TraitSet>
+        </ClinicalAssertion>
+      <ClinicalAssertion ID="14204901" SubmissionDate="2026-02-12" ContributesToAggregateClassification="false" DateLastUpdated="2026-02-15" DateCreated="2026-02-15">
+        <ClinVarSubmissionID localKey="NCH:10079|MONDO:0015356" submittedAssembly="GRCh38" />
+        <ClinVarAccession Accession="SCV007449512" DateUpdated="2026-02-15" DateCreated="2026-02-15" Type="SCV" Version="1" SubmitterName="Institute for Genomic Medicine (IGM) Clinical Laboratory, Nationwide Children's Hospital" OrgID="196472" OrganizationCategory="laboratory" />
+        <RecordStatus>current</RecordStatus>
+        <Classification DateLastEvaluated="2024-04-25">
+          <ReviewStatus>criteria provided, single submitter</ReviewStatus>
+          <GermlineClassification>Pathogenic</GermlineClassification>
+          <Citation>
+            <ID Source="PubMed">18431737</ID>
+          </Citation>
+          <Citation>
+            <ID Source="PubMed">20104584</ID>
+          </Citation>
+          <Citation>
+            <ID Source="PubMed">14729053</ID>
+          </Citation>
+          <Citation>
+            <ID Source="PubMed">23867111</ID>
+          </Citation>
+          <Citation>
+            <ID Source="PubMed">9042909</ID>
+          </Citation>
+          <Citation>
+            <ID Source="PubMed">22185575</ID>
+          </Citation>
+          <Citation>
+            <ID Source="PubMed">22430266</ID>
+          </Citation>
+          <Comment Type="public">This variant is predicted to result in loss of function through nonsense-mediated decay of the encoded transcript or premature truncation of the encoded protein in a gene in which loss of function is a known mechanism of disease (ACMG/AMP: PVS1_Strong; PMIDs:18431737, 20104584). Well-established functional studies have demonstrated this variant to have a damaging effect on protein function or splicing (ACMG/AMP: PS3; PMIDs:14729053, 23867111). This variant has been reported at an elevated frequency in affected individuals/in multiple affected individuals in the literature (ACMG/AMP: PS4; PMIDs:9042909, 22185575, 22430266).</Comment>
+        </Classification>
+        <Assertion>variation to disease</Assertion>
+        <TraitSet Type="Disease">
+          <Trait Type="Disease">
+            <XRef DB="MONDO" ID="MONDO:0015356" />
+          </Trait>
+        </TraitSet>
+        </ClinicalAssertion>
+      <ClinicalAssertion ID="145685" SubmissionDate="2022-02-17" ContributesToAggregateClassification="false" DateLastUpdated="2022-10-01" DateCreated="2013-10-01">
+        <ClinVarSubmissionID localKey="NM_007294.4:c.5266dupC|OMIM:PS604370" submittedAssembly="not applicable" />
+        <ClinVarAccession Accession="SCV000086949" DateUpdated="2022-10-01" DateCreated="2013-10-01" Type="SCV" Version="3" SubmitterName="GeneReviews" OrgID="500062" OrganizationCategory="resource" OrgAbbreviation="GeneReviews" />
+        <RecordStatus>current</RecordStatus>
+        <Classification>
+          <ReviewStatus>no classification provided</ReviewStatus>
+          <GermlineClassification>not provided</GermlineClassification>
+          <Citation>
+            <ID Source="BookShelf">NBK1247</ID>
+          </Citation>
+          <Citation>
+            <ID Source="PubMed">11466700</ID>
+          </Citation>
+          <Citation>
+            <ID Source="PubMed">11896095</ID>
+          </Citation>
+          <Citation>
+            <ID Source="PubMed">12402332</ID>
+          </Citation>
+          <Citation>
+            <ID Source="PubMed">17591843</ID>
+          </Citation>
+          <Citation>
+            <ID Source="PubMed">30152102</ID>
+          </Citation>
+          <Comment>Founder variant in Ashkenazi Jews; accounts for 26% of pathogenic variants in this population</Comment>
+        </Classification>
+        <Assertion>variation to disease</Assertion>
+        <TraitSet Type="Disease">
+          <Trait Type="Disease">
+            <XRef DB="MedGen" ID="C0677776" Type="CUI" />
+          </Trait>
+        </TraitSet>
+        </ClinicalAssertion>
+      </ClinicalAssertionList>
+    <TraitMappingList>
+      <TraitMapping ClinicalAssertionID="382133" TraitType="Disease" MappingType="Name" MappingValue="Breast-ovarian cancer, familial 1" MappingRef="Preferred">
+        <MedGen CUI="C2676676" Name="Breast-ovarian cancer, familial, susceptibility to, 1" />
+      </TraitMapping>
+      <TraitMapping ClinicalAssertionID="507638" TraitType="Disease" MappingType="XRef" MappingValue="ORPHA145" MappingRef="Orphanet">
+        <MedGen CUI="C0677776" Name="Hereditary breast ovarian cancer syndrome" />
+      </TraitMapping>
+      <TraitMapping ClinicalAssertionID="14204901" TraitType="Disease" MappingType="XRef" MappingValue="MONDO:0015356" MappingRef="MONDO">
+        <MedGen CUI="C0027672" Name="Hereditary cancer-predisposing syndrome" />
+      </TraitMapping>
+      <TraitMapping ClinicalAssertionID="145685" TraitType="Disease" MappingType="XRef" MappingValue="C0677776" MappingRef="MedGen">
+        <MedGen CUI="C0677776" Name="Hereditary breast ovarian cancer syndrome" />
+      </TraitMapping>
+      </TraitMappingList>
+    </ClassifiedRecord>
+</VariationArchive>
+</ClinVarResult-Set>

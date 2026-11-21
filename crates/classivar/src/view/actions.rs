@@ -6,7 +6,7 @@ impl Workbench {
     /// The variant name the curator typed, if any. Long pastes are cut to the
     /// same cap the saved case uses, so a display or a file cannot balloon.
     pub(super) fn variant_name(&self, cx: &App) -> Option<String> {
-        let typed = self.variant_input.read(cx).value();
+        let typed = self.boxes.variant.read(cx).value();
         let typed = typed.trim().chars().take(MAX_VARIANT_CHARS).collect::<String>();
         (!typed.is_empty()).then_some(typed)
     }
@@ -16,7 +16,7 @@ impl Workbench {
             || !self.records.is_empty()
             || self.variant_name(cx).is_some()
             || self.gene_link != GeneDecision::NotDecided
-            || !self.gene_input.read(cx).value().trim().is_empty()
+            || !self.boxes.gene.read(cx).value().trim().is_empty()
     }
 
     /// Ask a question, unless one is already waiting for an answer. A second
@@ -37,7 +37,7 @@ impl Workbench {
             return;
         }
         if matches!(key, "home" | "end") {
-            let own = [&self.variant_input, &self.gene_input, &self.record_name_input, &self.reason_input];
+            let own = [&self.boxes.variant, &self.boxes.gene, &self.boxes.record_name, &self.boxes.reason];
             if own
                 .into_iter()
                 .chain(self.helpers.text_boxes())
@@ -46,10 +46,10 @@ impl Workbench {
                 return;
             }
         }
-        let handle = if self.result_scroll.bounds().contains(&window.mouse_position()) {
-            &self.result_scroll
+        let handle = if self.handles.result_scroll.bounds().contains(&window.mouse_position()) {
+            &self.handles.result_scroll
         } else {
-            &self.criteria_scroll
+            &self.handles.criteria_scroll
         };
         let furthest = handle.max_offset().y.abs();
         let page = handle.bounds().size.height * 0.9;
@@ -121,12 +121,14 @@ impl Workbench {
         if let Some(choice) = self.evidence_mut(scope).remove(&criterion.code) {
             // A guided criterion on today's evidence stays: this click only opens its guide.
             if scope == Editing::Today && !criterion.guide.is_empty() {
+                self.guide_gene_level = choice.gene_level.clone();
                 self.evidence_mut(scope).insert(criterion.code.clone(), choice);
                 self.guide_open = Some(criterion.code.clone());
             }
             return;
         }
         if scope == Editing::Today && !criterion.guide.is_empty() {
+            self.guide_gene_level = None;
             self.guide_open = Some(criterion.code.clone());
             return;
         }
@@ -150,12 +152,14 @@ impl Workbench {
         }
     }
 
-    /// The curator's answer to a strength guide. `None` means the criterion does not apply.
+    /// The curator's answer to a strength guide, with the gene-level answer when
+    /// the criterion asks one. `None` means the criterion does not apply.
     pub(super) fn answer_guide(&mut self, code: &str, strength: Option<Strength>, situation: String) {
         self.guide_open = None;
+        let gene_level = self.guide_gene_level.take();
         match strength {
             Some(strength) => {
-                self.today.insert(code.to_string(), Choice::guided(strength, situation));
+                self.today.insert(code.to_string(), Choice::guided(strength, situation, gene_level));
             }
             None => {
                 self.today.remove(code);
@@ -166,6 +170,7 @@ impl Workbench {
     pub(super) fn next_strength(&mut self, criterion: &Criterion, window: &mut Window, cx: &mut Context<Self>) {
         let Some(current) = self.current().get(&criterion.code).map(|choice| choice.strength) else { return };
         if self.editing == Editing::Today && !criterion.guide.is_empty() {
+            self.guide_gene_level = self.today.get(&criterion.code).and_then(|choice| choice.gene_level.clone());
             self.guide_open = Some(criterion.code.clone());
             return;
         }
@@ -194,8 +199,8 @@ impl Workbench {
     ) {
         if self.editing == Editing::Today && self.rules.magnitude(next) > self.rules.magnitude(criterion.strength) {
             let earlier = self.today.get(&criterion.code).and_then(|c| c.reason.clone()).unwrap_or_default();
-            self.reason_input.update(cx, |input, cx| input.set_value(earlier, window, cx));
-            self.raising = Some(Raise { code: criterion.code.clone(), to: next });
+            self.boxes.reason.update(cx, |input, cx| input.set_value(earlier, window, cx));
+            self.raising = Some(Raise { code: criterion.code.clone(), to: next, note: false });
             return;
         }
         // A manual change no longer matches a guide answer or an earlier reason, so those are dropped.
@@ -206,14 +211,31 @@ impl Workbench {
     /// Save the raised strength with the reason that was typed. Does nothing
     /// while the box is empty: the button is disabled then too.
     pub(super) fn confirm_raise(&mut self, cx: &mut Context<Self>) {
-        let typed = self.reason_input.read(cx).value();
+        let typed = self.boxes.reason.read(cx).value();
         let reason: String = typed.trim().chars().take(MAX_REASON_CHARS).collect();
         if reason.is_empty() {
             return;
         }
-        if let Some(raise) = self.raising.take() {
-            self.today.insert(raise.code, Choice::with_reason(raise.to, reason));
+        match self.raising.take() {
+            Some(Raise { code, note: true, .. }) => {
+                if let Some(choice) = self.today.get_mut(&code) {
+                    choice.reason = Some(reason);
+                }
+            }
+            Some(raise) => {
+                self.today.insert(raise.code, Choice::with_reason(raise.to, reason));
+            }
+            None => {}
         }
+    }
+
+    /// Open the prompt to note what the curator looked at for an applied criterion
+    /// (a source and its date, for example). The current note is shown to edit.
+    pub(super) fn start_note(&mut self, code: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(choice) = self.today.get(code) else { return };
+        let (to, earlier) = (choice.strength, choice.reason.clone().unwrap_or_default());
+        self.boxes.reason.update(cx, |input, cx| input.set_value(earlier, window, cx));
+        self.raising = Some(Raise { code: code.to_string(), to, note: true });
     }
 
     /// Switch between the light and dark theme, and remember the choice for the

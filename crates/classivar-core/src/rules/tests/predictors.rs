@@ -150,3 +150,24 @@ fn predictor_metadata_that_would_mislead_is_refused() {
         );
     assert!(matches!(RuleSet::parse(&stronger_than_calibrated), Err(RuleError::BadPredictor { .. })));
 }
+
+#[test]
+fn alphamissense_and_varity_r_follow_bergquist_2025_table_1() {
+    use Strength::*;
+    // AlphaMissense: Supporting 0.792-0.905, Moderate 0.906-0.971, the 3-point band
+    // 0.972-0.989 counts as Moderate here, Strong from 0.990.
+    assert_eq!(reading("alphamissense", 0.791), None);
+    assert_eq!(reading("alphamissense", 0.792), Some(("PP3", Supporting, Supporting)));
+    assert_eq!(reading("alphamissense", 0.906), Some(("PP3", Moderate, Moderate)));
+    assert_eq!(reading("alphamissense", 0.980), Some(("PP3", Moderate, Moderate)));
+    assert_eq!(reading("alphamissense", 0.990), Some(("PP3", Strong, Strong)));
+    // The developers' cut-off (0.564) gives nothing.
+    assert_eq!(reading("alphamissense", 0.564), None);
+    assert_eq!(reading("alphamissense", 0.169), Some(("BP4", Supporting, Supporting)));
+    assert_eq!(reading("alphamissense", 0.099), Some(("BP4", Moderate, Moderate)));
+    // VARITY_R reaches Strong benign in the paper; BP4 stops at Moderate.
+    assert_eq!(reading("varity-r", 0.675), Some(("PP3", Supporting, Supporting)));
+    assert_eq!(reading("varity-r", 0.965), Some(("PP3", Strong, Strong)));
+    assert_eq!(reading("varity-r", 0.036), Some(("BP4", Strong, Moderate)));
+    assert_eq!(reading("varity-r", 0.5), None);
+}

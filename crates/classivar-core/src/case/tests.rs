@@ -1,5 +1,7 @@
 use super::*;
+use crate::condition::Inheritance;
 use crate::model::Strength::*;
+use crate::variant::VariantIdentity;
 
 fn rules() -> &'static RuleSet {
     RuleSet::builtin().expect("the built-in rules are valid")
@@ -25,11 +27,105 @@ fn sample() -> CaseFile {
                 year: 2019,
                 class: Some(Class::Vus),
                 reported_tier: Some("VUS-low".into()),
+                condition: None,
+                source: None,
                 criteria: vec![applied("PM2", Moderate)],
             },
-            SavedRecord { label: "Lab B".into(), year: 2022, class: None, reported_tier: None, criteria: vec![] },
+            SavedRecord {
+                label: "Lab B".into(),
+                year: 2022,
+                class: None,
+                reported_tier: None,
+                condition: None,
+                source: None,
+                criteria: vec![],
+            },
         ],
+        identity: None,
+        condition: None,
     }
+}
+
+fn hboc() -> Condition {
+    Condition {
+        name: "Hereditary breast ovarian cancer syndrome".into(),
+        mondo: Some("MONDO:0003582".into()),
+        inheritance: Inheritance::AutosomalDominant,
+    }
+}
+
+fn checked_identity() -> VariantIdentity {
+    VariantIdentity {
+        allele_id: Some("CA003404".into()),
+        grch38: Some("NC_000017.11:g.43057065dup".into()),
+        grch37: Some("NC_000017.10:g.41209082dup".into()),
+        mane_select: Some("NM_007294.4:c.5266dup".into()),
+        protein: Some("NP_009225.1:p.Gln1756ProfsTer?".into()),
+        gene: Some("BRCA1".into()),
+        clinvar_variation: Some(17677),
+        dbsnp: Some(80357906),
+        checked_with: "ClinGen Allele Registry".into(),
+        checked_on: "2026-11-21".into(),
+    }
+}
+
+/// A case that uses every field added in layout 1 after its first release.
+fn full_sample() -> CaseFile {
+    let mut case = sample();
+    case.identity = Some(checked_identity());
+    case.condition = Some(hboc());
+    case.records[0].condition = Some(Condition { inheritance: Inheritance::Unknown, ..hboc() });
+    case.records[0].source = Some(RecordSource {
+        accession: "SCV000145419".into(),
+        review_status: "criteria provided, single submitter".into(),
+        last_evaluated: Some("2019-03-01".into()),
+        stated_criteria: Some("PP5, PS4_moderate, PVS1".into()),
+        imported_on: "2026-11-21".into(),
+    });
+    case
+}
+
+#[test]
+fn the_identity_the_condition_and_where_a_record_came_from_survive_saving() {
+    let case = full_sample();
+    assert_eq!(CaseFile::from_json(&case.to_json(), rules()).unwrap(), case);
+}
+
+#[test]
+fn a_file_written_before_identities_and_conditions_existed_still_opens() {
+    let json = sample().to_json();
+    let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
+    let object = value.as_object_mut().unwrap();
+    object.remove("identity");
+    object.remove("condition");
+    for record in object["records"].as_array_mut().unwrap() {
+        record.as_object_mut().unwrap().remove("condition");
+        record.as_object_mut().unwrap().remove("source");
+    }
+    let back = CaseFile::from_json(&value.to_string(), rules()).unwrap();
+    assert_eq!(back, sample());
+}
+
+#[test]
+fn long_identity_condition_or_source_text_is_refused_by_name() {
+    let refused = |case: CaseFile| CaseFile::from_json(&case.to_json(), rules()).unwrap_err().to_string();
+    let mut case = full_sample();
+    case.condition.as_mut().unwrap().name = "c".repeat(crate::MAX_CONDITION_CHARS + 1);
+    assert!(refused(case).contains("condition"));
+    let mut case = full_sample();
+    case.identity.as_mut().unwrap().mane_select = Some("c".repeat(crate::variant::MAX_IDENTITY_CHARS + 1));
+    assert!(refused(case).contains("MANE Select"));
+    let mut case = full_sample();
+    case.records[0].source.as_mut().unwrap().stated_criteria = Some("P".repeat(301));
+    assert!(refused(case).contains("Lab A"));
+}
+
+#[test]
+fn check_refuses_a_case_that_would_not_open_again_so_saving_can_refuse_it() {
+    assert!(full_sample().check(rules()).is_ok());
+    let mut case = full_sample();
+    case.records[0].source.as_mut().unwrap().stated_criteria = Some("P".repeat(MAX_SOURCE_CHARS + 1));
+    assert!(case.check(rules()).unwrap_err().to_string().contains("Lab A"));
 }
 
 #[test]
@@ -164,7 +260,7 @@ fn a_case_at_the_field_limits_still_opens() {
 
 #[test]
 fn a_file_with_too_many_records_is_refused() {
-    let padding = SavedRecord { label: "Lab".into(), year: 2020, class: None, reported_tier: None, criteria: vec![] };
+    let padding = SavedRecord { label: "Lab".into(), year: 2020, ..sample().records[1].clone() };
     let mut case = sample();
     case.records = vec![padding; MAX_RECORDS + 1];
     assert!(matches!(CaseFile::from_json(&case.to_json(), rules()), Err(CaseError::TooManyRecords(31))));
@@ -174,13 +270,7 @@ fn a_file_with_too_many_records_is_refused() {
 fn the_record_years_are_brought_into_the_typing_range() {
     let mut case = sample();
     case.records[0].year = 1990;
-    case.records.push(SavedRecord {
-        label: "Future".into(),
-        year: 2200,
-        class: None,
-        reported_tier: None,
-        criteria: vec![],
-    });
+    case.records.push(SavedRecord { label: "Future".into(), year: 2200, ..sample().records[1].clone() });
     let opened = CaseFile::from_json(&case.to_json(), rules()).unwrap();
     assert_eq!((opened.records[0].year, opened.records[2].year), (2000, 2100));
 }

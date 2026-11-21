@@ -4,6 +4,8 @@
 //! The answer is a candidate, never a decision. The curator reviews the reasons.
 
 use crate::assess::{Applied, AssessError, Assessment, Counting};
+use crate::case::GeneDecision;
+use crate::condition::ConditionMatch;
 use crate::model::{Class, Strength};
 use crate::rules::{RuleSet, RuleSetRef};
 
@@ -17,6 +19,9 @@ pub struct Submission {
     pub reported_tier: Option<String>,
     /// The rule set the record was made with, if it is known.
     pub rule_set: Option<RuleSetRef>,
+    /// Whether the record is about the case's condition (see `Condition::compare`).
+    /// A record for a different condition is shown but never compared.
+    pub condition: ConditionMatch,
     pub criteria: Vec<Applied>,
 }
 
@@ -27,6 +32,7 @@ pub struct Rescored {
     pub year: u16,
     pub reported_class: Class,
     pub reported_tier: Option<String>,
+    pub condition: ConditionMatch,
     /// Each record is scored on its own, so one bad record does not hide the others.
     pub assessment: Result<Assessment, AssessError>,
 }
@@ -70,6 +76,9 @@ pub enum Verdict {
     /// The latest record's class does not fit its own evidence, so comparing
     /// with it would mean little.
     RecordInconsistent,
+    /// Every record names a different condition than the case, so no record
+    /// can be compared with today's class.
+    DifferentCondition,
 }
 
 /// One change between the latest record and today's evidence.
@@ -91,6 +100,9 @@ pub enum Reason {
     RuleSetChanged { from: RuleSetRef, to: RuleSetRef },
     /// The record named a VUS sub-tier; today's evidence falls in another one.
     TierChanged { from: String, to: String },
+    /// The curator says the gene-disease link is not established, so today's
+    /// pathogenic class is shown as VUS (Richards 2015, genes of uncertain significance).
+    GeneLinkNotEstablished,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -105,7 +117,8 @@ pub struct Reevaluation {
     pub records: Vec<Rescored>,
     pub today: Result<Assessment, AssessError>,
     pub rows: Vec<Row>,
-    /// Index into `records` of the latest record (latest year; on a tie, entered last).
+    /// Index into `records` of the latest record for the case's condition
+    /// (latest year; on a tie, entered last). Records for a different condition are skipped.
     pub latest_index: Option<usize>,
     /// None when there are no records, or when today's evidence cannot be
     /// classified (empty, contradictory, or not scorable).
@@ -118,7 +131,14 @@ fn strength_in(list: &[Applied], code: &str) -> Option<Strength> {
 }
 
 impl RuleSet {
+    /// Compare the records with today's evidence, taking the gene-disease link as established.
     pub fn reevaluate(&self, submissions: &[Submission], today: &[Applied]) -> Reevaluation {
+        self.reevaluate_in(submissions, today, GeneDecision::Established)
+    }
+
+    /// Like `reevaluate`, with the curator's answer on the gene-disease link: when
+    /// it is not established, today's pathogenic class is shown as VUS.
+    pub fn reevaluate_in(&self, submissions: &[Submission], today: &[Applied], gene: GeneDecision) -> Reevaluation {
         let records: Vec<Rescored> = submissions
             .iter()
             .map(|s| Rescored {
@@ -126,17 +146,27 @@ impl RuleSet {
                 year: s.year,
                 reported_class: s.reported_class,
                 reported_tier: s.reported_tier.clone(),
+                condition: s.condition,
                 // An old record is scored the way it was made, so its own class can be reproduced.
                 assessment: self.assess_as(&s.criteria, Counting::AsRecorded),
             })
             .collect();
-        let today_assessment = self.assess(today);
+        let today_assessment = self.assess(today).map(|a| match gene {
+            GeneDecision::NotEstablished => a.in_gene_of_uncertain_significance(),
+            _ => a,
+        });
         let rows = self.history_rows(submissions, today);
 
-        // The latest record is the one with the latest year; on a tie, the one entered last.
-        let latest_index = submissions.iter().enumerate().max_by_key(|(index, s)| (s.year, *index)).map(|(i, _)| i);
+        // The latest record for the same condition: the latest year; on a tie, the one entered last.
+        let latest_index = submissions
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.condition != ConditionMatch::Different)
+            .max_by_key(|(index, s)| (s.year, *index))
+            .map(|(i, _)| i);
         let (reasons, verdict) = match latest_index {
             Some(index) => self.compare_with_latest(&submissions[index], &records[index], today, &today_assessment),
+            None if !submissions.is_empty() => (Vec::new(), Some(Verdict::DifferentCondition)),
             None => (Vec::new(), None),
         };
 
@@ -167,8 +197,12 @@ impl RuleSet {
         today_assessment: &Result<Assessment, AssessError>,
     ) -> (Vec<Reason>, Option<Verdict>) {
         let mut reasons = self.evidence_reasons(latest, today);
-        // Only changes in the evidence itself count when deciding between "different method"
-        // and a real upgrade or downgrade. The two notes added below do not.
+        // Only changes in the evidence itself, or in the gene-disease link, count when deciding
+        // between "different method" and a real upgrade or downgrade. The rule-set and tier notes do not.
+        let lowered_for_gene = today_assessment.as_ref().is_ok_and(Assessment::lowered_for_gene);
+        if lowered_for_gene {
+            reasons.push(Reason::GeneLinkNotEstablished);
+        }
         let evidence_changed = !reasons.is_empty();
         if let Some(old) = latest.rule_set.as_ref().filter(|old| **old != self.reference()) {
             reasons.push(Reason::RuleSetChanged { from: old.clone(), to: self.reference() });

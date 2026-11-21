@@ -131,7 +131,7 @@ impl Workbench {
                 }))
                 .into_any_element();
         }
-        let cap = c.max_strength.map(|limit| format!("Capped at {} by this program.", limit.label()));
+        let cap = c.max_strength.map(|limit| format!("Highest level in these rules: {}.", limit.label()));
         let options = self.strength_options(c);
         let this = cx.entity().downgrade();
         button
@@ -206,6 +206,9 @@ impl Workbench {
                 div().child("Click the code to answer a short decision tree; nothing is applied until you choose."),
             );
         }
+        if open && strength.is_some() && self.editing == Editing::Today {
+            text = text.child(self.criterion_note_button(c, cx));
+        }
         if open && strength.is_some() && !c.guide.is_empty() && self.editing == Editing::Today {
             text = text.child(self.criterion_remove_button(c, cx));
         }
@@ -213,6 +216,21 @@ impl Workbench {
             text = text.child(format!("Source: {citation}"));
         }
         text
+    }
+
+    /// Note what the evidence behind an applied criterion was (any criterion, not only a raised one).
+    fn criterion_note_button(&self, c: &'static Criterion, cx: &mut Context<Self>) -> Button {
+        let code = c.code.clone();
+        let has_note = self.today.get(&c.code).is_some_and(|choice| choice.reason.is_some());
+        Button::new(SharedString::from(format!("note-{}", c.code)))
+            .label(if has_note { "Edit note" } else { "Add a note" })
+            .accessibility_label(format!("Note what you looked at for {}", c.code))
+            .small()
+            .ghost()
+            .on_click(cx.listener(move |this, _, window, cx| {
+                this.start_note(&code, window, cx);
+                cx.notify();
+            }))
     }
 
     /// Removing a guided criterion has its own button: its code button only reopens the guide.
