@@ -1,13 +1,21 @@
 //! The ACMG/AMP 2015 combining table (Richards et al., Table 5) as data, plus
-//! two additions, each marked with `added_by`:
+//! three additions, each marked with `added_by`:
+//! - Two Very Strong criteria give Pathogenic. In 2015 PVS1 was the only Very
+//!   Strong criterion, so the table had no row for two; later ClinGen
+//!   recommendations let PM3, PS2, PM6 and PS3 reach Very Strong. On the points
+//!   scale (Tavtigian 2020) two are 16 points, Pathogenic from 10, more than the
+//!   12 of "Very Strong + Strong". All 58 ClinGen expert-panel classifications
+//!   with two Very Strong criteria in the benchmark snapshot are Pathogenic.
 //! - ClinGen's PM2 recommendation of 4 September 2020 lowered PM2 to Supporting
 //!   and, so that PVS1 + PM2 stays Likely pathogenic, added "one Very Strong +
 //!   one Supporting = Likely pathogenic".
 //! - Pejaver 2022 (Discussion) introduced BP4 at Moderate, which the 2015 table
 //!   has no row for, and allowed it to invoke the "likely benign" rules alone or
 //!   with one Strong benign criterion. This file applies that to any Moderate
-//!   benign evidence (BS3 at Moderate from an assay has the same weight): one
-//!   Moderate benign criterion gives Likely benign.
+//!   benign evidence: Richards 2015 combines by strength, not by code, BS3 at
+//!   Moderate (Brnich 2019) is the other Moderate benign criterion, and on the
+//!   points scale one Moderate (-2) equals the two Supporting of an existing
+//!   row. One Moderate benign criterion gives Likely benign.
 //!
 //! Each row names the evidence it needs. Keeping the rows as a list, instead of
 //! one long condition, lets the screen show which row the evidence meets. The
@@ -118,6 +126,7 @@ pub static ROWS: &[TableRow] = {
     use Direction::{Benign as Against, Pathogenic as For};
     use Strength::{Moderate as M, Strong as S, Supporting as P, VeryStrong as VS};
     &[
+        TableRow { side: For, class: Pathogenic, needs: &[need(VS, 2)], added_by: Some("Tavtigian 2020 points") },
         row(For, Pathogenic, &[need(VS, 1), need(S, 1)]),
         row(For, Pathogenic, &[need(VS, 1), need(M, 2)]),
         row(For, Pathogenic, &[need(VS, 1), need(M, 1), need(P, 1)]),
@@ -170,7 +179,9 @@ mod tests {
     fn old_sides(c: &Counts) -> (Option<Class>, Option<Class>) {
         let (pvs, ps, pm, pp) = (c.very_strong, c.strong, c.moderate, c.supporting);
         let (ba, bs, bm, bp) = (c.stand_alone_benign, c.strong_benign, c.moderate_benign, c.supporting_benign);
-        let pathogenic = (pvs >= 1 && (ps >= 1 || pm >= 2 || (pm >= 1 && pp >= 1) || pp >= 2))
+        // `pvs >= 2` is the Tavtigian 2020 points addition; the rest are the 2015 rules as they were.
+        let pathogenic = pvs >= 2
+            || (pvs >= 1 && (ps >= 1 || pm >= 2 || (pm >= 1 && pp >= 1) || pp >= 2))
             || ps >= 2
             || (ps >= 1 && (pm >= 3 || (pm >= 2 && pp >= 2) || (pm >= 1 && pp >= 4)));
         let likely_pathogenic = (pvs >= 1 && pm >= 1)
@@ -242,7 +253,7 @@ mod tests {
             assert!(ROWS[i + 1..].iter().all(|other| other != row), "{} appears twice", row.text());
         }
         let added: Vec<_> = ROWS.iter().filter_map(|row| row.added_by).collect();
-        assert_eq!(added, ["ClinGen 2020", "Pejaver 2022"]);
+        assert_eq!(added, ["Tavtigian 2020 points", "ClinGen 2020", "Pejaver 2022"]);
     }
 
     fn row_with(text: &str) -> &'static TableRow {

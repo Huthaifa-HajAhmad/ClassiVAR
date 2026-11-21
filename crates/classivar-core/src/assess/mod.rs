@@ -146,7 +146,7 @@ pub struct Assessment {
     pub total_points: i32,
     /// What the points alone give. Use `class()` to know whether to show it.
     pub points_class: Class,
-    /// The 2015 combining table (with the ClinGen 2020 and Pejaver 2022 additions, see `combining_table`).
+    /// The 2015 combining table (with its later additions, see `combining_table`).
     /// None if there is no evidence or the evidence contradicts itself.
     pub classic_class: Option<Class>,
     /// The rows of the 2015 table that the counted evidence meets, strongest
@@ -263,7 +263,7 @@ impl RuleSet {
             conflicts,
             combination_overuse: self.combination_overuse(&items),
             // BA1 against pathogenic evidence: withheld when a pathogenic rule is met, or when the
-            // pathogenic points alone reach Likely pathogenic (two Very Strong criteria meet no 2015 row).
+            // pathogenic points alone reach Likely pathogenic (PVS1 alone meets no row).
             both_sides_met: (pathogenic_side.is_some() && benign_side.is_some())
                 || (has_stand_alone_benign(&items)
                     && self.class_min(Class::LikelyPathogenic).is_some_and(|min| pathogenic_points >= min)),

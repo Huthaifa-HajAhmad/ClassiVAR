@@ -20,3 +20,5 @@ CI (`.github/workflows/`) runs the same checks plus `cargo audit` on Windows and
 ## Licence
 
 Licensed under either of Apache License 2.0 (`LICENSE-APACHE`) or the MIT licence (`LICENSE-MIT`), at your option. The packages ClassiVAR is built with are listed in `THIRD-PARTY-NOTICES.md` (regenerate with `scripts/third-party-notices.ps1`).
+
+The benchmark snapshot in `crates/classivar-core/tests/data/` is curated content from the Clinical Genome Resource (ClinGen, www.clinicalgenome.org), accessed 2026-11-21, released by ClinGen under CC0 1.0. See the README in that folder.

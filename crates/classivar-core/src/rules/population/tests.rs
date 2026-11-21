@@ -89,6 +89,8 @@ fn bs1_compares_the_filtering_frequency_with_the_maximum_credible_one() {
     assert_eq!(found(&read(facts(Some(5e-5))), "BS1"), Some(Strength::Strong));
     assert_eq!(found(&read(facts(Some(4e-5))), "BS1"), Some(Strength::Strong), "at the limit counts, as in the paper");
     assert_eq!(found(&read(facts(Some(3e-5))), "BS1"), None);
+    let shown = read(facts(Some(5e-5)));
+    assert!(shown[1].why.contains("× ½") && shown[1].why.contains("Whiffin 2017"), "{}", shown[1].why);
     let asked = read(facts(None));
     assert!(asked[1].why.contains("filtering allele frequency"), "{}", asked[1].why);
     // Too common for BS1 also rules out PM2.

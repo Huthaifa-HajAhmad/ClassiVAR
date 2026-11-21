@@ -3,6 +3,8 @@
 Usage: python scripts/erepo-snapshot.py <erepo-export.tsv> <out.tsv>
 The export is https://erepo.clinicalgenome.org/evrepo/api/classifications/all?format=tabbed
 Keeps four columns (allele, expert panel, class, met codes) and drops retracted rows.
+ClinGen releases curated content under CC0 1.0 and asks for attribution with the
+date accessed: see crates/classivar-core/tests/data/README.md.
 """
 import csv
 import sys

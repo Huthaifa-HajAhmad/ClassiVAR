@@ -186,6 +186,14 @@ The owner asked for every finding to be addressed, with Claude as the interim re
 | R4 gene-specific rules as the route above the caps | Done | Rules… opens a rule file in a new window |
 | R5 SVC v4 readiness | Unchanged by design | rules stay data; no new helpers beyond the findings |
 
+**Decisions closed 2026-11-21** (the owner asked for a decision as a panel of domain experts would make it; AI judgment with sources, status stays `unverified`):
+
+1. *Moderate benign in the 2015 table:* kept for any Moderate benign criterion, not only BP4. Richards 2015 combines by strength, not by code; Brnich 2019 defines BS3_Moderate, which would otherwise meet no row; on the points scale −2 equals the existing two-Supporting row.
+2. *Benign results in a gene of uncertain significance:* kept as they are. Richards 2015 limits what a doubtful gene can make *pathogenic*; a common variant is still benign. The note on the result now says that BS1, BS2, BS4 and BP5 assume the gene causes the disease.
+3. *Whiffin's ½:* kept. The paper's worked example and Table 1 footnote use it (a share of people becomes a share of gene copies). The BS1 finding now names the formula with its ½.
+4. *Two Very Strong criteria:* **new table row "≥2 Very strong → Pathogenic", marked "Tavtigian 2020 points addition".** No paper prints it: in 2015 PVS1 was the only Very Strong criterion. Two are 16 points (Pathogenic from 10), and all 58 ERepo classifications with two Very Strong criteria are Pathogenic. It closes a safety gap: PVS1 + PM3_Very Strong + BS1 + BS2 used to show a confident Likely pathogenic; it now meets both sides and is withheld. Benchmark unchanged (98.3%, none across VUS).
+5. *ERepo data in a public repository:* kept. ClinGen releases curated content under CC0 1.0 and asks for attribution with the access date (terms page read 2026-11-21); `crates/classivar-core/tests/data/README.md` gives it.
+
 **What the benchmark changed.** Scoring 13,864 expert-panel classifications showed two rules that disagreed with practice or safety: (1) 8 panels apply PS1 and PM5 together (18 classifications, 17 of them P or LP), so the pair is now a double-counting caution, not a withheld class; (2) two Very Strong criteria meet no 2015 row, so BA1 with PVS1 and PM3 at Very Strong was shown as Benign; BA1 is now also withheld when the pathogenic points alone reach Likely pathogenic. After both changes, 98.3% of classifications with evidence agree, and none crosses VUS.
 
 **Decisions for the human reviewer.**

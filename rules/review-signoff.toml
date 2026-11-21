@@ -28,8 +28,8 @@ reviewer = "Claude (AI, claude-opus-5-5)"
 kind = "ai"
 date = "2026-11-21"
 verdict = "matches source, reading noted"
-checked_against = "Richards 2015 Table 5 (PMC4544753 text); ClinGen PM2 v1.0 PDF; Pejaver 2022 Discussion"
-note = "Every 2015 row matches. The ClinGen 2020 row (VS + 1 Supporting = LP) is in the PM2 PDF. The Pejaver 2022 row is written for BP4_Moderate; applying it to any Moderate benign evidence is this reviewer's reading."
+checked_against = "Richards 2015 Table 5 (PMC4544753 text); ClinGen PM2 v1.0 PDF; Pejaver 2022 Discussion; Brnich 2019 (PMC6938631); Tavtigian 2020; ERepo snapshot 2026-11-21"
+note = "Every 2015 row matches. The ClinGen 2020 row (VS + 1 Supporting = LP) is in the PM2 PDF. The Pejaver 2022 row is written for BP4_Moderate; applying it to any Moderate benign evidence is this reviewer's reading (Richards 2015 combines by strength, Brnich 2019 defines BS3_Moderate, and -2 points equals the existing two-Supporting row). The '2 Very Strong = Pathogenic' row is printed in no paper: it follows from Tavtigian 2020 (16 points, Pathogenic from 10) and all 58 ERepo expert-panel classifications with two Very Strong criteria are Pathogenic. It also closes a gap: 2 VS + 2 Strong benign used to show Likely pathogenic instead of withholding."
 
 [[signoff]]
 item = "vus_tiers"
@@ -170,7 +170,7 @@ kind = "ai"
 date = "2026-11-21"
 verdict = "matches source, reading noted"
 checked_against = "Ghosh 2018 (PMC6188666); Whiffin 2017 (PMC5563454, formula images); ClinGen PM2 v1.0 PDF; Richards 2015 Table 3"
-note = "BA1 wording and 2,000 alleles match Ghosh. Whiffin's printed dominant formula has no 1/2 but its worked example (4.0e-5) uses it; the example is followed. Recessive formula reproduces 2.42e-3. PM2 v1.0 gives no recessive frequency limit, so only a gene limit is used."
+note = "BA1 wording and 2,000 alleles match Ghosh. Whiffin's printed dominant formula has no 1/2 but its worked example (4.0e-5) uses it; the example is followed, and the BS1 finding names the formula with its 1/2. Recessive formula reproduces 2.42e-3. PM2 v1.0 gives no recessive frequency limit, so only a gene limit is used."
 
 [[signoff]]
 item = "ba1_exceptions"

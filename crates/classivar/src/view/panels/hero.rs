@@ -190,7 +190,7 @@ fn hero_empty(hero: Div, result: &Assessment, muted: Hsla) -> Div {
     )
 }
 
-/// How the 2015 combining table (with its ClinGen 2020 and Pejaver 2022 additions) compares with the points.
+/// How the 2015 combining table (with its later additions) compares with the points.
 pub(super) fn classic_comparison(result: &Assessment) -> String {
     match (result.classic_class, result.frameworks_agree()) {
         (Some(c), Some(true)) => format!("The 2015 table (with its later additions) also gives {}.", c.label()),

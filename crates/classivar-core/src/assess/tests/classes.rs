@@ -124,6 +124,21 @@ fn moderate_benign_with_a_confident_pathogenic_side_now_needs_expert_judgment() 
 }
 
 #[test]
+fn two_very_strong_criteria_meet_pathogenic_and_withhold_against_strong_benign_evidence() {
+    // Two Very Strong criteria are 16 points, Pathogenic from 10 (Tavtigian 2020). The 2015
+    // table had no row for them only because PVS1 was its one Very Strong criterion.
+    let a = apply(&[("PVS1", VeryStrong), ("PM3", VeryStrong)]);
+    assert_eq!(a.classic_class, Some(Class::Pathogenic));
+    assert_eq!(a.table_rows[0].added_by, Some("Tavtigian 2020 points"));
+    assert_eq!(a.frameworks_agree(), Some(true));
+    // Against two Strong benign criteria both sides are met. Before the row, the points
+    // (16 - 8 = 8) showed a confident Likely pathogenic here.
+    let b = apply(&[("PVS1", VeryStrong), ("PM3", VeryStrong), ("BS1", Strong), ("BS2", Strong)]);
+    assert!(b.both_sides_met);
+    assert_eq!(b.class(), None);
+}
+
+#[test]
 fn both_sides_met_gives_vus_in_the_classic_table() {
     let a = apply(&[("PS1", Strong), ("PS3", Strong), ("BS1", Strong), ("BS2", Strong)]);
     assert_eq!(a.classic_class, Some(Class::Vus));

@@ -148,13 +148,23 @@ impl RuleSet {
         let Some(filtering) = facts.filtering_frequency.filter(|f| (0.0..=1.0).contains(f)) else {
             return finding(None, "Type the filtering allele frequency (gnomAD FAF95): BS1 is judged on it, not on the observed frequency.".into());
         };
+        let basis = match (facts.gene_bs1, facts.inheritance) {
+            (Some(_), _) => "the gene's own limit",
+            (None, Some(Inheritance::AutosomalRecessive)) => {
+                "the maximum credible frequency, √prevalence × allelic share × √gene share ÷ √penetrance (Whiffin 2017)"
+            }
+            // The ½: a carrier has two copies of the gene, so a share of people becomes a share of copies.
+            (None, _) => {
+                "the maximum credible frequency, prevalence × ½ × allelic share ÷ penetrance (Whiffin 2017; ½ because each person has two copies)"
+            }
+        };
         if filtering >= limit {
             finding(
                 self.reading("BS1", Strength::Strong),
-                format!("Filtering frequency {filtering:.3e} is at or above {limit:.3e}."),
+                format!("Filtering frequency {filtering:.3e} is at or above {limit:.3e}, {basis}."),
             )
         } else {
-            finding(None, format!("Filtering frequency {filtering:.3e} is below {limit:.3e}."))
+            finding(None, format!("Filtering frequency {filtering:.3e} is below {limit:.3e}, {basis}."))
         }
     }
 

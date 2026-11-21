@@ -66,7 +66,10 @@ impl RuleSet {
                     t.pathogenic, t.likely_pathogenic, t.vus, t.likely_benign
                 ),
             ),
-            item("combining_table".into(), "Richards 2015 Table 5 with the ClinGen 2020 and Pejaver 2022 rows".into()),
+            item(
+                "combining_table".into(),
+                "Richards 2015 Table 5 with the Tavtigian 2020 points, ClinGen 2020 and Pejaver 2022 rows".into(),
+            ),
             item("vus_tiers".into(), self.vus_tiers.iter().map(|t| t.name.clone()).collect::<Vec<_>>().join(", ")),
         ];
         for c in &self.criteria {

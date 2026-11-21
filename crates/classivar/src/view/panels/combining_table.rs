@@ -1,5 +1,5 @@
 //! "What the 2015 table says": every row of the ACMG/AMP 2015 combining table
-//! (with the ClinGen 2020 and Pejaver 2022 additions), grouped by class, with the rows the evidence
+//! (with its three later additions), grouped by class, with the rows the evidence
 //! meets marked. It shows the second way to reach a class, next to the points.
 //!
 //! The sentence that says which rows are met is a plain function with tests;
@@ -406,6 +406,19 @@ mod tests {
             summary(&result),
             "Met: ≥1 Very strong + ≥1 Supporting (Likely pathogenic, ClinGen 2020 addition). The 2015 table gives Likely pathogenic."
         );
+    }
+
+    #[test]
+    fn two_very_strong_criteria_name_the_points_addition_not_vus() {
+        let rules = RuleSet::builtin().unwrap();
+        let situation = rules.criterion("PVS1").unwrap().situation_for(Strength::VeryStrong).unwrap().to_string();
+        let result = assessed(&[
+            Applied::guided("PVS1", Strength::VeryStrong, situation).with_gene_level("established"),
+            Applied::new("PM3", Strength::VeryStrong),
+        ]);
+        let sentence = summary(&result);
+        assert!(sentence.starts_with("Met: ≥2 Very strong (Pathogenic, Tavtigian 2020 points addition)"), "{sentence}");
+        assert!(sentence.ends_with("The 2015 table gives Pathogenic."), "{sentence}");
     }
 
     #[test]
