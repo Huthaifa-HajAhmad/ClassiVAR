@@ -25,7 +25,9 @@ impl Workbench {
         self.inspected = None;
         self.preview = false;
         self.editing = Editing::Record(index);
-        self.record_name_input.update(cx, |input, cx| input.set_value(name, window, cx));
+        let condition = record.condition.as_ref().map(|c| c.name.clone()).unwrap_or_default();
+        self.boxes.record_name.update(cx, |input, cx| input.set_value(name, window, cx));
+        self.variant.record_condition_input.update(cx, |input, cx| input.set_value(condition, window, cx));
     }
 
     pub(super) fn add_record(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -41,6 +43,8 @@ impl Workbench {
             class: None,
             tier: None,
             evidence: Evidence::new(),
+            condition: None,
+            source: None,
         });
         self.show_record(self.records.len() - 1, window, cx);
     }

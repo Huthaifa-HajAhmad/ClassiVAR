@@ -6,7 +6,7 @@ impl Workbench {
     /// Ask all four gene sources about the gene in the text box. A different gene
     /// from the one this case is about starts a new case, so the curator is asked first.
     pub(super) fn check_gene(&mut self, cx: &mut Context<Self>) {
-        let typed = self.gene_input.read(cx).value().to_string();
+        let typed = self.boxes.gene.read(cx).value().to_string();
         let symbol = typed.trim().to_ascii_uppercase();
         if !classivar_sources::is_gene_symbol(&symbol) {
             self.gene_error = Some(

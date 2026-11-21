@@ -47,6 +47,15 @@ impl Workbench {
             .items_center()
             .gap_2()
             .when(unsaved, |row| row.child(caption(muted).child("Changed since saved")))
+            .child(
+                Button::new("open-rules")
+                    .label("Rules…")
+                    .accessibility_label("Open a rule file in a new window")
+                    .tooltip("Try an expert panel's gene-specific rule file. It opens in a new window; this case is not changed.")
+                    .small()
+                    .ghost()
+                    .on_click(cx.listener(|this, _, window, cx| this.open_rules(window, cx))),
+            )
             .child(Button::new("open-case").label("Open").accessibility_label("Open case…").small().ghost().on_click(
                 cx.listener(|this, _, window, cx| {
                     this.open_case(window, cx);
@@ -120,11 +129,7 @@ impl Workbench {
             .border_b_1()
             .border_color(cx.theme().border)
             .child(crate::look::eyebrow("Case", cx))
-            .child(super::records::form_row(
-                "Variant",
-                div().w_full().child(Input::new(&self.variant_input).aria_label("Variant name")),
-                cx,
-            ))
+            .child(self.variant_rows(cx))
             .child(super::records::form_row(
                 "Gene",
                 div().w_full().flex().items_center().gap_2().child(self.gene_box(cx)).child(
@@ -138,9 +143,12 @@ impl Workbench {
             ))
             .children(self.gene_error.as_ref().map(|error| notice(error.clone(), warning_fill(), warning_ink())))
             .child(self.gene_decision_buttons(cx))
+            .child(self.condition_rows(cx))
             .when(lookups_started, |d| d.child(self.gene_summary(cx)))
             .when(lookups_started && self.gene_cards_open, |d| d.child(self.gene_cards(cx)))
-            .when(self.mode == Mode::ReportedVariant, |d| d.child(self.records_bar(cx)))
+            .when(self.mode == Mode::ReportedVariant, |d| {
+                d.children(self.clinvar_import_row(cx)).child(self.records_bar(cx))
+            })
             .into_any_element()
     }
 
@@ -175,14 +183,14 @@ impl Workbench {
     /// The gene box, with matching symbols in a floating list under it. A typing
     /// aid only: picking a symbol fills the box, and "Check gene" (or Enter) starts the lookups.
     fn gene_box(&self, cx: &mut Context<Self>) -> Div {
-        let typed = self.gene_input.read(cx).value();
+        let typed = self.boxes.gene.read(cx).value();
         let matches: Vec<String> = crate::genes::suggestions_for(&typed, 6).into_iter().map(String::from).collect();
         super::suggest::with_suggestions(
             "gene-suggestion",
-            Input::new(&self.gene_input).aria_label("Gene symbol"),
+            Input::new(&self.boxes.gene).aria_label("Gene symbol"),
             matches,
             "For typing only, not a check that the gene is right.",
-            &self.gene_input,
+            &self.boxes.gene,
             cx,
         )
     }

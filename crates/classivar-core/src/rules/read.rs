@@ -3,7 +3,7 @@
 
 use crate::model::Strength;
 
-use super::{DeNovoReading, EvidenceReading, LocusReading, Pm3Reading, RuleSet};
+use super::{AssayValidation, DeNovoReading, EvidenceReading, LocusReading, Pm3Reading, RuleSet};
 
 /// Points come in steps of 0.1 or more; rounding removes sums such as 2.9999999999999996.
 fn round_points(points: f64) -> f64 {
@@ -37,12 +37,15 @@ impl RuleSet {
     /// alone (no statistical analysis). `damaging` says whether the assay showed
     /// damage (PS3) or no damage (BS3). `None` when the rules have no functional table
     /// or the assay has too few controls to give any evidence.
-    pub fn read_functional_controls(&self, damaging: bool, controls: u32) -> Option<EvidenceReading> {
+    pub fn read_functional_controls(&self, damaging: bool, assay: AssayValidation) -> Option<EvidenceReading> {
         let rules = self.functional.as_ref()?;
-        if controls < rules.controls_supporting_min {
+        if !assay.experimental_controls {
             return None;
         }
-        let strength = if controls >= rules.controls_moderate_min { Strength::Moderate } else { Strength::Supporting };
+        let total = assay.pathogenic_controls.saturating_add(assay.benign_controls);
+        let mixed = assay.pathogenic_controls >= 1 && assay.benign_controls >= 1;
+        let strength =
+            if mixed && total >= rules.controls_moderate_min { Strength::Moderate } else { Strength::Supporting };
         self.reading(if damaging { "PS3" } else { "BS3" }, strength)
     }
 
@@ -182,7 +185,7 @@ impl RuleSet {
 
     /// A published strength for `code`, lowered to the highest this program offers
     /// for that criterion when the source goes higher.
-    fn reading(&self, code: &'static str, published: Strength) -> Option<EvidenceReading> {
+    pub(super) fn reading(&self, code: &'static str, published: Strength) -> Option<EvidenceReading> {
         let allowed = self.criterion(code)?.allowed_strengths();
         let strength = if allowed.contains(&published) { published } else { *allowed.last()? };
         Some(EvidenceReading { code, published, strength })

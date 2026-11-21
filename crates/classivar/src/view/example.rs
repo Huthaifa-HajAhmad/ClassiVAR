@@ -44,6 +44,8 @@ impl Workbench {
                 class: Some(*class),
                 tier: None,
                 evidence: evidence_of(list),
+                condition: None,
+                source: None,
             })
             .collect();
         self.today = evidence_of(EXAMPLE_TODAY);
@@ -61,19 +63,24 @@ impl Workbench {
         self.file_status = Some(Status::attention(
             "Fictional case. Explore the evidence and compare its two reports. Clear the example before saving a real case.",
         ));
-        // The example is fictional: it must not inherit the gene or variant that
-        // happened to be on screen, or the class would be attributed to them.
+        self.forget_names(window, cx);
+        self.guide_open = None;
+        self.confirm = None;
+        self.reset_helpers(window, cx);
+        self.reset_variant(window, cx);
+    }
+
+    /// The example is fictional: it must not inherit the gene or variant that
+    /// happened to be on screen, or the class would be attributed to them.
+    fn forget_names(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.case_gene.clear();
         self.gene_link = GeneDecision::NotDecided;
         self.gene_error = None;
         self.gene = GeneChecks::idle();
         self.lookup_id += 1;
         self._lookup_tasks.clear();
-        self.variant_input.update(cx, |input, cx| input.set_value("", window, cx));
-        self.gene_input.update(cx, |input, cx| input.set_value("", window, cx));
-        self.guide_open = None;
-        self.confirm = None;
-        self.reset_helpers(window, cx);
+        self.boxes.variant.update(cx, |input, cx| input.set_value("", window, cx));
+        self.boxes.gene.update(cx, |input, cx| input.set_value("", window, cx));
     }
 }
 

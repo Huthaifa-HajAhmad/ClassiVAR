@@ -40,8 +40,25 @@ pub(super) struct FunctionalState {
     pub(super) route: AssayRoute,
     /// For the controls route: did the assay show damage (PS3) or none (BS3)?
     pub(super) damaging: bool,
-    pub(super) controls_input: Entity<InputState>,
+    /// The curator confirmed normal and abnormal experimental controls and replicates.
+    pub(super) experimental: bool,
+    pub(super) pathogenic_input: Entity<InputState>,
+    pub(super) benign_input: Entity<InputState>,
     pub(super) oddspath_input: Entity<InputState>,
+}
+
+impl FunctionalState {
+    fn new(subscriptions: &mut Vec<Subscription>, window: &mut Window, cx: &mut Context<Workbench>) -> Self {
+        Self {
+            open: false,
+            route: AssayRoute::Controls,
+            damaging: true,
+            experimental: false,
+            pathogenic_input: new_box("e.g. 6", subscriptions, window, cx),
+            benign_input: new_box("e.g. 5", subscriptions, window, cx),
+            oddspath_input: new_box("OddsPath, e.g. 5.2", subscriptions, window, cx),
+        }
+    }
 }
 
 /// The co-segregation and phenotype helper (PP1 and PP4).
@@ -77,6 +94,24 @@ pub(super) struct DeNovoState {
     pub(super) inputs: Vec<[Entity<InputState>; 2]>,
 }
 
+/// The population frequency helper (BA1, BS1, PM2): the "absent" answer and
+/// one box for each number (see `POPULATION_BOXES`).
+pub(super) struct PopulationState {
+    pub(super) open: bool,
+    pub(super) absent: bool,
+    pub(super) inputs: Vec<Entity<InputState>>,
+}
+
+impl PopulationState {
+    fn new(subscriptions: &mut Vec<Subscription>, window: &mut Window, cx: &mut Context<Workbench>) -> Self {
+        let inputs = super::panels::POPULATION_BOXES
+            .iter()
+            .map(|(_, example)| new_box(example.to_string(), subscriptions, window, cx))
+            .collect();
+        Self { open: false, absent: false, inputs }
+    }
+}
+
 pub(super) struct Helpers {
     pub(super) predictor: PredictorState,
     pub(super) functional: FunctionalState,
@@ -85,6 +120,7 @@ pub(super) struct Helpers {
     pub(super) pm3: Pm3State,
     pub(super) ba1_open: bool,
     pub(super) de_novo: DeNovoState,
+    pub(super) population: PopulationState,
 }
 
 /// A text box that repaints the screen when it changes. Its subscription is kept in `subscriptions`.
@@ -113,18 +149,13 @@ impl Helpers {
         window: &mut Window,
         cx: &mut Context<Workbench>,
     ) -> Self {
+        let population = PopulationState::new(subscriptions, window, cx);
+        let functional = FunctionalState::new(subscriptions, window, cx);
         let mut boxed = |placeholder: &str, window: &mut Window, cx: &mut Context<Workbench>| {
             new_box(placeholder.to_string(), subscriptions, window, cx)
         };
         let predictor =
             PredictorState { open: false, tool: 0, eligible: false, input: boxed("Score, e.g. 0.85", window, cx) };
-        let functional = FunctionalState {
-            open: false,
-            route: AssayRoute::Controls,
-            damaging: true,
-            controls_input: boxed("Controls, e.g. 11", window, cx),
-            oddspath_input: boxed("OddsPath, e.g. 5.2", window, cx),
-        };
         let locus = LocusState {
             open: false,
             kind: 0,
@@ -153,6 +184,7 @@ impl Helpers {
             pm3: Pm3State { open: false, eligible: false, inputs: pm3_inputs },
             ba1_open: false,
             de_novo: DeNovoState { open: false, recessive: false, inputs: de_novo_inputs },
+            population,
         }
     }
 
@@ -160,7 +192,8 @@ impl Helpers {
     pub(super) fn text_boxes(&self) -> impl Iterator<Item = &Entity<InputState>> {
         [
             &self.predictor.input,
-            &self.functional.controls_input,
+            &self.functional.pathogenic_input,
+            &self.functional.benign_input,
             &self.functional.oddspath_input,
             &self.locus.yield_input,
             &self.locus.segregations_input,
@@ -169,6 +202,7 @@ impl Helpers {
         .into_iter()
         .chain(&self.pm3.inputs)
         .chain(self.de_novo.inputs.iter().flatten())
+        .chain(&self.population.inputs)
     }
 
     /// Close every helper and forget what was typed. A helper belongs to the variant on screen.
@@ -179,6 +213,7 @@ impl Helpers {
         self.functional.open = false;
         self.functional.route = AssayRoute::Controls;
         self.functional.damaging = true;
+        self.functional.experimental = false;
         self.locus.open = false;
         self.locus.kind = 0;
         self.locus.genes = PhenotypeGenes::Unanswered;
@@ -188,6 +223,8 @@ impl Helpers {
         self.ba1_open = false;
         self.de_novo.open = false;
         self.de_novo.recessive = false;
+        self.population.open = false;
+        self.population.absent = false;
         for input in self.text_boxes() {
             clear_box(input, window, cx);
         }

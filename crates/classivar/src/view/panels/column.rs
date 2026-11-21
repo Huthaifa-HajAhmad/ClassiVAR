@@ -65,7 +65,7 @@ impl Workbench {
         cx: &mut Context<Self>,
     ) -> Div {
         let earlier = self.earlier_totals();
-        let stage = self.stage_width.get();
+        let stage = self.stage.width.get();
         let column = self.column(result, class, &earlier, tip_left(earlier.len(), stage), cx);
         match arrange(stage, earlier.len()) {
             Arrangement::Beside => {

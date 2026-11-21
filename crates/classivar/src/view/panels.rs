@@ -24,6 +24,8 @@ mod frame;
 mod gene_cards;
 mod helper_bar;
 mod helpers;
+
+pub(super) use helpers::POPULATION_BOXES;
 mod hero;
 mod history;
 mod insights;
@@ -43,6 +45,7 @@ mod suggest;
 mod timeline;
 mod top;
 mod track;
+mod variant_card;
 mod verdict;
 mod welcome;
 mod welcome_more;
@@ -50,12 +53,17 @@ mod what_if;
 
 impl Workbench {
     /// Today's evidence, scored. An earlier record is scored the way it was made, as in the history table.
-    fn score_on_screen(&self) -> Result<Assessment, classivar_core::AssessError> {
+    pub(super) fn score_on_screen(&self) -> Result<Assessment, classivar_core::AssessError> {
         let counting = match self.editing {
             Editing::Today => classivar_core::Counting::Current,
             Editing::Record(_) => classivar_core::Counting::AsRecorded,
         };
-        self.rules.assess_as(&to_applied(self.current()), counting)
+        let result = self.rules.assess_as(&to_applied(self.current()), counting)?;
+        // A gene of uncertain significance limits today's class (Richards 2015), not a lab's record.
+        Ok(match (self.editing, self.gene_link) {
+            (Editing::Today, GeneDecision::NotEstablished) => result.in_gene_of_uncertain_significance(),
+            _ => result,
+        })
     }
 
     /// The records that still lack a class (they are named in the verdict), and the
@@ -76,11 +84,12 @@ impl Workbench {
                     reported_class: r.class?,
                     reported_tier: r.tier.clone(),
                     rule_set: None,
+                    condition: Condition::compare(self.variant.condition.as_ref(), r.condition.as_ref()),
                     criteria: to_applied(&r.evidence),
                 })
             })
             .collect();
-        let comparison = self.rules.reevaluate(&submissions, &to_applied(&self.today));
+        let comparison = self.rules.reevaluate_in(&submissions, &to_applied(&self.today), self.gene_link);
         (incomplete, Some(comparison))
     }
 }
@@ -131,10 +140,10 @@ impl Workbench {
     /// Tab has nowhere to start from (a fresh window, or one whose question just
     /// closed), so the page holds it until a control does.
     fn settle_focus(&self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.confirm.is_some() && !self.confirm_focus.contains_focused(window, cx) {
-            window.focus(&self.confirm_focus, cx);
+        if self.confirm.is_some() && !self.handles.confirm_focus.contains_focused(window, cx) {
+            window.focus(&self.handles.confirm_focus, cx);
         } else if self.confirm.is_none() && window.focused(cx).is_none() {
-            window.focus(&self.page_focus, cx);
+            window.focus(&self.handles.page_focus, cx);
         }
     }
 
@@ -143,10 +152,10 @@ impl Workbench {
     fn measure_stage(&self, window: &Window) -> (bool, f32) {
         let (width, height) = (f32::from(window.viewport_size().width), f32::from(window.viewport_size().height));
         let (rail, sheet) = (width >= rail::RAIL_FROM, if self.reading { 0. } else { sheet_width(width) });
-        self.rail_shown.set(rail);
-        self.stage_width.set(stage_width(width, rail, sheet));
+        self.stage.rail_shown.set(rail);
+        self.stage.width.set(stage_width(width, rail, sheet));
         // The top bar, the banner, the stage toolbar and the class readout under the dial take about 330 px.
-        self.stage_height.set(height - 330.);
+        self.stage.height.set(height - 330.);
         (rail, sheet)
     }
 
@@ -180,7 +189,7 @@ impl Render for Workbench {
             .size_full()
             .flex()
             .flex_col()
-            .track_focus(&self.page_focus)
+            .track_focus(&self.handles.page_focus)
             .child(frame)
             .child(div().flex_1().min_h_0().child(self.workspace(window, cx)))
     }

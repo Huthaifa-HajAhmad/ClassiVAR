@@ -2,23 +2,15 @@
 //! themselves live in `combining_table`.
 
 use crate::combining_table::{self, TableRow};
-use crate::model::{Class, Direction, Strength};
-
-use super::Item;
+use crate::model::Class;
 
 /// What the 2015 table (see `combining_table`) gives for the evidence, given the
-/// rows it meets. None when the table has no row for a strength in use.
-pub(super) fn classic_class(items: &[Item], met: &[&TableRow]) -> Option<Class> {
-    // The 2015 table has no moderate or very strong benign rows.
-    let uncovered = items.iter().any(|i| {
-        i.counted && i.direction == Direction::Benign && matches!(i.strength, Strength::Moderate | Strength::VeryStrong)
-    });
-    if uncovered {
-        return None;
-    }
+/// rows it meets. Every strength a criterion can hold has a row (the loader
+/// refuses Very Strong benign), so the table always gives a class.
+pub(super) fn classic_class(met: &[&TableRow]) -> Class {
     // If both sides are met, the 2015 guidance says VUS.
-    Some(match combining_table::sides(met) {
+    match combining_table::sides(met) {
         (Some(_), Some(_)) | (None, None) => Class::Vus,
         (Some(class), None) | (None, Some(class)) => class,
-    })
+    }
 }

@@ -28,8 +28,11 @@ fn check_applied(a: &Applied, c: &Criterion, counting: Counting) -> Result<(), A
         let Some(situation) = &a.situation else {
             return Err(AssessError::GuideAnswerRequired { code: a.code.clone() });
         };
-        let matches = c.guide.iter().find(|g| g.id == *situation).is_some_and(|g| g.strength == Some(a.strength));
-        if !matches {
+        // With a gene-level question, the guide's strength is lowered by its answer.
+        if !c.gene_level.is_empty() && a.gene_level.is_none() {
+            return Err(AssessError::GeneLevelRequired { code: a.code.clone() });
+        }
+        if c.strength_for(situation, a.gene_level.as_deref()) != Some(a.strength) {
             return Err(AssessError::GuideMismatch { code: a.code.clone(), situation: situation.clone() });
         }
     }

@@ -20,7 +20,39 @@ fn a_guided_criterion_needs_a_guide_answer() {
     let pvs1 = rules().criterion("PVS1").unwrap();
     let start_loss =
         pvs1.guide.iter().find(|g| g.situation.starts_with("Start-loss") && g.strength == Some(Supporting)).unwrap();
-    assert!(rules().assess(&[Applied::guided("PVS1", Supporting, start_loss.id.clone())]).is_ok());
+    let guided = Applied::guided("PVS1", Supporting, start_loss.id.clone());
+    assert_eq!(
+        rules().assess(std::slice::from_ref(&guided)),
+        Err(AssessError::GeneLevelRequired { code: "PVS1".into() })
+    );
+    assert!(rules().assess(&[guided.with_gene_level("established")]).is_ok());
+}
+
+#[test]
+fn the_gene_level_answer_lowers_the_guides_strength_and_nothing_else_is_accepted() {
+    // Abou Tayoun 2018, Table 1: NMD predicted (Very Strong) in a gene that meets only
+    // the "lower one level" row is Strong; "lower two levels" is Moderate.
+    let nmd =
+        |strength, level: &str| rules().assess(&[Applied::guided("PVS1", strength, "nmd").with_gene_level(level)]);
+    assert!(nmd(VeryStrong, "established").is_ok());
+    assert!(nmd(Strong, "lower_one").is_ok());
+    assert!(nmd(Moderate, "lower_two").is_ok());
+    assert!(
+        matches!(nmd(VeryStrong, "lower_one"), Err(AssessError::GuideMismatch { .. })),
+        "the step cannot be skipped"
+    );
+    // No loss-of-function mechanism: PVS1 does not apply at any strength.
+    for strength in [VeryStrong, Strong, Moderate, Supporting] {
+        assert!(nmd(strength, "no_lof_mechanism").is_err(), "{strength:?}");
+    }
+    // A step below Supporting is no PVS1 (start-loss Supporting, lowered one level).
+    let start =
+        |level: &str| rules().assess(&[Applied::guided("PVS1", Supporting, "start_loss_none").with_gene_level(level)]);
+    assert!(start("lower_one").is_err());
+    assert!(matches!(nmd(VeryStrong, "made_up"), Err(AssessError::GuideMismatch { .. })));
+    // An earlier record is read as it was made, with or without the answer.
+    let old = [Applied::guided("PVS1", VeryStrong, "nmd")];
+    assert!(rules().assess_as(&old, crate::assess::Counting::AsRecorded).is_ok());
 }
 
 #[test]
@@ -95,10 +127,10 @@ fn weak_evidence_cannot_be_raised_to_a_confident_class() {
 
 #[test]
 fn contradicting_criteria_withhold_the_class() {
-    // PS1 + PM5 would add to 6 points (Likely pathogenic) although PS1 alone is only 4.
-    let a = apply(&[("PS1", Strong), ("PM5", Moderate)]);
+    // PS3 + BS3: functional studies cannot both show damage and no damage.
+    let a = apply(&[("PS3", Strong), ("BS3", Strong)]);
     assert_eq!(a.conflicts.len(), 1);
-    assert_eq!((a.conflicts[0].a.as_str(), a.conflicts[0].b.as_str()), ("PS1", "PM5"));
+    assert_eq!((a.conflicts[0].a.as_str(), a.conflicts[0].b.as_str()), ("PS3", "BS3"));
     assert_eq!(a.class(), None);
 
     // BA1 + PM2 must not be turned into "Likely benign" by adding the points.
@@ -109,12 +141,34 @@ fn contradicting_criteria_withhold_the_class() {
     assert_eq!(apply(&[("PP3", Supporting), ("BP4", Supporting)]).class(), None);
 
     // Removing one of the pair gives the class back.
-    assert_eq!(apply(&[("PS1", Strong)]).class(), Some(Class::Vus));
+    assert_eq!(apply(&[("PS3", Strong)]).class(), Some(Class::Vus));
+}
+
+#[test]
+fn ps1_and_pm5_together_are_a_caution_not_a_contradiction() {
+    // Expert panels apply both (18 ClinGen ERepo classifications from 8 panels,
+    // 2026-11-21), usually at reduced strengths, so the class is shown and the
+    // curator is warned that one residue may be counted twice.
+    let a = apply(&[("PS1", Strong), ("PM5", Moderate)]);
+    assert!(a.conflicts.is_empty());
+    assert_eq!(a.class(), Some(Class::LikelyPathogenic));
+    assert!(a.warnings.iter().any(|w| matches!(w, Warning::DoubleCounted { a, b, .. } if a == "PS1" && b == "PM5")));
+}
+
+#[test]
+fn ba1_against_pathogenic_points_that_reach_likely_pathogenic_is_withheld() {
+    // Two Very Strong criteria meet no 2015 row, so the table alone missed this:
+    // a common variant with PVS1 and PM3 at Very Strong was shown as Benign.
+    let a = apply(&[("BA1", StandAlone), ("PVS1", VeryStrong), ("PM3", VeryStrong)]);
+    assert!(a.both_sides_met);
+    assert_eq!(a.class(), None, "needs expert judgment (the BA1 exception list exists for this)");
+    // Below Likely pathogenic by points and meeting no row, BA1 still stands.
+    assert_eq!(apply(&[("BA1", StandAlone), ("PM5", Moderate), ("PP3", Supporting)]).class(), Some(Class::Benign));
 }
 
 #[test]
 fn contradictory_evidence_gets_no_class_from_the_2015_table_either() {
-    let a = apply(&[("PS1", Strong), ("PM5", Moderate)]);
+    let a = apply(&[("PS3", Strong), ("BS3", Strong)]);
     assert_eq!(a.classic_class, None);
     assert_eq!(a.frameworks_agree(), None);
 }
@@ -140,7 +194,7 @@ fn a_guide_answer_is_not_reported_as_a_manual_strength_change() {
     // like the curator raised or lowered the criterion by hand.
     let pvs1 = rules().criterion("PVS1").unwrap();
     let situation = pvs1.situation_for(Supporting).unwrap().to_string();
-    let a = rules().assess(&[Applied::guided("PVS1", Supporting, situation)]).unwrap();
+    let a = rules().assess(&[Applied::guided("PVS1", Supporting, situation).with_gene_level("established")]).unwrap();
     assert!(a.warnings.iter().all(|w| !matches!(w, Warning::StrengthChanged { .. })), "{a:?}");
     assert_eq!(a.total_points, 1);
 }
@@ -234,4 +288,17 @@ fn vus_tiers_are_named_only_when_every_tier_has_a_range() {
     assert_eq!(r.vus_tier_for(5).as_deref(), Some("VUS-high"));
     assert_eq!(r.vus_tier_for(2).as_deref(), Some("VUS-mid"));
     assert_eq!(r.vus_tier_for(0).as_deref(), Some("VUS-low"));
+}
+
+#[test]
+fn pvs1_and_ps3_together_are_flagged_with_the_splicing_assay_caution() {
+    // Brnich 2019: the combined strength of PVS1 and PS3 "needs additional data";
+    // Walker 2023: PS3 is for assays not directly captured by an RNA splicing assay.
+    let a = apply(&[("PVS1", VeryStrong), ("PS3", Strong)]);
+    let warning = a.warnings.iter().find_map(|w| match w {
+        Warning::DoubleCounted { a, b, reason } if a == "PVS1" && b == "PS3" => Some(reason.clone()),
+        _ => None,
+    });
+    assert!(warning.is_some_and(|r| r.contains("RNA splicing assay")), "{:?}", a.warnings);
+    assert!(a.class().is_some(), "a caution, not a withheld class");
 }

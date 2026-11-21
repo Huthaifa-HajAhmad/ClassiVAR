@@ -58,6 +58,7 @@ impl RuleSet {
         self.check_de_novo(&known)?;
         self.check_pm3(&known)?;
         self.check_ba1(&known)?;
+        self.check_population(&known)?;
         for tier in &self.vus_tiers {
             needs_source(&known, tier.name.as_str(), &tier.source)?;
         }
@@ -143,7 +144,16 @@ impl RuleSet {
         {
             return Err(RuleError::MaxStrengthNotRecorded { code: c.code.clone() });
         }
+        // Listed levels must be strengths a record can hold, in the order the
+        // menus show them (weakest first, no repeats).
+        let recorded = c.recorded_strengths();
+        let at = |s: &Strength| recorded.iter().position(|r| r == s);
+        let ordered = c.levels.windows(2).all(|w| matches!((at(&w[0]), at(&w[1])), (Some(a), Some(b)) if a < b));
+        if !c.levels.is_empty() && (!ordered || c.levels.iter().any(|s| at(s).is_none())) {
+            return Err(RuleError::BadLevels { code: c.code.clone() });
+        }
         check_guide(c, known)?;
+        check_gene_level(c, known)?;
         if let Some(original) = c.original_strength
             && (original == c.strength || !c.recorded_strengths().contains(&original))
         {
@@ -197,6 +207,32 @@ impl RuleSet {
 /// A strength guide needs a source, answers the criterion allows, distinct and
 /// filled-in situations, and at least one answer that applies. The criteria the
 /// helpers fill in from tables cannot answer a guide, so they may not carry one.
+/// A gene-level question lowers a guide's answer, so it needs a guide, its own
+/// source, distinct non-empty answers, at least one that keeps the guide's
+/// strength, and steps of at most 3 (Very Strong to Supporting).
+fn check_gene_level(c: &Criterion, known: &HashSet<&str>) -> Result<(), RuleError> {
+    if c.gene_level.is_empty() {
+        return match c.gene_level_source {
+            Some(_) => Err(RuleError::BadGeneLevel(c.code.clone())),
+            None => Ok(()),
+        };
+    }
+    let mut ids = HashSet::new();
+    let shaped = c.gene_level.iter().all(|g| {
+        !g.id.trim().is_empty()
+            && !g.short.trim().is_empty()
+            && !g.situation.trim().is_empty()
+            && ids.insert(g.id.as_str())
+    });
+    let source_ok = c.gene_level_source.as_deref().is_some_and(|id| known.contains(id));
+    let steps_ok = c.gene_level.iter().all(|g| g.steps.is_none_or(|n| n <= 3));
+    let keeps = c.gene_level.iter().any(|g| g.steps == Some(0));
+    if c.guide.is_empty() || !shaped || !source_ok || !steps_ok || !keeps {
+        return Err(RuleError::BadGeneLevel(c.code.clone()));
+    }
+    Ok(())
+}
+
 fn check_guide(c: &Criterion, known: &HashSet<&str>) -> Result<(), RuleError> {
     if c.guide.is_empty() {
         return match c.guide_source {

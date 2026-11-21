@@ -13,6 +13,7 @@ fn saved_evidence(list: &[Applied]) -> Evidence {
                 Choice {
                     strength: a.strength,
                     situation: a.situation.clone(),
+                    gene_level: a.gene_level.clone(),
                     reason: a.reason.clone().map(bounded_reason),
                 },
             )
@@ -29,6 +30,8 @@ impl Workbench {
             year: r.year,
             class: r.class,
             reported_tier: r.tier.clone(),
+            condition: r.condition.clone(),
+            source: r.source.clone(),
             criteria: to_applied(&r.evidence),
         };
         CaseFile {
@@ -42,6 +45,8 @@ impl Workbench {
             gene_decision: self.gene_link,
             today: to_applied(&self.today),
             records: self.records.iter().map(saved_record).collect(),
+            identity: self.variant.identity.clone(),
+            condition: self.variant.condition.clone(),
         }
     }
 
@@ -57,6 +62,11 @@ impl Workbench {
             return;
         }
         let case = self.case_file(cx);
+        // Never write a file the app would refuse to open again.
+        if let Err(error) = case.check(self.rules) {
+            self.set_file_status(Status::attention(format!("Not saved: {error}.")), cx);
+            return;
+        }
         let saved = case.clone();
         let folder = default_save_folder();
         let chosen = cx.prompt_for_new_path(&folder, Some(&suggested_file_name(&case.variant)));
@@ -153,6 +163,8 @@ impl Workbench {
                 class: r.class,
                 tier: r.reported_tier.clone(),
                 evidence: saved_evidence(&r.criteria),
+                condition: r.condition.clone(),
+                source: r.source.clone(),
             })
             .collect();
         self.editing = Editing::Today;
@@ -170,9 +182,10 @@ impl Workbench {
         self.gene = GeneChecks::idle();
         self.lookup_id += 1;
         self._lookup_tasks.clear();
-        self.variant_input.update(cx, |input, cx| input.set_value(case.variant.clone(), window, cx));
-        self.gene_input.update(cx, |input, cx| input.set_value(case.gene.clone(), window, cx));
+        self.boxes.variant.update(cx, |input, cx| input.set_value(case.variant.clone(), window, cx));
+        self.boxes.gene.update(cx, |input, cx| input.set_value(case.gene.clone(), window, cx));
         self.reset_helpers(window, cx);
+        self.restore_variant(&case, window, cx);
 
         // What is on screen now is the baseline: the file holds the case before it was adjusted.
         let shown = self.case_file(cx);
@@ -240,8 +253,9 @@ impl Workbench {
         self.confirm = None;
         self.open_details.clear();
         self.next_record = 1;
-        self.variant_input.update(cx, |input, cx| input.set_value("", window, cx));
+        self.boxes.variant.update(cx, |input, cx| input.set_value("", window, cx));
         self.reset_helpers(window, cx);
+        self.reset_variant(window, cx);
     }
 }
 
@@ -284,6 +298,8 @@ mod tests {
             gene_decision: GeneDecision::NotDecided,
             today: vec![],
             records: vec![],
+            identity: None,
+            condition: None,
         }
     }
 

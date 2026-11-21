@@ -92,12 +92,12 @@ fn count_patients(table: &DeNovoRules, typed: &[TypedPair]) -> (Vec<(u32, u32)>,
     (counts, parts, unusable)
 }
 /// The sentence for a total that reaches a level: the strength for PS2 or PM6, and the two
-/// ways this program may differ from the table (the recessive rule, and the PM6 limit).
+/// ways the result may differ from the table (the recessive rule, and a PM6 limit in a gene-specific rule file).
 fn total_message(reading: &DeNovoReading, evidence: &EvidenceReading) -> String {
     let lowered = if reading.lowered_for_recessive { " Lowered one level for the recessive condition." } else { "" };
     let pm6_note = match &reading.pm6 {
         Some(pm6) if pm6.strength != evidence.strength => {
-            format!(" This program stops PM6 at {}; use PS2 for {}.", pm6.strength.label(), evidence.strength.label())
+            format!(" These rules stop PM6 at {}; use PS2 for {}.", pm6.strength.label(), evidence.strength.label())
         }
         _ => String::new(),
     };
@@ -255,14 +255,14 @@ mod tests {
     }
 
     #[test]
-    fn pm6_is_said_to_stop_below_a_very_strong_total() {
-        // Four points reach Very strong for PS2; this program stops PM6 at Strong.
+    fn a_very_strong_total_is_offered_at_very_strong_for_both_codes() {
+        // Four points reach Very strong; SVI Table 2 lists PS2_VeryStrong or PM6_VeryStrong.
         let result = outcome([Some(Ok(4)), None], false);
         let ps2 = &result.apply[0].1;
         let pm6 = &result.apply[1].1;
         assert_eq!(ps2.strength, Strength::VeryStrong);
-        assert_eq!(pm6.strength, Strength::Strong);
-        assert!(result.message.contains("This program stops PM6 at Strong; use PS2 for Very strong."));
+        assert_eq!(pm6.strength, Strength::VeryStrong);
+        assert!(!result.message.contains("stop PM6"), "{}", result.message);
     }
 
     #[test]

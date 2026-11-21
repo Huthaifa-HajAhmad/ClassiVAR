@@ -157,6 +157,8 @@ fn pm3_calculation_reason_survives_case_reopening() {
         gene_decision: GeneDecision::NotDecided,
         today: vec![item],
         records: vec![],
+        identity: None,
+        condition: None,
     };
     let reopened = CaseFile::from_json(&case.to_json(), rules).unwrap();
     assert_eq!(reopened.today, case.today);

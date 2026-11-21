@@ -27,8 +27,9 @@ impl RuleSet {
         {
             return bad("PS3 must be a counted pathogenic criterion and BS3 a counted benign one");
         }
-        if rules.controls_supporting_min == 0 || rules.controls_supporting_min >= rules.controls_moderate_min {
-            return bad("controls_supporting_min must be at least 1 and below controls_moderate_min");
+        // Moderate needs a mix, so at least one pathogenic and one benign control.
+        if rules.controls_moderate_min < 2 {
+            return bad("controls_moderate_min must be at least 2 (one pathogenic and one benign control)");
         }
         for (limits, rising) in [(&rules.pathogenic, true), (&rules.benign, false)] {
             if let Err(problem) = check_strength_ladder(limits) {

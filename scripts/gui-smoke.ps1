@@ -335,13 +335,24 @@ try {
     $value = (Gene-Box).GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value
     if ($value -ne "BRCA1") { throw "the suggestion did not fill the gene box (got '$value')" }
 
-    # PVS1 now asks which situation fits instead of applying Very strong.
-    Click-Button-Like "PVS1:*not applied*"
-    if (@(Names | Where-Object { $_ -like "PVS1 Very strong:*" }).Count -eq 0) {
-        # A double click toggles the guide closed; retry once so a stray repeat
-        # from the automation does not fail the run.
+    # PVS1 asks the gene-level question (Abou Tayoun 2018, Table 1) first, then which situation fits.
+    # Open the PVS1 guide. After the guide closes, the list keeps its scroll and the
+    # PVS1 row can sit above the visible part, where a click does nothing; scroll to
+    # it first. A double click toggles the guide closed again; retry once so a stray
+    # repeat from the automation does not fail the run.
+    function Open-Pvs1-Guide {
+        Scroll-To-Button "PVS1:*not applied*"
         Click-Button-Like "PVS1:*not applied*"
+        Start-Sleep -Milliseconds 300
+        if (@(Names | Where-Object { $_ -like "PVS1 gene level:*" }).Count -eq 0) {
+            Click-Button-Like "PVS1:*not applied*"
+        }
     }
+    Open-Pvs1-Guide
+    if (@(Names | Where-Object { $_ -like "PVS1 Very strong:*" }).Count -ne 0) {
+        throw "the PVS1 situations showed before the gene-level question was answered"
+    }
+    Click-Button "PVS1 gene level: LoF mechanism established"
     $guide = Capture "04-pvs1-guide"
     Find-Button-Like "PVS1 does not apply:*" | Out-Null
     Find-Button-Like "PVS1 Very strong:*" | Out-Null
@@ -353,7 +364,8 @@ try {
     if (@(Names | Where-Object { $_ -like "PVS1:*applied*" -and $_ -notlike "*not applied*" }).Count -ne 0) {
         throw "Escape applied PVS1 instead of just closing the guide"
     }
-    Click-Button-Like "PVS1:*not applied*"
+    Open-Pvs1-Guide
+    Click-Button-Like "PVS1 gene level: LoF mechanism established"
     Find-Button-Like "PVS1 Very strong:*" | Out-Null
     # The first option is visible without scrolling; later ones may be below the fold.
     Click-Button-Like "PVS1 Very strong:*"
@@ -414,8 +426,11 @@ try {
     Click-Button "Close the predictor score helper"
 
     # The functional helper: controls route, then the OddsPath route.
+    Scroll-To-Button "Open the functional evidence helper"
     Click-Button "Open the functional evidence helper"
-    Set-BoxText "Validation control count" "12"
+    Click-Button "Confirm the assay has normal and abnormal experimental controls and replicates"
+    Set-BoxText "Pathogenic validation control count" "6"
+    Set-BoxText "Benign validation control count" "6"
     Click-Button-Like "Apply PS3 Moderate*"
     Find-Button-Like "PS3:*applied*" | Out-Null
     Scroll-To-Button "OddsPath value"
@@ -436,6 +451,7 @@ try {
     $countBox = "Informative family member count"
     $variantsBox = "Variants sharing the allele"
     $anyApply = { @(Names | Where-Object { $_ -like "Apply PP1*" -or $_ -like "Apply PP4*" }).Count -ne 0 }
+    Scroll-To-Button "Open the co-segregation and phenotype helper"
     Click-Button "Open the co-segregation and phenotype helper"
     Set-BoxText $yieldBox "60"
     Set-BoxText $countBox "3"
@@ -498,8 +514,8 @@ try {
     Click-Button "Open the de novo helper"
     Set-BoxText $patientsBox "2"
     Find-Button-Like "Apply PS2 Very*" | Out-Null
-    # The same total can be applied as PM6, which this program stops at Strong.
-    Find-Button-Like "Apply PM6 Strong*" | Out-Null
+    # The same total can be applied as PM6, which may also reach Very Strong (SVI Table 2).
+    Find-Button-Like "Apply PM6 Very*" | Out-Null
     Scroll-To-Button "Recessive condition, no second variant found"
     $deNovo = Capture "05g-de-novo"
     Click-Button "Recessive condition, no second variant found"
@@ -567,34 +583,35 @@ try {
     Click-Button "Close the BA1 exceptions reference"
     Scroll-List-To-Top
 
-    # Raising a strength above its default asks for a reason first.
+    # Raising a strength above its default asks for a reason first. PM2 (default
+    # Supporting, limit Moderate) is one of the few criteria with room above its default.
     # The helper panels above push these rows down, so each click scrolls to its button first.
-    Scroll-To-Button "PM1:*not applied*"
-    Click-Button-Like "PM1:*not applied*"
-    Choose-Strength "PM1" "Strong"
+    Scroll-To-Button "PM2:*not applied*"
+    Click-Button-Like "PM2:*not applied*"
+    Choose-Strength "PM2" "Moderate"
     $raise = Capture "05d-raise-reason"
-    Set-BoxText "Reason for raising the strength" "Hot spot in a well-studied domain"
-    Scroll-To-Button "Save the reason and raise PM1*"
-    Click-Button-Like "Save the reason and raise PM1*"
-    Find-Button-Like "PM1 strength: Strong*" | Out-Null
+    Set-BoxText "Reason for raising the strength" "Absent in a well-covered, ancestry-matched dataset"
+    Scroll-To-Button "Save the reason and raise PM2*"
+    Click-Button-Like "Save the reason and raise PM2*"
+    Find-Button-Like "PM2 strength: Moderate*" | Out-Null
     # Back to the default needs no reason; raising again asks. Escape then leaves the strength unchanged.
-    Choose-Strength "PM1" "Moderate"
-    Find-Button-Like "PM1 strength: Moderate*" | Out-Null
-    Choose-Strength "PM1" "Strong"
-    Find-Button-Like "Save the reason and raise PM1*" | Out-Null
+    Choose-Strength "PM2" "Supporting"
+    Find-Button-Like "PM2 strength: Supporting*" | Out-Null
+    Choose-Strength "PM2" "Moderate"
+    Find-Button-Like "Save the reason and raise PM2*" | Out-Null
     Press-Escape
-    Find-Button-Like "PM1 strength: Moderate*" | Out-Null
+    Find-Button-Like "PM2 strength: Supporting*" | Out-Null
     if (@(Names | Where-Object { $_ -like "Save the reason and raise*" }).Count -ne 0) {
         throw "Escape did not close the reason prompt"
     }
     # Clicking the criterion code removes it, and its open reason prompt goes with it.
-    Choose-Strength "PM1" "Strong"
-    Find-Button-Like "Save the reason and raise PM1*" | Out-Null
-    Scroll-To-Button "PM1:*applied*"
-    Click-Button-Like "PM1:*applied*"
-    Find-Button-Like "PM1:*not applied*" | Out-Null
+    Choose-Strength "PM2" "Moderate"
+    Find-Button-Like "Save the reason and raise PM2*" | Out-Null
+    Scroll-To-Button "PM2:*applied*"
+    Click-Button-Like "PM2:*applied*"
+    Find-Button-Like "PM2:*not applied*" | Out-Null
     if (@(Names | Where-Object { $_ -like "Save the reason and raise*" }).Count -ne 0) {
-        throw "removing PM1 left its reason prompt open"
+        throw "removing PM2 left its reason prompt open"
     }
 
     # A criterion is applied by clicking its name as well as its code. The code
@@ -733,6 +750,8 @@ try {
     # old "same gene, different gene" guard cannot notice a first gene check:
     # checking a gene on the example asks first. Escape leaves it intact.
     Set-GeneText "brca2"
+    # The editor sheet may be scrolled down here, with the gene box above the view.
+    Scroll-To-Button "Check gene"
     Click-Button "Check gene"
     if (@(Names | Where-Object { $_ -eq "Yes, continue" }).Count -ne 1) {
         throw "checking a gene on the fictional example did not ask first"

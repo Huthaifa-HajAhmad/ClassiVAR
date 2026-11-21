@@ -16,6 +16,10 @@ Status on 2026-11-04 is in `docs/ROADMAP.md` and in `docs/AUDIT-2026-11-04.md` s
 6. **Practice shelf** with a small set of solved cases.
 7. **Windows and macOS builds.**
 
+## Not covered: other frameworks
+
+ClassiVAR scores germline sequence variants with the ACMG/AMP 2015 criteria and their ClinGen refinements. It is not built for copy-number variants (Riggs 2020, ACMG/ClinGen CNV points), mitochondrial DNA variants (McCormick 2020), somatic or cancer variants (AMP/ASCO/CAP 2017; ClinGen/CGC/VICC 2022 oncogenicity), or low-penetrance and risk alleles. The welcome screen says so; the PVS1 "whole-gene deletion" answer points to the CNV framework.
+
 ## Out of scope for the MVP
 
 Population and prediction fetching, gene-specific rule overlays, the saved re-check list, slide and PDF export, shared cases, web build, VUS tier numbers, accounts.

@@ -118,7 +118,7 @@ impl Workbench {
             .on_click(cx.listener(move |this, _, _, cx| this.choose_picture(picture, cx)))
     }
 
-    /// What the app does and what it does not, in three short statements.
+    /// What the app does and what it does not, in four short statements.
     pub(super) fn promises(&self, cx: &App) -> Div {
         let muted = cx.theme().muted_foreground;
         let statement = |label: &'static str, title: &'static str, body: &'static str| {
@@ -153,6 +153,11 @@ impl Workbench {
                 "Not for clinical reports",
                 "Research and learning only",
                 "The rules stay UNVERIFIED until a qualified curator reviews them, and every class says so.",
+            ))
+            .child(statement(
+                "Scope",
+                "Germline sequence variants",
+                "Not built for copy-number variants (ACMG/ClinGen CNV points), mitochondrial variants, somatic or cancer variants, or low-penetrance risk alleles: those use other frameworks.",
             ))
     }
 

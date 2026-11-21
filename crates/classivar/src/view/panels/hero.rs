@@ -15,7 +15,7 @@ impl Workbench {
         };
         // With the rail folded away, the case name moves here as one small line. A
         // withheld result has no readout, so it says here whose evidence it is.
-        let rail = self.rail_shown.get();
+        let rail = self.stage.rail_shown.get();
         let header = div()
             .flex()
             .flex_wrap()
@@ -31,7 +31,7 @@ impl Workbench {
             None if result.both_sides_met => hero_both_sides(hero, result),
             None if !result.combination_overuse.is_empty() => hero_overuse(hero, result),
             None if result.items.is_empty() => {
-                let room = (self.stage_width.get(), self.stage_height.get());
+                let room = (self.stage.width.get(), self.stage.height.get());
                 let dial = div().flex().justify_center().child(self.dial(result, None, room, false, cx));
                 hero_empty(hero.child(dial), result, muted).child(self.category_picker(cx))
             }
@@ -54,7 +54,7 @@ impl Workbench {
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.category = Some(category);
                             this.reading = false;
-                            this.criteria_scroll.set_offset(point(px(0.), px(0.)));
+                            this.handles.criteria_scroll.set_offset(point(px(0.), px(0.)));
                             cx.notify();
                         })),
                 );
@@ -190,15 +190,15 @@ fn hero_empty(hero: Div, result: &Assessment, muted: Hsla) -> Div {
     )
 }
 
-/// How the 2015 combining table (with ClinGen's 2020 addition) compares with the points.
+/// How the 2015 combining table (with its later additions) compares with the points.
 pub(super) fn classic_comparison(result: &Assessment) -> String {
     match (result.classic_class, result.frameworks_agree()) {
-        (Some(c), Some(true)) => format!("The 2015 table plus ClinGen's 2020 addition also gives {}.", c.label()),
+        (Some(c), Some(true)) => format!("The 2015 table (with its later additions) also gives {}.", c.label()),
         (Some(c), _) => format!(
-            "The 2015 table plus ClinGen's 2020 addition gives {}. It differs from the points; the two methods are not identical.",
+            "The 2015 table (with its later additions) gives {}. It differs from the points; the two methods are not identical.",
             c.label()
         ),
-        (None, _) => "The 2015 table does not cover the strengths used.".to_string(),
+        (None, _) => "The 2015 table gives no class while the evidence contradicts itself.".to_string(),
     }
 }
 
@@ -217,9 +217,17 @@ mod tests {
         assert!(classic_comparison(&agree).contains("also gives"), "{}", classic_comparison(&agree));
         // PVS1 alone is 8 points (Likely pathogenic) while the 2015 table calls it uncertain.
         let situation = rules.criterion("PVS1").unwrap().situation_for(Strength::VeryStrong).unwrap().to_string();
-        let differ = rules.assess(&[Applied::guided("PVS1", Strength::VeryStrong, situation)]).unwrap();
+        let differ = rules
+            .assess(&[Applied::guided("PVS1", Strength::VeryStrong, situation).with_gene_level("established")])
+            .unwrap();
         assert!(classic_comparison(&differ).contains("It differs from the points"), "{}", classic_comparison(&differ));
-        let uncovered = rules.assess(&[Applied::new("BP4", Strength::Moderate)]).unwrap();
-        assert!(classic_comparison(&uncovered).contains("does not cover the strengths used"));
+        let contradiction = rules
+            .assess(&[Applied::new("PP3", Strength::Supporting), Applied::new("BP4", Strength::Supporting)])
+            .unwrap();
+        assert!(
+            classic_comparison(&contradiction).contains("contradicts itself"),
+            "{}",
+            classic_comparison(&contradiction)
+        );
     }
 }

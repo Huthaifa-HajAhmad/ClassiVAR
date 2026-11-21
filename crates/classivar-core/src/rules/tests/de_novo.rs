@@ -78,7 +78,7 @@ fn de_novo_evidence_is_counted_as_ps2_and_can_reach_very_strong() {
 }
 
 #[test]
-fn a_de_novo_total_can_also_be_applied_as_pm6_at_the_most_this_program_allows() {
+fn a_de_novo_total_can_also_be_applied_as_pm6_up_to_very_strong() {
     use Strength::*;
     let rules = RuleSet::builtin().unwrap();
     let pm6 = |counts: [(u32, u32); 4], recessive: bool| {
@@ -89,8 +89,8 @@ fn a_de_novo_total_can_also_be_applied_as_pm6_at_the_most_this_program_allows() 
     // Table 2 lets PS2 or PM6 carry the same level: 1 point is Moderate for both.
     assert_eq!(pm6([none, (1, 0), none, none], false), Some(("PM6", Moderate, Moderate)));
     assert_eq!(pm6([none, (3, 0), none, none], false), Some(("PM6", Strong, Strong)));
-    // Table 2 also lists PM6 at Very Strong, but this program stops PM6 at Strong.
-    assert_eq!(pm6([(1, 2), none, none, none], false), Some(("PM6", VeryStrong, Strong)));
+    // Table 2 lists PM6 at Very Strong too, and the program follows it.
+    assert_eq!(pm6([(1, 2), none, none, none], false), Some(("PM6", VeryStrong, VeryStrong)));
     // The recessive rule lowers PM6 exactly as it lowers PS2; no points, no PM6.
     assert_eq!(pm6([(1, 2), none, none, none], true), Some(("PM6", Strong, Strong)));
     assert_eq!(pm6([none, none, (1, 0), none], true), None);

@@ -1,40 +1,56 @@
 //! The functional assay helper: validation controls or an OddsPath value become PS3 or BS3.
 
 use super::*;
-use classivar_core::{EvidenceReading, FunctionalRules};
+use classivar_core::{AssayValidation, EvidenceReading, FunctionalRules};
 
-/// What the number of validation controls means (Brnich 2019, no statistical analysis).
-/// `typed` is what the box holds (see `parse_count`).
-fn controls_outcome(
+/// What the boxes of the controls route hold: the two counts of validation controls.
+pub(super) struct TypedControls {
+    pub(super) pathogenic: Option<Result<u32, ()>>,
+    pub(super) benign: Option<Result<u32, ()>>,
+}
+
+/// What the validation of an assay means without statistics (Brnich 2019, step 3).
+/// `experimental` is the curator's confirmation that the assay has normal and
+/// abnormal experimental controls and replicates.
+pub(super) fn controls_outcome(
     rules: &RuleSet,
     table: &FunctionalRules,
     damaging: bool,
-    typed: Option<Result<u32, ()>>,
+    experimental: bool,
+    typed: TypedControls,
 ) -> (String, Option<EvidenceReading>) {
-    let controls = match typed {
-        None => {
+    if !experimental {
+        return (
+            "Confirm the experimental controls and replicates first. Without them, Brnich 2019 says not to apply functional evidence."
+                .to_string(),
+            None,
+        );
+    }
+    let (pathogenic, benign) = match (typed.pathogenic, typed.benign) {
+        (Some(Ok(p)), Some(Ok(b))) => (p, b),
+        (Some(Err(())), _) | (_, Some(Err(()))) => {
+            return ("Use whole numbers of controls, for example 6 and 5.".to_string(), None);
+        }
+        _ => {
             return (
-                "Type how many validation controls the assay used (pathogenic and benign variants together)."
+                "Type how many pathogenic and how many benign validation controls the assay used (0 if none)."
                     .to_string(),
                 None,
             );
         }
-        Some(Err(())) => return ("Use a whole number of controls, for example 11.".to_string(), None),
-        Some(Ok(controls)) => controls,
     };
-    match rules.read_functional_controls(damaging, controls) {
+    let assay =
+        AssayValidation { experimental_controls: true, pathogenic_controls: pathogenic, benign_controls: benign };
+    match rules.read_functional_controls(damaging, assay) {
         Some(reading) => (
             format!(
-                "{controls} controls, no statistical analysis: {} for {}. {} or more controls reach Moderate; fewer reach Supporting; this route goes no higher.",
+                "{pathogenic} pathogenic and {benign} benign validation controls, no statistical analysis: {} for {}. Moderate needs at least {} validation controls including both kinds; this route goes no higher.",
                 reading.strength.label(),
                 reading.code,
                 table.controls_moderate_min
             ),
             Some(reading),
         ),
-        None if controls < table.controls_supporting_min => {
-            ("An assay with no validation controls gives no evidence (Brnich 2019).".to_string(), None)
-        }
         None => ("The rules have no functional evidence table.".to_string(), None),
     }
 }
@@ -81,10 +97,16 @@ impl Workbench {
         };
         let state = &self.helpers.functional;
         let (inputs, (message, reading)) = match state.route {
-            AssayRoute::Controls => (
-                self.functional_controls_inputs(cx),
-                controls_outcome(self.rules, table, state.damaging, self.typed_count(&state.controls_input, cx)),
-            ),
+            AssayRoute::Controls => {
+                let typed = TypedControls {
+                    pathogenic: self.typed_count(&state.pathogenic_input, cx),
+                    benign: self.typed_count(&state.benign_input, cx),
+                };
+                (
+                    self.functional_controls_inputs(cx),
+                    controls_outcome(self.rules, table, state.damaging, state.experimental, typed),
+                )
+            }
             AssayRoute::OddsPath => (
                 self.functional_oddspath_input(cx),
                 oddspath_outcome(self.rules, table, self.typed_number(&state.oddspath_input, cx)),
@@ -150,13 +172,40 @@ impl Workbench {
                     .child(direction_button("functional-damage", "Damage (PS3)", true, cx))
                     .child(direction_button("functional-no-damage", "No damage (BS3)", false, cx)),
             )
+            .child(self.functional_experimental_button(cx))
             .child(
-                div().flex().items_center().gap_2().child(caption(muted).child("Validation controls")).child(
-                    div().w(px(120.)).child(
-                        Input::new(&self.helpers.functional.controls_input).aria_label("Validation control count"),
-                    ),
-                ),
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap_2()
+                    .child(caption(muted).child("Validation controls: pathogenic"))
+                    .child(
+                        div().w(px(80.)).child(
+                            Input::new(&self.helpers.functional.pathogenic_input)
+                                .aria_label("Pathogenic validation control count"),
+                        ),
+                    )
+                    .child(caption(muted).child("benign"))
+                    .child(div().w(px(80.)).child(
+                        Input::new(&self.helpers.functional.benign_input).aria_label("Benign validation control count"),
+                    )),
             )
+    }
+
+    /// The curator's confirmation that the assay has experimental controls and replicates.
+    fn functional_experimental_button(&self, cx: &mut Context<Self>) -> Button {
+        let confirmed = self.helpers.functional.experimental;
+        Button::new("functional-experimental")
+            .label("It has normal and abnormal controls, and replicates")
+            .accessibility_label("Confirm the assay has normal and abnormal experimental controls and replicates")
+            .small()
+            .selected(confirmed)
+            .toggled(confirmed)
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.helpers.functional.experimental = !this.helpers.functional.experimental;
+                cx.notify();
+            }))
     }
 
     fn functional_oddspath_input(&self, cx: &mut Context<Self>) -> Div {
@@ -173,8 +222,9 @@ impl Workbench {
         let label = format!("Apply {} {}", reading.code, reading.strength.label());
         let reason = match state.route {
             AssayRoute::Controls => format!(
-                "Functional assay with {} validation controls, no statistical analysis (Brnich 2019)",
-                state.controls_input.read(cx).value().trim()
+                "Functional assay with experimental controls and replicates; {} pathogenic and {} benign validation controls; no statistical analysis (Brnich 2019)",
+                state.pathogenic_input.read(cx).value().trim(),
+                state.benign_input.read(cx).value().trim()
             ),
             AssayRoute::OddsPath => format!("OddsPath {} (Brnich 2019)", state.oddspath_input.read(cx).value().trim()),
         };
@@ -202,30 +252,44 @@ impl Workbench {
 mod tests {
     use classivar_core::{RuleSet, Strength};
 
-    use super::{controls_outcome, oddspath_outcome};
+    use super::{TypedControls, controls_outcome, oddspath_outcome};
 
     fn rules() -> &'static RuleSet {
         RuleSet::builtin().expect("the built-in rules are valid")
     }
 
+    fn controls(
+        damaging: bool,
+        experimental: bool,
+        pathogenic: Option<Result<u32, ()>>,
+        benign: Option<Result<u32, ()>>,
+    ) -> (String, Option<classivar_core::EvidenceReading>) {
+        let table = rules().functional.as_ref().unwrap();
+        controls_outcome(rules(), table, damaging, experimental, TypedControls { pathogenic, benign })
+    }
+
     #[test]
     fn controls_give_supporting_or_moderate_and_never_more() {
-        let table = rules().functional.as_ref().unwrap();
-        let read = |damaging, controls| controls_outcome(rules(), table, damaging, Some(Ok(controls)));
-        assert_eq!(read(true, 0).1, None);
-        assert!(read(true, 0).0.contains("no validation controls"));
-        let (_, reading) = read(true, table.controls_moderate_min);
-        assert_eq!((reading.as_ref().unwrap().code, reading.unwrap().strength), ("PS3", Strength::Moderate));
-        let (_, reading) = read(false, table.controls_supporting_min);
-        assert_eq!((reading.as_ref().unwrap().code, reading.unwrap().strength), ("BS3", Strength::Supporting));
+        let strength = |r: (String, Option<classivar_core::EvidenceReading>)| r.1.map(|r| (r.code, r.strength));
+        assert_eq!(strength(controls(true, true, Some(Ok(0)), Some(Ok(0)))), Some(("PS3", Strength::Supporting)));
+        assert_eq!(strength(controls(true, true, Some(Ok(6)), Some(Ok(5)))), Some(("PS3", Strength::Moderate)));
+        assert_eq!(strength(controls(false, true, Some(Ok(11)), Some(Ok(0)))), Some(("BS3", Strength::Supporting)));
+        let (text, _) = controls(true, true, Some(Ok(6)), Some(Ok(5)));
+        assert!(text.contains("6 pathogenic and 5 benign"), "{text}");
+    }
+
+    #[test]
+    fn without_experimental_controls_nothing_is_offered() {
+        let (text, reading) = controls(true, false, Some(Ok(20)), Some(Ok(20)));
+        assert_eq!(reading, None);
+        assert!(text.contains("not to apply functional evidence"), "{text}");
     }
 
     #[test]
     fn an_empty_or_bad_controls_box_asks_instead_of_reading() {
-        let table = rules().functional.as_ref().unwrap();
-        assert!(controls_outcome(rules(), table, true, None).0.starts_with("Type how many"));
-        assert!(controls_outcome(rules(), table, true, Some(Err(()))).0.contains("whole number"));
-        assert_eq!(controls_outcome(rules(), table, true, Some(Err(()))).1, None);
+        assert!(controls(true, true, None, Some(Ok(3))).0.starts_with("Type how many"));
+        assert!(controls(true, true, Some(Err(())), Some(Ok(3))).0.contains("whole numbers"));
+        assert_eq!(controls(true, true, Some(Err(())), Some(Ok(3))).1, None);
     }
 
     #[test]

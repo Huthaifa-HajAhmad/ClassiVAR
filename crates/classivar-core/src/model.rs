@@ -20,6 +20,16 @@ pub enum Strength {
 }
 
 impl Strength {
+    /// The strength `steps` levels lower on the pathogenic ladder (Very Strong,
+    /// Strong, Moderate, Supporting), or None when that goes below Supporting.
+    /// Stand-alone has no ladder.
+    pub fn lowered(self, steps: u8) -> Option<Strength> {
+        const LADDER: [Strength; 4] =
+            [Strength::VeryStrong, Strength::Strong, Strength::Moderate, Strength::Supporting];
+        let at = LADDER.iter().position(|s| *s == self)?;
+        LADDER.get(at + usize::from(steps)).copied()
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Self::Supporting => "Supporting",
@@ -128,5 +138,20 @@ impl Class {
             Self::LikelyBenign => Some(Self::Benign),
             Self::Benign => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Strength::*;
+
+    #[test]
+    fn lowering_walks_the_pathogenic_ladder_and_stops_below_supporting() {
+        assert_eq!(VeryStrong.lowered(0), Some(VeryStrong));
+        assert_eq!(VeryStrong.lowered(1), Some(Strong));
+        assert_eq!(VeryStrong.lowered(2), Some(Moderate));
+        assert_eq!(VeryStrong.lowered(3), Some(Supporting));
+        assert_eq!(Moderate.lowered(2), None, "below Supporting is no evidence");
+        assert_eq!(StandAlone.lowered(0), None, "stand-alone has no ladder");
     }
 }

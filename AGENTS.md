@@ -23,6 +23,8 @@ cargo test --workspace --locked         # all offline tests
 cargo test -p classivar-sources -- --ignored           # live service tests (network)
 powershell -ExecutionPolicy Bypass -File scripts/check.ps1   # the merge gate
 powershell -ExecutionPolicy Bypass -File scripts/gui-smoke.ps1   # Windows UI smoke test
+cargo run -p classivar-core --example review_packet > docs/review/REVIEW-PACKET.md   # after editing rules or sign-offs
+cargo run -p classivar-core --example erepo_benchmark > docs/review/BENCHMARK-erepo.md # after a clinical rule change
 ```
 
 `scripts/check.sh` is the POSIX equivalent of `check.ps1`. The UI smoke test is Windows-only and needs a built `target\debug\classivar.exe`.
@@ -31,12 +33,14 @@ powershell -ExecutionPolicy Bypass -File scripts/gui-smoke.ps1   # Windows UI sm
 
 ```
 rules/acmg-amp-points.toml   all clinical content: criteria, points, classes, sources, guides, caps
-crates/classivar-core/       engine, no UI: rules/ (load + check; check*.rs, read.rs for the helper tables), assess/ (score), combining_table.rs (the 2015 table as rows), reevaluate.rs (reported variants), case.rs (file format)
-crates/classivar-sources/    ClinGen, G2P, PanelApp clients; shared HTTP rules and caps
+rules/review-signoff.toml    one sign-off per rule entry (kind ai or human); the test `rules::review` checks it covers every entry
+crates/classivar-core/       engine, no UI: rules/ (load + check; check*.rs, read.rs for the helper tables, population.rs for BA1/BS1/PM2, review.rs for the review packet), assess/ (score; gene_limit.rs for a gene of uncertain significance), combining_table.rs (the 2015 table as rows, with marked additions), reevaluate.rs (reported variants, condition-aware), case.rs (file format), condition.rs (condition, inheritance, how two conditions compare), variant/ (notation parser, build table, the question for the Allele Registry, the saved identity), benchmark.rs + tests/erepo_benchmark.rs (expert-panel classifications, dated snapshot in tests/data)
+crates/classivar-sources/    ClinGen, G2P, PanelApp, ClinGen Allele Registry (allele_registry.rs), ClinVar (clinvar.rs) clients; shared HTTP rules and caps; fixtures in tests/fixtures
 crates/classivar/            GPUI app: main.rs, view.rs (Workbench state), view/*.rs (actions, records, gene lookups, save/open, unsaved.rs, helper_state.rs), view/panels/ (drawing, one file per panel) and view/panels/helpers/ (one file per evidence helper), design.rs (the app's own colours), genes.rs, settings.rs
                              The pictures that explain a class are panels too: track.rs (the interactive evidence track; evidence_stack.rs holds its step layout), combining_table.rs, what_if.rs, timeline.rs and strength_ladder.rs. point_axis.rs holds the axis the track, the "what if" bars and the timeline share. Their layout rules are plain tested functions; the drawing on top is thin.
                              The window: a rail (reports over time, `rail.rs`), the stage, and the editor sheet. The class is drawn as a dial, column or track (`picture.rs`, `dial.rs` + `dial_geometry.rs`, `column.rs`, `track.rs`); the choice is saved in settings. `look.rs` is the design system (type roles, panels, segmented control).
-                             view/headless.rs: tests that draw the real window in GPUI's test platform (see "Verify a UI change"); view/headless_keys.rs: the same window with real key events (Tab, Enter, Escape)
+                             view/types.rs: the plain screen types (Choice, Record, Lookup, Boxes, Handles, StageMemory). view/variant.rs + variant_state.rs: the variant check, condition and ClinVar import; view/clinvar_records.rs: submissions to records (tested); view/rules_window.rs: Rules… opens another rule file in a new window; rule_file.rs: reading a rule file (start-up and Rules…)
+                             view/headless.rs: tests that draw the real window in GPUI's test platform (see "Verify a UI change"); view/headless_case.rs: the variant, condition, ClinVar, PVS1 gene-level and note paths; view/headless_keys.rs: the same window with real key events (Tab, Enter, Escape)
 docs/                        ROADMAP.md is the current status; ARCHITECTURE.md is the map; AUDIT is historical
 ```
 
@@ -49,6 +53,13 @@ Key types: `RuleSet` → `Applied` → `Assessment` (`class()`, `points_class`, 
 - A new assessment of a guided criterion (PVS1) must carry a guide answer id; the engine rejects a bare strength. Keep guide ids stable: saved cases refer to them. Rebuilding a missing answer is only allowed when exactly one guide answer sets the strength (`unique_situation_for`); otherwise ask, never guess. The criteria the helpers set (`HELPER_CODES`) refuse a guide at load time.
 - `start_from_latest` must lower copied strengths to today's limits, fill the matching guide answer, and say so.
 - `Assessment::class()` also withholds when a PP1+PP4-style combined limit is exceeded; do not make the UI invent a class.
+- A variant is never guessed: a bare position needs the build the curator chose, several alleles for one id wait for a choice, and a failed lookup says it failed. The saved identity is what the Allele Registry returned, nothing filled in.
+- A record for a different condition (different MONDO ids) is never compared with today's class. Names alone can show sameness, never difference.
+- With the gene-disease link marked doubtful, a pathogenic class is shown as VUS (`Assessment::in_gene_of_uncertain_significance`); the points are not changed.
+- PVS1's gene-level answer (`gene_level` on `Applied`) is required for a new assessment and is never assumed when a case opens; keep its ids stable like guide ids.
+- Criteria from ClinVar are never applied for the curator; a lab's codes stay text in its record's source.
+- An AI sign-off never makes the rules "reviewed". `status = "reviewed"` also needs a human sign-off on every entry of `rules/review-signoff.toml`.
+- The ERepo benchmark floors (98% agreement on rows with evidence, no class on the other side of VUS) hold in the merge gate. A rule change that lowers them must be explained in `docs/ROADMAP.md`.
 - Every new button needs a stable id, a visible label, and `accessibility_label` when the label is a glyph or abbreviation. Every text box gets an `aria_label`.
 - The fictional example never names a variant or gene on its own: saving is refused and checking a gene asks first, so a demo case cannot be attributed to a real variant (`Workbench.example`).
 - Colours: use theme tokens for chrome, and the checked WCAG pairs in `design.rs` (`class_fill`/`class_ink`, `direction_colour`/`direction_ink`, warning pair) for meaning. Do not write a raw `rgb(...)` in a view file. Extend the contrast test for both themes if you add a pair.

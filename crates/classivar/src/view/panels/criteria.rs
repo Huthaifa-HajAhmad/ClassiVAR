@@ -7,7 +7,7 @@ impl Workbench {
     pub(super) fn criteria_panel(&self, result: &Assessment, width: f32, cx: &mut Context<Self>) -> AnyElement {
         let list = div()
             .id("criteria")
-            .track_scroll(&self.criteria_scroll)
+            .track_scroll(&self.handles.criteria_scroll)
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
@@ -122,7 +122,37 @@ impl Workbench {
     pub(super) fn strength_guide(&self, c: &Criterion, cx: &mut Context<Self>) -> AnyElement {
         let (border, muted, background) = (cx.theme().border, cx.theme().muted_foreground, cx.theme().background);
         let citation = c.guide_source.as_deref().and_then(|id| self.rules.source(id)).map(|s| s.citation.clone());
-        let heading = div()
+        let heading = self.guide_heading(c, cx);
+        // With a gene-level question, the situations wait until it is answered.
+        let asks_gene = !c.gene_level.is_empty();
+        let answers: Vec<Div> = if asks_gene && self.guide_gene_level.is_none() {
+            vec![
+                caption(muted)
+                    .child("Answer the gene-level question first: it sets how far the strength below is lowered."),
+            ]
+        } else {
+            c.guide.iter().enumerate().map(|(i, option)| self.guide_answer(c, i, option, cx)).collect()
+        };
+        div()
+            .mt_1()
+            .p_3()
+            .rounded_md()
+            .border_1()
+            .border_color(border)
+            .bg(background)
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(heading)
+            .when(asks_gene, |d| d.child(self.gene_level_question(c, cx)))
+            .children(answers)
+            .when_some(citation, |d, citation| d.child(caption(muted).child(format!("Source: {citation}"))))
+            .into_any_element()
+    }
+
+    /// The guide's question and its Cancel button.
+    fn guide_heading(&self, c: &Criterion, cx: &mut Context<Self>) -> Div {
+        div()
             .flex()
             .items_center()
             .gap_2()
@@ -142,29 +172,57 @@ impl Workbench {
                     .ghost()
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.guide_open = None;
+                        this.guide_gene_level = None;
                         cx.notify();
                     })),
+            )
+    }
+
+    /// The gene-level question (Abou Tayoun 2018, Table 1), asked before the
+    /// situations. "No LoF mechanism" ends the guide: PVS1 does not apply.
+    fn gene_level_question(&self, c: &Criterion, cx: &mut Context<Self>) -> Div {
+        let muted = cx.theme().muted_foreground;
+        let source = c.gene_level_source.as_deref().and_then(|id| self.rules.source(id)).map(|s| s.citation.clone());
+        let mut column = div().flex().flex_col().gap_1().child(
+            div()
+                .text_xs()
+                .font_weight(FontWeight::SEMIBOLD)
+                .child("First, the gene: is loss of function how it causes this disease?"),
+        );
+        for (i, level) in c.gene_level.iter().enumerate() {
+            let chosen = self.guide_gene_level.as_deref() == Some(level.id.as_str());
+            let (code, id, steps) = (c.code.clone(), level.id.clone(), level.steps);
+            let button = Button::new(SharedString::from(format!("gene-level-{}-{i}", c.code)))
+                .label(level.short.clone())
+                .accessibility_label(format!("{} gene level: {}", c.code, level.short))
+                .small()
+                .outline()
+                .selected(chosen)
+                .toggled(chosen)
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.guide_gene_level = Some(id.clone());
+                    if steps.is_none() {
+                        this.answer_guide(&code, None, String::new());
+                    }
+                    cx.notify();
+                }));
+            column = column.child(
+                div()
+                    .flex()
+                    .items_start()
+                    .gap_2()
+                    .child(div().w(px(180.)).flex_none().child(button))
+                    .child(div().flex_1().min_w_0().text_xs().child(level.situation.clone())),
             );
-        let answers = c.guide.iter().enumerate().map(|(i, option)| self.guide_answer(c, i, option, cx));
-        div()
-            .mt_1()
-            .p_3()
-            .rounded_md()
-            .border_1()
-            .border_color(border)
-            .bg(background)
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(heading)
-            .children(answers)
-            .when_some(citation, |d, citation| d.child(caption(muted).child(format!("Source: {citation}"))))
-            .into_any_element()
+        }
+        column.when_some(source, |d, source| d.child(caption(muted).child(format!("Source: {source}"))))
     }
 
     /// One answer of a strength guide: the button that applies it, and the situation it describes.
+    /// With a gene-level answer, the button names the strength after that answer's step.
     fn guide_answer(&self, c: &Criterion, i: usize, option: &StrengthGuide, cx: &mut Context<Self>) -> Div {
-        let (code, strength, situation) = (c.code.clone(), option.strength, option.id.clone());
+        let strength = c.strength_for(&option.id, self.guide_gene_level.as_deref());
+        let (code, situation) = (c.code.clone(), option.id.clone());
         let chosen =
             self.current().get(&c.code).and_then(|choice| choice.situation.as_deref()) == Some(option.id.as_str());
         div()

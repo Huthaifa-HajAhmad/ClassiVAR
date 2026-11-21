@@ -115,12 +115,12 @@ impl Workbench {
         let face = Rc::new(self.dial_face(result, class, room, cx));
         let (w, h) = face.size();
         let total = result.total_points;
-        let (mut from, shown) = self.needle.get();
+        let (mut from, shown) = self.stage.needle.get();
         if shown != total {
             from = shown;
-            self.needle.set((shown, total));
+            self.stage.needle.set((shown, total));
         }
-        let (painted, frame) = (face.clone(), self.dial_frame.clone());
+        let (painted, frame) = (face.clone(), self.stage.dial_frame.clone());
         let drawing = div().absolute().top_0().left_0().size_full().with_animation(
             SharedString::from(format!("dial-{from}-{total}")),
             Animation::new(Duration::from_millis(620)).with_easing(ease_out_quint()),
@@ -149,7 +149,8 @@ impl Workbench {
         if !interactive {
             return dial;
         }
-        let (clicks, moves) = ((face.clone(), self.dial_frame.clone()), (face.clone(), self.dial_frame.clone()));
+        let (clicks, moves) =
+            ((face.clone(), self.stage.dial_frame.clone()), (face.clone(), self.stage.dial_frame.clone()));
         dial.cursor_pointer()
             .on_mouse_down(
                 MouseButton::Left,
@@ -191,10 +192,10 @@ fn slice_under(face: &Face, frame: &Frame, position: Point<Pixels>) -> Option<St
 impl Workbench {
     /// Where the middle of a slice was last painted, in window coordinates, so a test can click it.
     pub(in crate::view) fn slice_centre(&self, result: &Assessment, code: &str, cx: &App) -> Option<Point<Pixels>> {
-        let face = self.dial_face(result, result.class(), (self.stage_width.get(), self.stage_height.get()), cx);
+        let face = self.dial_face(result, result.class(), (self.stage.width.get(), self.stage.height.get()), cx);
         let slice = face.slices.iter().find(|slice| slice.code == code)?;
         let radius = (face.ring().0 + face.ring().1) / 2.;
-        let origin = self.dial_frame.get()?;
+        let origin = self.stage.dial_frame.get()?;
         Some(to_window(origin, polar(face.centre(), radius, (slice.start + slice.end) / 2.)))
     }
 }

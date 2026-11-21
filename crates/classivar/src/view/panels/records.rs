@@ -16,7 +16,7 @@ impl Workbench {
             .pt_3()
             .border_t_1()
             .border_color(border)
-            .when(!self.rail_shown.get(), |d| d.child(self.record_chips(cx)))
+            .when(!self.stage.rail_shown.get(), |d| d.child(self.record_chips(cx)))
             .child(detail)
             .into_any_element()
     }
@@ -111,6 +111,7 @@ impl Workbench {
                 d.child(form_row("", caption(muted).child("Choose the class it reported to get a verdict."), cx))
             })
             .when(record.class == Some(Class::Vus), |d| d.child(form_row("Tier it named", self.tier_menu(i, cx), cx)))
+            .child(self.record_condition_rows(i, cx))
             .child(form_row(
                 "Year",
                 div().flex().items_center().justify_between().w_full().child(self.record_year_buttons(i, cx)).child(

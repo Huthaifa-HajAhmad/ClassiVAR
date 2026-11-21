@@ -14,7 +14,7 @@ impl Workbench {
         let reported = self.mode == Mode::ReportedVariant;
         let body = div()
             .id("result")
-            .track_scroll(&self.result_scroll)
+            .track_scroll(&self.handles.result_scroll)
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
@@ -80,7 +80,7 @@ impl Workbench {
                     move |this, _, _, cx| {
                         this.comparison = comparison;
                         this.hovered = None;
-                        this.result_scroll.set_offset(point(px(0.), px(0.)));
+                        this.handles.result_scroll.set_offset(point(px(0.), px(0.)));
                         this.preview = false;
                         cx.notify();
                     },

@@ -39,7 +39,7 @@ fn predictor_outcome(
     };
     if reading.published != reading.strength {
         text.push_str(&format!(
-            " This program stops {} at {}, so it applies {}.",
+            " These rules stop {} at {}, so it applies {}.",
             reading.code,
             reading.strength.label(),
             reading.strength.label()
@@ -59,7 +59,7 @@ fn predictor_reason(tool: &Predictor, reading: &EvidenceReading, score: &str) ->
             tool.reference
         ),
         None if reading.published != reading.strength => format!(
-            "{name} score {score}: {strength} for {code} (the paper rates this {}; this program caps {code} at {strength}; {}{confirmation})",
+            "{name} score {score}: {strength} for {code} (the paper rates this {}; these rules cap {code} at {strength}; {}{confirmation})",
             reading.published.label(),
             tool.reference
         ),
@@ -202,10 +202,10 @@ mod tests {
         let (text, reading) = predictor_outcome(rules(), revel, Some(Ok(0.003)));
         let reading = reading.unwrap();
         assert_eq!(reading.code, "BP4");
-        assert!(text.contains("This program stops BP4 at Moderate"), "{text}");
+        assert!(text.contains("These rules stop BP4 at Moderate"), "{text}");
         let reason = predictor_reason(revel, &reading, "0.003");
         assert!(reason.contains("REVEL score 0.003"), "{reason}");
-        assert!(reason.contains("this program caps BP4 at Moderate"), "{reason}");
+        assert!(reason.contains("these rules cap BP4 at Moderate"), "{reason}");
         assert!(reason.contains("Pejaver 2022, Table 2"), "{reason}");
     }
 

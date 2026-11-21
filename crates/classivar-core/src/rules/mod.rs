@@ -12,7 +12,9 @@ mod check_locus;
 mod check_predictors;
 mod check_tables;
 mod criterion;
+mod population;
 mod read;
+mod review;
 mod tables;
 #[cfg(test)]
 mod tests;
@@ -24,7 +26,11 @@ use serde::Deserialize;
 use crate::model::{Class, Strength};
 
 pub use basics::*;
-pub use criterion::{Criterion, StrengthGuide};
+pub use criterion::{Criterion, GeneLevel, StrengthGuide};
+pub use population::{
+    DiseaseArchitecture, PopulationFacts, PopulationFinding, PopulationRules, max_credible_frequency,
+};
+pub use review::{ReviewItem, Signoff, parse_signoffs};
 pub use tables::*;
 
 /// The built-in rule set, embedded in the program.
@@ -51,6 +57,7 @@ struct RuleSetFile {
     non_segregation: Option<NonSegregationRules>,
     de_novo: Option<DeNovoRules>,
     pm3: Option<Pm3Rules>,
+    population: Option<PopulationRules>,
     // A file may have no tier table at all (the engine treats that as "no tiers").
     #[serde(default)]
     vus_tiers: Vec<VusTier>,
@@ -81,6 +88,8 @@ pub struct RuleSet {
     /// De novo points for PS2 (absent in older rule files).
     pub de_novo: Option<DeNovoRules>,
     pub pm3: Option<Pm3Rules>,
+    /// BA1, BS1 and PM2 limits (absent in older rule files).
+    pub population: Option<PopulationRules>,
     pub ba1_exceptions: Vec<Ba1Exception>,
     pub criteria: Vec<Criterion>,
 }
@@ -103,6 +112,7 @@ impl TryFrom<RuleSetFile> for RuleSet {
             non_segregation: file.non_segregation,
             de_novo: file.de_novo,
             pm3: file.pm3,
+            population: file.population,
             ba1_exceptions: file.ba1_exceptions,
             criteria: file.criteria,
         };
@@ -153,8 +163,14 @@ pub enum RuleError {
     DefaultNotAllowed { code: String },
     #[error("criterion {code}: its strength guide has no source, or offers a strength the criterion does not allow")]
     BadGuide { code: String },
+    #[error(
+        "criterion {0}: its gene-level question needs a guide, a known source, and distinct answers of at most 3 steps"
+    )]
+    BadGeneLevel(String),
     #[error("criterion {code}: max_strength is not a strength a record can use")]
     MaxStrengthNotRecorded { code: String },
+    #[error("criterion {code}: levels must be strengths a record can use, weakest first, each once")]
+    BadLevels { code: String },
     #[error("the rule file has no criteria, or has criteria for only one direction")]
     MissingCriteria,
     #[error("the rule set is marked reviewed but has no reviewer name or no review date in the form YYYY-MM-DD")]
@@ -167,6 +183,8 @@ pub enum RuleError {
     BadNonSegregation(String),
     #[error("de novo points: {0}")]
     BadDeNovo(String),
+    #[error("population frequency: {0}")]
+    BadPopulation(String),
     #[error("PM3 points: {0}")]
     BadPm3(String),
     #[error("BA1 reference: {0}")]

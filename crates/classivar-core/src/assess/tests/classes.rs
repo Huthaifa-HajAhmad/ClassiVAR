@@ -78,7 +78,7 @@ fn the_assessment_names_the_rows_of_the_table_it_meets() {
     // PVS1 + PM2 Supporting meets one row: the ClinGen 2020 addition.
     let a = apply(&[("PVS1", VeryStrong), ("PM2", Supporting)]);
     assert_eq!(a.table_rows.len(), 1);
-    assert!(a.table_rows[0].clingen_2020_addition);
+    assert_eq!(a.table_rows[0].added_by, Some("ClinGen 2020"));
     assert_eq!(a.table_rows[0].class, Class::LikelyPathogenic);
     // Two Strong criteria meet the "two Strong" row, and Pathogenic comes first.
     let a = apply(&[("PS1", Strong), ("PS3", Strong)]);
@@ -96,6 +96,46 @@ fn classic_table_benign_side() {
     assert_eq!(apply(&[("BS1", Strong), ("BS2", Strong)]).classic_class, Some(Class::Benign));
     assert_eq!(apply(&[("BS1", Strong), ("BP4", Supporting)]).classic_class, Some(Class::LikelyBenign));
     assert_eq!(apply(&[("BP4", Supporting), ("BP7", Supporting)]).classic_class, Some(Class::LikelyBenign));
+}
+
+#[test]
+fn moderate_benign_evidence_meets_the_likely_benign_row_pejaver_added() {
+    // Pejaver 2022 (Discussion): BP4_Moderate alone, or with one Strong benign
+    // criterion, may invoke the 2015 "likely benign" rules. Before this row the
+    // table had no row for it and gave no class at all.
+    let a = apply(&[("BP4", Moderate)]);
+    assert_eq!(a.classic_class, Some(Class::LikelyBenign));
+    assert_eq!(a.table_rows.len(), 1);
+    assert_eq!(a.table_rows[0].added_by, Some("Pejaver 2022"));
+    assert_eq!(apply(&[("BS1", Strong), ("BP4", Moderate)]).classic_class, Some(Class::LikelyBenign));
+    // The points agree: -2 is Likely benign.
+    assert_eq!(a.class(), Some(Class::LikelyBenign));
+}
+
+#[test]
+fn moderate_benign_with_a_confident_pathogenic_side_now_needs_expert_judgment() {
+    // Two Strong pathogenic criteria meet Pathogenic and BP4_Moderate now meets
+    // Likely benign: both sides of the table are met while the points (6) would
+    // say Likely pathogenic, so the class is withheld, as for any two-sided case.
+    let a = apply(&[("PS1", Strong), ("PS3", Strong), ("BP4", Moderate)]);
+    assert!(a.both_sides_met);
+    assert_eq!(a.classic_class, Some(Class::Vus));
+    assert_eq!(a.class(), None);
+}
+
+#[test]
+fn two_very_strong_criteria_meet_pathogenic_and_withhold_against_strong_benign_evidence() {
+    // Two Very Strong criteria are 16 points, Pathogenic from 10 (Tavtigian 2020). The 2015
+    // table had no row for them only because PVS1 was its one Very Strong criterion.
+    let a = apply(&[("PVS1", VeryStrong), ("PM3", VeryStrong)]);
+    assert_eq!(a.classic_class, Some(Class::Pathogenic));
+    assert_eq!(a.table_rows[0].added_by, Some("Tavtigian 2020 points"));
+    assert_eq!(a.frameworks_agree(), Some(true));
+    // Against two Strong benign criteria both sides are met. Before the row, the points
+    // (16 - 8 = 8) showed a confident Likely pathogenic here.
+    let b = apply(&[("PVS1", VeryStrong), ("PM3", VeryStrong), ("BS1", Strong), ("BS2", Strong)]);
+    assert!(b.both_sides_met);
+    assert_eq!(b.class(), None);
 }
 
 #[test]
@@ -189,16 +229,9 @@ fn ba1_is_withheld_against_any_evidence_that_meets_a_pathogenic_rule_not_only_pa
 }
 #[test]
 fn a_withheld_class_has_no_next_class_hint() {
-    let a = apply(&[("PS1", Strong), ("PM5", Moderate)]);
+    let a = apply(&[("PS3", Strong), ("BS3", Strong)]);
     assert_eq!(a.class(), None);
     assert_eq!(a.to_upgrade, None);
     assert_eq!(a.to_downgrade, None);
     assert_eq!(a.vus_tier, None);
-}
-
-#[test]
-fn moderate_benign_evidence_is_not_covered_by_the_classic_table() {
-    let a = apply(&[("BP4", Moderate)]);
-    assert_eq!(a.classic_class, None);
-    assert_eq!(a.frameworks_agree(), None);
 }

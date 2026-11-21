@@ -4,6 +4,7 @@ use super::*;
 use crate::model::Strength::*;
 
 mod classes;
+mod gene_limit;
 mod safety;
 
 fn rules() -> &'static RuleSet {
@@ -13,6 +14,10 @@ fn rules() -> &'static RuleSet {
 fn applied(list: &[(&str, Strength)]) -> Vec<Applied> {
     list.iter()
         .map(|(code, strength)| match rules().criterion(code).and_then(|c| c.situation_for(*strength)) {
+            // PVS1 also answers the gene-level question; "established" keeps the guide's strength.
+            Some(situation) if !rules().criterion(code).unwrap().gene_level.is_empty() => {
+                Applied::guided(*code, *strength, situation).with_gene_level("established")
+            }
             Some(situation) => Applied::guided(*code, *strength, situation),
             None => Applied::new(*code, *strength),
         })

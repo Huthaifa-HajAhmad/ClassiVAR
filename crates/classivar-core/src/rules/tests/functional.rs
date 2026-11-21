@@ -34,19 +34,33 @@ fn oddspath_limits_follow_brnich_2019_and_are_crossed_strictly() {
 }
 
 #[test]
-fn without_statistics_the_number_of_controls_decides_and_stops_at_moderate() {
+fn without_statistics_the_validation_controls_decide_and_stop_at_moderate() {
+    // Brnich 2019, step 3: Supporting needs experimental controls and replicates but
+    // allows "10 or fewer" validation controls; Moderate needs "at least 11 total
+    // validation controls including a mix of benign and pathogenic variants".
     use Strength::*;
     let rules = RuleSet::builtin().unwrap();
-    let read = |damaging, controls| rules.read_functional_controls(damaging, controls).map(|r| (r.code, r.strength));
-    // No validation controls: no evidence at all, in either direction.
-    assert_eq!(read(true, 0), None);
-    assert_eq!(read(false, 0), None);
-    assert_eq!(read(true, 1), Some(("PS3", Supporting)));
-    assert_eq!(read(true, 10), Some(("PS3", Supporting)));
-    assert_eq!(read(true, 11), Some(("PS3", Moderate)));
-    assert_eq!(read(true, 500), Some(("PS3", Moderate)));
-    assert_eq!(read(false, 10), Some(("BS3", Supporting)));
-    assert_eq!(read(false, 11), Some(("BS3", Moderate)));
+    let read = |damaging, experimental, pathogenic, benign| {
+        let assay = AssayValidation {
+            experimental_controls: experimental,
+            pathogenic_controls: pathogenic,
+            benign_controls: benign,
+        };
+        rules.read_functional_controls(damaging, assay).map(|r| (r.code, r.strength))
+    };
+    // Without normal and abnormal experimental controls and replicates: no evidence.
+    assert_eq!(read(true, false, 20, 20), None);
+    assert_eq!(read(false, false, 0, 0), None);
+    // With them, few or no validation controls still give Supporting.
+    assert_eq!(read(true, true, 0, 0), Some(("PS3", Supporting)));
+    assert_eq!(read(true, true, 5, 5), Some(("PS3", Supporting)));
+    assert_eq!(read(false, true, 6, 4), Some(("BS3", Supporting)));
+    // Eleven or more, with both kinds, reach Moderate.
+    assert_eq!(read(true, true, 6, 5), Some(("PS3", Moderate)));
+    assert_eq!(read(false, true, 1, 499), Some(("BS3", Moderate)));
+    // Eleven of one kind only is not "a mix": Supporting.
+    assert_eq!(read(true, true, 11, 0), Some(("PS3", Supporting)));
+    assert_eq!(read(true, true, 0, 30), Some(("PS3", Supporting)));
 }
 
 #[test]
@@ -64,11 +78,7 @@ fn functional_limits_that_run_the_wrong_way_are_refused() {
         Err(RuleError::BadFunctional(_))
     ));
     assert!(matches!(
-        edited("controls_supporting_min = 1", "controls_supporting_min = 0"),
-        Err(RuleError::BadFunctional(_))
-    ));
-    assert!(matches!(
-        edited("controls_supporting_min = 1", "controls_supporting_min = 11"),
+        edited("controls_moderate_min = 11", "controls_moderate_min = 1"),
         Err(RuleError::BadFunctional(_))
     ));
     assert!(matches!(
