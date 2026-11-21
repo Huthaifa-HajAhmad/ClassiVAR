@@ -30,6 +30,7 @@ pub(super) struct Step {
 impl Step {
     /// "+4" or "−4". Never "0": a counted criterion is worth at least one point.
     pub(super) fn change(&self) -> String {
+        debug_assert!(self.points != 0, "the rule file check makes every strength worth at least one point");
         let sign = if self.points > 0 { "+" } else { "−" };
         format!("{sign}{}", self.points.unsigned_abs())
     }

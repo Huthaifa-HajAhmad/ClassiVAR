@@ -61,3 +61,12 @@ pub(super) fn watch_keys(cx: &mut Context<Workbench>) -> Subscription {
         _ => {}
     })
 }
+
+/// Closing the window with unsaved changes asks first. The close button is
+/// refused and the question is shown; "Yes, continue" then closes the window.
+pub(super) fn watch_close(window: &mut Window, cx: &mut Context<Workbench>) {
+    let this = cx.entity().downgrade();
+    window.on_window_should_close(cx, move |window, cx| {
+        this.update(cx, |this, cx| this.close_requested(window, cx)).unwrap_or(true)
+    });
+}

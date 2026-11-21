@@ -57,6 +57,7 @@ impl Workbench {
         self.inspected = None;
         self.preview = false;
         self.example = true;
+        self.forget_saved();
         self.file_status = Some(Status::attention(
             "Fictional case. Explore the evidence and compare its two reports. Clear the example before saving a real case.",
         ));

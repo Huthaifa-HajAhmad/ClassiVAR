@@ -7,13 +7,14 @@
 //! Explicit imports on purpose: `use gpui_kit::*` also brings GPUI's `test` macro
 //! into scope, and `#[gpui::test]` then expands into itself without end.
 
-use classivar_core::{Class, RuleSet, Strength};
-use gpui::{Entity, TestAppContext, VisualTestContext};
+use classivar_core::{Class, GeneDecision, RuleSet, Strength};
+use gpui::{Entity, TestAppContext, VisualTestContext, WindowOptions};
 use gpui_kit::component::ThemeMode;
-use gpui_kit::init;
+use gpui_kit::{AppContext, init, open_window};
 
 use super::{Choice, Editing, Mode, Workbench};
 use crate::settings::Picture;
+use crate::status::Status;
 use crate::theme;
 
 fn rules() -> &'static RuleSet {
@@ -21,16 +22,22 @@ fn rules() -> &'static RuleSet {
 }
 
 /// A window with a new workbench in it, in the given theme.
-fn open(cx: &mut TestAppContext, theme_mode: ThemeMode) -> (Entity<Workbench>, &mut VisualTestContext) {
+pub(super) fn open(cx: &mut TestAppContext, theme_mode: ThemeMode) -> (Entity<Workbench>, &mut VisualTestContext) {
     cx.update(|cx| {
         init(cx);
         theme::install(theme_mode, cx);
     });
-    cx.add_window_view(|window, cx| Workbench::new(rules(), window, cx))
+    // The same call `main` makes, so the window has the toolkit's root around it (which owns Tab).
+    let (handle, workbench) = cx
+        .update(|cx| {
+            open_window(WindowOptions::default(), cx, |window, cx| cx.new(|cx| Workbench::new(rules(), window, cx)))
+        })
+        .expect("the window opens");
+    (workbench, VisualTestContext::from_window(handle, cx).into_mut())
 }
 
 /// Draw the window once, as the screen would.
-fn draw(cx: &mut VisualTestContext) {
+pub(super) fn draw(cx: &mut VisualTestContext) {
     cx.update(|window, cx| {
         let drawn = window.draw(cx);
         drawn.clear(cx);
@@ -354,4 +361,166 @@ fn choosing_a_stronger_strength_from_the_menu_asks_for_a_reason_and_a_weaker_one
         assert!(this.raising.is_none());
     });
     draw(cx);
+}
+
+/// Apply one criterion at its default strength.
+fn apply_default(this: &mut Workbench, code: &str) {
+    let strength = this.rules.criterion(code).expect("criterion exists").strength;
+    this.today.insert(code.to_string(), Choice::new(strength));
+}
+
+#[gpui::test]
+fn a_change_after_saving_is_noticed_and_undoing_it_is_noticed_too(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    workbench.update_in(cx, |this, window, cx| {
+        assert!(!this.has_unsaved_changes(cx), "nothing was saved yet, so there is nothing to compare with");
+        apply_default(this, "PM2");
+        let saved = this.case_file(cx);
+        this.remember_saved(saved);
+        assert!(!this.has_unsaved_changes(cx));
+
+        apply_default(this, "PS1");
+        assert!(this.has_unsaved_changes(cx), "a new criterion is a change");
+        this.today.remove("PS1");
+        assert!(!this.has_unsaved_changes(cx), "putting it back is not a change");
+
+        this.today.insert("PM2".to_string(), Choice::new(Strength::Moderate));
+        assert!(this.has_unsaved_changes(cx), "a different strength is a change");
+        apply_default(this, "PM2");
+
+        this.variant_input.update(cx, |input, cx| input.set_value("NM_000000.1:c.1A>G", window, cx));
+        assert!(this.has_unsaved_changes(cx), "the variant name is part of the case");
+    });
+    draw(cx);
+}
+
+#[gpui::test]
+fn an_opened_case_is_unchanged_until_it_is_edited_and_clearing_forgets_it(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    workbench.update_in(cx, |this, window, cx| {
+        apply_default(this, "PM2");
+        let case = this.case_file(cx);
+        this.apply_case(case, window, cx);
+        assert!(!this.has_unsaved_changes(cx), "a case just opened matches its file");
+        apply_default(this, "PP3");
+        assert!(this.has_unsaved_changes(cx));
+        this.clear_case(window, cx);
+        assert!(!this.has_unsaved_changes(cx), "a cleared case has no file to differ from");
+    });
+}
+
+#[gpui::test]
+fn a_failed_save_keeps_the_old_baseline_and_a_finished_one_moves_it(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    workbench.update_in(cx, |this, _, cx| {
+        apply_default(this, "PM2");
+        let before = this.case_file(cx);
+        this.remember_saved(before.clone());
+        apply_default(this, "PS1");
+        let edited = this.case_file(cx);
+
+        this.finish_save(Some(Status::attention("Could not save to a.json: disk full.")), edited.clone(), cx);
+        assert!(this.has_unsaved_changes(cx), "a failed save wrote nothing, so the change is still unsaved");
+        this.finish_save(None, edited.clone(), cx);
+        assert!(this.has_unsaved_changes(cx), "a closed dialog wrote nothing either");
+
+        this.finish_save(Some(Status::done("Saved to a.json.")), edited, cx);
+        assert!(!this.has_unsaved_changes(cx), "a finished save makes what was written the baseline");
+    });
+}
+
+#[gpui::test]
+fn the_gene_decision_and_the_records_are_part_of_the_saved_state(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    workbench.update_in(cx, |this, window, cx| {
+        apply_default(this, "PM2");
+        let saved = this.case_file(cx);
+        this.remember_saved(saved);
+
+        this.gene_link = GeneDecision::Established;
+        assert!(this.has_unsaved_changes(cx), "the gene decision is saved in the file");
+        this.gene_link = GeneDecision::NotDecided;
+        assert!(!this.has_unsaved_changes(cx));
+
+        this.add_record(window, cx);
+        assert!(this.has_unsaved_changes(cx), "a new earlier record is a change");
+        this.remove_record(0, window, cx);
+        assert!(!this.has_unsaved_changes(cx), "taking the record away again is not a change");
+    });
+}
+
+#[gpui::test]
+fn loading_the_example_removes_the_marker(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    workbench.update_in(cx, |this, window, cx| {
+        apply_default(this, "PM2");
+        let saved = this.case_file(cx);
+        this.remember_saved(saved);
+        apply_default(this, "PS1");
+        assert!(this.has_unsaved_changes(cx));
+        this.load_example(window, cx);
+        assert!(!this.has_unsaved_changes(cx), "the example is never saved, so it has no file to differ from");
+    });
+}
+
+#[gpui::test]
+fn closing_an_unchanged_case_just_closes(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    assert!(cx.simulate_close(), "nothing to lose, so the window closes");
+    assert!(workbench.read_with(cx, |this, _| this.confirm.is_none()));
+
+    workbench.update_in(cx, |this, _, cx| {
+        apply_default(this, "PM2");
+        let saved = this.case_file(cx);
+        this.remember_saved(saved);
+    });
+    assert!(cx.simulate_close(), "a saved case closes without a question");
+
+    workbench.update_in(cx, |this, window, cx| this.load_example(window, cx));
+    assert!(cx.simulate_close(), "the example is a demo and is never saved, so closing it loses nothing");
+}
+
+#[gpui::test]
+fn closing_a_saved_case_that_changed_asks(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    workbench.update_in(cx, |this, _, cx| {
+        apply_default(this, "PM2");
+        let saved = this.case_file(cx);
+        this.remember_saved(saved);
+        apply_default(this, "PS1");
+    });
+    assert!(!cx.simulate_close(), "a change after saving would be lost");
+}
+
+#[gpui::test]
+fn closing_a_changed_case_asks_first_and_cancel_keeps_the_window(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    workbench.update_in(cx, |this, _, _| apply_default(this, "PM2"));
+    assert!(!cx.simulate_close(), "unsaved work must not be thrown away by one click on the close button");
+    assert!(workbench.read_with(cx, |this, _| matches!(this.confirm, Some(super::Confirm::CloseWindow))));
+    draw(cx);
+
+    workbench.update_in(cx, |this, window, cx| this.cancel_confirm(window, cx));
+    assert!(
+        workbench.read_with(cx, |this, _| this.confirm.is_none() && !this.today.is_empty()),
+        "Cancel keeps the case"
+    );
+}
+
+#[gpui::test]
+fn a_close_request_replaces_the_question_that_was_open_and_yes_closes_the_window(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    workbench.update_in(cx, |this, _, _| {
+        apply_default(this, "PM2");
+        this.ask(super::Confirm::LoadExample);
+    });
+    assert!(!cx.simulate_close());
+    assert!(
+        workbench.read_with(cx, |this, _| matches!(this.confirm, Some(super::Confirm::CloseWindow))),
+        "the question about closing must show, not stay hidden behind the older one"
+    );
+    assert!(workbench.read_with(cx, |this, _| !this.example), "the older question was cancelled, not answered");
+
+    workbench.update_in(cx, |this, window, cx| this.apply_confirm(window, cx));
+    assert!(cx.windows().is_empty(), "Yes closes the window");
 }

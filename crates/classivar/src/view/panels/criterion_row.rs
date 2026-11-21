@@ -191,6 +191,7 @@ impl Workbench {
         }
         if open {
             text = text.child(self.strength_ladder(c, strength, cx));
+            text = text.children(self.interactions_panel(c, cx));
         }
         if let Some(option) = guide_option {
             let answer = if open {

@@ -46,11 +46,14 @@ mod file_io;
 mod gene;
 #[cfg(test)]
 mod headless;
+#[cfg(test)]
+mod headless_keys;
 mod helper_state;
 
 use helper_state::{AssayRoute, Helpers, PhenotypeGenes, new_box};
 mod panels;
 mod records;
+mod unsaved;
 mod watchers;
 mod widgets;
 
@@ -60,7 +63,7 @@ use describe::{
 };
 use evidence::{carry_forward, evidence_of, open_notes, to_applied};
 use file_io::{default_save_folder, suggested_file_name, write_case};
-use watchers::{repaint_on_change, watch_gene_box, watch_keys, watch_record_name};
+use watchers::{repaint_on_change, watch_close, watch_gene_box, watch_keys, watch_record_name};
 use widgets::{class_badge, notice};
 
 /// The largest a case file may be before it is refused without reading it.
@@ -148,6 +151,8 @@ enum Confirm {
     RemoveRecord(usize, String),
     /// Open a case file over the work on screen.
     OpenCase(Box<CaseFile>),
+    /// Close the window although the case changed since it was saved.
+    CloseWindow,
 }
 
 /// Where one lookup stands.
@@ -241,8 +246,12 @@ pub struct Workbench {
     /// The confirmation window holds the keyboard focus while it is open, so a
     /// stray Tab or Enter cannot reach the controls behind the question.
     confirm_focus: FocusHandle,
+    /// Holds the focus when no control does, so Tab always has a place to start from.
+    page_focus: FocusHandle,
     /// The result of the last save or open, shown until the curator dismisses it.
     file_status: Option<Status>,
+    /// The case as last saved or opened, to tell whether it has changed since (see `unsaved.rs`).
+    saved_case: Option<CaseFile>,
     /// The next number for a new record, so removing one cannot create two "Record 2"s.
     next_record: u32,
     /// Counts lookups, so a slow old answer cannot replace a newer one.
@@ -265,6 +274,7 @@ impl Workbench {
             cx.new(|cx| InputState::new(window, cx).placeholder("Lab or source, e.g. Lab A (ClinVar)"));
         subscriptions.push(watch_record_name(&record_name_input, window, cx));
         subscriptions.push(watch_keys(cx));
+        watch_close(window, cx);
         let helpers = Helpers::new(rules, &mut subscriptions, window, cx);
         Self {
             rules,
@@ -307,7 +317,9 @@ impl Workbench {
             gene_link: GeneDecision::NotDecided,
             confirm: None,
             confirm_focus: cx.focus_handle(),
+            page_focus: cx.focus_handle(),
             file_status: None,
+            saved_case: None,
             next_record: 1,
             lookup_id: 0,
             _lookup_tasks: Vec::new(),

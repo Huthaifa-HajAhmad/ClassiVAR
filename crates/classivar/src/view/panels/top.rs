@@ -1,9 +1,10 @@
 //! The top bar and the case panel (variant, gene, gene decision).
 
+use super::unsaved::save_button_label;
 use super::*;
 
 impl Workbench {
-    pub(super) fn top_bar(&self, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn top_bar(&self, unsaved: bool, cx: &mut Context<Self>) -> AnyElement {
         let muted = cx.theme().muted_foreground;
         div()
             .flex()
@@ -16,7 +17,7 @@ impl Workbench {
             .child(caption(muted).child("Research and learning only"))
             .child(div().flex_1())
             .child(super::picture::status_pill(self.rules, cx))
-            .child(self.file_buttons(cx))
+            .child(self.file_buttons(unsaved, cx))
             .child(self.theme_button(cx))
             .child(self.learning_button(cx))
             .into_any_element()
@@ -39,20 +40,28 @@ impl Workbench {
         crate::look::segmented(buttons, cx)
     }
 
-    fn file_buttons(&self, cx: &mut Context<Self>) -> Div {
+    fn file_buttons(&self, unsaved: bool, cx: &mut Context<Self>) -> Div {
+        let muted = cx.theme().muted_foreground;
         div()
             .flex()
+            .items_center()
             .gap_2()
+            .when(unsaved, |row| row.child(caption(muted).child("Changed since saved")))
             .child(Button::new("open-case").label("Open").accessibility_label("Open case…").small().ghost().on_click(
                 cx.listener(|this, _, window, cx| {
                     this.open_case(window, cx);
                 }),
             ))
-            .child(Button::new("save-case").label("Save").accessibility_label("Save case…").small().primary().on_click(
-                cx.listener(|this, _, _, cx| {
-                    this.save_case(cx);
-                }),
-            ))
+            .child(
+                Button::new("save-case")
+                    .label("Save")
+                    .accessibility_label(save_button_label(unsaved))
+                    .small()
+                    .primary()
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.save_case(cx);
+                    })),
+            )
     }
 
     pub(super) fn theme_button(&self, cx: &mut Context<Self>) -> Button {

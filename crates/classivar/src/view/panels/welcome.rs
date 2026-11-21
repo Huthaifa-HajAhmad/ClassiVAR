@@ -30,7 +30,7 @@ impl Workbench {
             .bg(paper)
             .text_color(ink)
             .child(header)
-            .children(self.file_status_banner(cx))
+            .children(self.file_status_banner(self.has_unsaved_changes(cx), cx))
             .child(div().id("welcome-scroll").flex_1().min_h_0().overflow_y_scroll().child(page))
             .into_any_element()
     }

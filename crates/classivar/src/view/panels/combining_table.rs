@@ -35,12 +35,12 @@ pub(super) fn is_shown(result: &Assessment) -> bool {
 /// version of the picture. When the class is withheld it says so instead of
 /// naming what the table gives.
 fn summary(result: &Assessment) -> String {
-    let Some(class) = result.classic_class else {
-        return "The 2015 table has no row for Moderate or Very strong benign evidence, so it gives no class."
-            .to_string();
-    };
+    const NO_ROW: &str = "The 2015 table has no row for Moderate or Very strong benign evidence";
     if result.table_rows.is_empty() {
-        return format!("No row is met, so the 2015 table gives {}.", class.label());
+        return match result.classic_class {
+            Some(class) => format!("No row is met, so the 2015 table gives {}.", class.label()),
+            None => format!("{NO_ROW}, so it gives no class."),
+        };
     }
     // Rows are listed strongest first, so the first met row on a side gives that side's class.
     // A weaker row on the same side (Likely pathogenic next to Pathogenic) adds nothing to
@@ -51,6 +51,10 @@ fn summary(result: &Assessment) -> String {
         Direction::Benign => Some(row.class) == benign_class,
     };
     let met: Vec<_> = result.table_rows.iter().filter(deciding).map(|row| met_text(row)).collect();
+    // Some rows are met, but a strength in use has no row, so the table cannot give one class.
+    let Some(class) = result.classic_class else {
+        return format!("{NO_ROW}, so it cannot combine the two sides. Met: {}.", met.join("; "));
+    };
     let both_sides = pathogenic_class.is_some() && benign_class.is_some();
     let note = if both_sides { " Rows are met on both sides, which the 2015 guidance calls uncertain." } else { "" };
     let ending = match result.class() {
@@ -239,6 +243,31 @@ mod tests {
             summary(&result),
             "Met: ≥2 Strong (Pathogenic); ≥2 Strong (Benign). Rows are met on both sides, which the 2015 guidance calls uncertain. ClassiVAR shows no class here: this needs expert judgment."
         );
+    }
+
+    #[test]
+    fn a_strength_the_table_lacks_a_row_for_does_not_hide_the_rows_that_are_met() {
+        // Benign evidence at Moderate has no row in the 2015 table, so the table cannot
+        // combine the two sides. The two Strong pathogenic criteria still meet a row,
+        // and the sentence must not say that nothing is met.
+        let result = assessed(&[
+            Applied::new("PS1", Strength::Strong),
+            Applied::new("PS2", Strength::Strong),
+            Applied::new("BP4", Strength::Moderate),
+        ]);
+        assert_eq!(result.classic_class, None);
+        assert!(result.class().is_some() && !result.table_rows.is_empty());
+        let sentence = summary(&result);
+        assert!(sentence.contains("cannot combine the two sides"), "{sentence}");
+        assert!(sentence.contains("≥2 Strong (Pathogenic)"), "{sentence}");
+        assert!(!sentence.contains("gives no class"), "{sentence}");
+    }
+
+    #[test]
+    fn with_no_row_met_and_a_strength_the_table_lacks_the_sentence_says_it_gives_no_class() {
+        let result = assessed(&[Applied::new("BP4", Strength::Moderate)]);
+        assert!(result.table_rows.is_empty());
+        assert!(summary(&result).contains("gives no class"));
     }
 
     #[test]

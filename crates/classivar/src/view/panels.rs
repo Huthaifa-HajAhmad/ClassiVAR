@@ -28,6 +28,7 @@ mod hero;
 mod history;
 mod insights;
 mod inspector;
+mod interactions;
 mod lanes;
 mod makeup;
 mod picture;
@@ -86,17 +87,17 @@ impl Workbench {
 
 impl Workbench {
     fn workspace(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        self.hold_focus_for_question(window, cx);
         if self.welcome && !self.has_case_data(cx) {
             return self.welcome_screen(cx);
         }
-        let modal_open = self.confirm.is_some();
         let result = match self.score_on_screen() {
             Ok(result) => result,
             Err(error) => return self.error_screen(format!("The evidence on screen cannot be scored: {error}"), cx),
         };
         let (incomplete, reevaluation) = self.compare_with_records();
         let variant = self.variant_name(cx);
+        // Worked out once per draw: the Save marker and the file message must agree.
+        let unsaved = self.has_unsaved_changes(cx);
         let (background, foreground) = (cx.theme().background, cx.theme().foreground);
         let (rail, sheet) = self.measure_stage(window);
         let middle = div().flex_1().min_w_0().h_full().flex().flex_col().child(self.results_panel(
@@ -114,15 +115,8 @@ impl Workbench {
             .flex_col()
             .bg(background)
             .text_color(foreground)
-            // The capture phase runs before every control inside, so a blocked
-            // key cannot act on whichever element holds the focus.
-            .capture_key_down(move |event, _window, cx| {
-                if modal_open && event.keystroke.key == "tab" {
-                    cx.stop_propagation();
-                }
-            })
-            .child(self.top_bar(cx))
-            .children(self.file_status_banner(cx))
+            .child(self.top_bar(unsaved, cx))
+            .children(self.file_status_banner(unsaved, cx))
             .child(self.stage_row(&result, middle, (rail, sheet), variant.as_deref(), cx))
             .children(self.confirm_modal(cx))
             .into_any_element()
@@ -130,14 +124,17 @@ impl Workbench {
 }
 
 impl Workbench {
-    /// While a question waits on screen, it owns the keyboard: the question
-    /// window takes the focus, and Tab cannot walk out to the controls behind
-    /// it. Enter and Space keep their normal meaning on whichever control
-    /// inside the window has the focus; Escape (and the window's Cancel
-    /// button) is handled by the global key observer.
-    fn hold_focus_for_question(&self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.confirm.is_some() && !self.confirm_focus.is_focused(window) {
+    /// While a question waits on screen, it owns the keyboard: its window takes
+    /// the focus and traps Tab (see `confirm_modal`). Enter and Space keep their
+    /// normal meaning on the answer that has the focus; Escape (and the window's
+    /// Cancel button) is handled by the global key observer. With no focus at all
+    /// Tab has nowhere to start from (a fresh window, or one whose question just
+    /// closed), so the page holds it until a control does.
+    fn settle_focus(&self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.confirm.is_some() && !self.confirm_focus.contains_focused(window, cx) {
             window.focus(&self.confirm_focus, cx);
+        } else if self.confirm.is_none() && window.focused(cx).is_none() {
+            window.focus(&self.page_focus, cx);
         }
     }
 
@@ -177,11 +174,13 @@ impl Workbench {
 
 impl Render for Workbench {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.settle_focus(window, cx);
         let frame = self.frame(cx);
         div()
             .size_full()
             .flex()
             .flex_col()
+            .track_focus(&self.page_focus)
             .child(frame)
             .child(div().flex_1().min_h_0().child(self.workspace(window, cx)))
     }

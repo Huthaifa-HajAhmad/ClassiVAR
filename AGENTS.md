@@ -33,10 +33,10 @@ powershell -ExecutionPolicy Bypass -File scripts/gui-smoke.ps1   # Windows UI sm
 rules/acmg-amp-points.toml   all clinical content: criteria, points, classes, sources, guides, caps
 crates/classivar-core/       engine, no UI: rules/ (load + check; check*.rs, read.rs for the helper tables), assess/ (score), combining_table.rs (the 2015 table as rows), reevaluate.rs (reported variants), case.rs (file format)
 crates/classivar-sources/    ClinGen, G2P, PanelApp clients; shared HTTP rules and caps
-crates/classivar/            GPUI app: main.rs, view.rs (Workbench state), view/*.rs (actions, records, gene lookups, save/open, helper_state.rs), view/panels/ (drawing, one file per panel) and view/panels/helpers/ (one file per evidence helper), design.rs (the app's own colours), genes.rs, settings.rs
+crates/classivar/            GPUI app: main.rs, view.rs (Workbench state), view/*.rs (actions, records, gene lookups, save/open, unsaved.rs, helper_state.rs), view/panels/ (drawing, one file per panel) and view/panels/helpers/ (one file per evidence helper), design.rs (the app's own colours), genes.rs, settings.rs
                              The pictures that explain a class are panels too: track.rs (the interactive evidence track; evidence_stack.rs holds its step layout), combining_table.rs, what_if.rs, timeline.rs and strength_ladder.rs. point_axis.rs holds the axis the track, the "what if" bars and the timeline share. Their layout rules are plain tested functions; the drawing on top is thin.
                              The window: a rail (reports over time, `rail.rs`), the stage, and the editor sheet. The class is drawn as a dial, column or track (`picture.rs`, `dial.rs` + `dial_geometry.rs`, `column.rs`, `track.rs`); the choice is saved in settings. `look.rs` is the design system (type roles, panels, segmented control).
-                             view/headless.rs: tests that draw the real window in GPUI's test platform (see "Verify a UI change")
+                             view/headless.rs: tests that draw the real window in GPUI's test platform (see "Verify a UI change"); view/headless_keys.rs: the same window with real key events (Tab, Enter, Escape)
 docs/                        ROADMAP.md is the current status; ARCHITECTURE.md is the map; AUDIT is historical
 ```
 
@@ -59,7 +59,7 @@ Key types: `RuleSet` → `Applied` → `Assessment` (`class()`, `points_class`, 
 
 The unit tests do not draw the window, and a stack overflow or a bad binding only appears on screen (the headless tests catch a panic in a render function, not a wrong binding). After a UI change:
 
-1. `scripts/check.ps1`. It includes the headless window tests (`crates/classivar/src/view/headless.rs`): they draw the real window in GPUI's test platform with no screen, mouse or keyboard, so run them freely, also while the user is working. They set state directly; they do not click.
+1. `scripts/check.ps1`. It includes the headless window tests (`crates/classivar/src/view/headless.rs`): they draw the real window in GPUI's test platform with no screen, mouse or keyboard, so run them freely, also while the user is working. Most set state directly and do not click. `headless_keys.rs` sends key events and reads which element has the focus: use it for any keyboard path. A button answers Enter on key release, so send both the press and the release (see `press_enter` there).
 2. `scripts/gui-smoke.ps1`. **It takes over the user's mouse and keyboard and must not run while the user is using the machine** (it also fails when they touch it). Ask first, or run it only when the user says the machine is free. (it never calls the live sources, so it runs offline; it refuses to act unless ClassiVAR is the foreground window; screenshots go to `%TEMP%\classivar-smoke`)
 3. Click the changed path yourself if the smoke script does not cover it (Save/Open dialogs and keyboard are not covered).
 
@@ -68,7 +68,7 @@ The unit tests do not draw the window, and a stack overflow or a bad binding onl
 - Theme preference: `%APPDATA%\ClassiVAR\settings.txt` (`theme=dark|light`).
 - A case saved under other rules says so on open; per-record rule sets are intentionally not saved.
 - Live source tests hit real services; run them separately, not in the merge gate.
-- CI (`.github/workflows/`) runs the merge gate on Windows and macOS plus `cargo audit`; the first fully green run is linked in `README.md`. It has not run since the headless window tests were added, so treat "CI covers them" as unverified until a newer run URL is in `docs/ROADMAP.md`. The Windows UI smoke test is not part of CI: run it yourself after a UI change.
+- CI (`.github/workflows/`) runs the merge gate on Windows and macOS plus `cargo audit`; the first fully green run is linked in `README.md`. It has run with the headless window tests and passed on Windows and macOS (run URL in `docs/ROADMAP.md`, Phase E item 7). The Windows UI smoke test is not part of CI: run it yourself after a UI change.
 - Do not commit unless the user asks.
 - Size limits: files of 300 lines (a test block in the same file may go over) and functions of 50 lines hold in all three crates. Keep it that way. A new helper is one state type in `view/helper_state.rs`, one file in `view/panels/helpers/` with a tested function that reads the typed values, and one entry in `view/panels/helper_bar.rs`.
 - Saved text with non-ASCII characters (`•`, `·`, `→`) is easy to damage when a script reads a file with the wrong encoding. After a scripted edit, search for `â€` and `Â`.
