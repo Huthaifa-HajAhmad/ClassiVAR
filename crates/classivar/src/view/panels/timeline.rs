@@ -13,8 +13,12 @@
 
 use classivar_core::{Direction, Reevaluation, Rescored};
 
-use super::point_axis::{Bar, axis, points_text, widened};
+use super::point_axis::{
+    Bar, class_strip, fluid_bar, fraction, limit_lines, points_text, tick_row, widened, zone_labels,
+};
 use super::*;
+use crate::look::figure;
+use crate::view::describe::Scale;
 
 /// The bars to draw, and the same facts in words.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -137,20 +141,73 @@ fn timeline(re: &Reevaluation) -> Option<Timeline> {
     Some(Timeline { bars, summary })
 }
 
+/// Width of the year column and of the total column, and the height of one row.
+const LABEL_WIDTH: f32 = 112.;
+const END_WIDTH: f32 = 48.;
+const ROW: f32 = 40.;
+
 impl Workbench {
     /// The picture, or nothing when today's class is not shown.
     pub(super) fn timeline(&self, re: &Reevaluation, cx: &mut Context<Self>) -> AnyElement {
         let Some(Timeline { bars, summary }) = timeline(re) else { return div().into_any_element() };
-        let (border, muted) = (cx.theme().border, cx.theme().muted_foreground);
+        let theme = cx.theme();
+        let (ink, muted, border, paper) = (theme.foreground, theme.muted_foreground, theme.border, theme.muted);
         let scale = widened(&scale_for(self.rules), &bars);
-        div()
+        let today = re.today.as_ref().ok().and_then(|today| today.class());
+        let last = bars.len().saturating_sub(1);
+        let mut rows = div().flex().flex_col();
+        if let Some(class) = today {
+            let head = div().pl(px(LABEL_WIDTH)).pr(px(END_WIDTH)).pb_1().flex().flex_col().gap_1();
+            rows = rows.child(head.child(zone_labels(&scale, class, (ink, muted), None)).child(class_strip(
+                &scale,
+                class,
+                (theme.popover, ink),
+                6.,
+            )));
+        }
+        for (i, bar) in bars.iter().enumerate() {
+            rows = rows.child(record_row(bar, i == last, &scale, (ink, muted, border, paper)));
+        }
+        rows = rows.child(div().pl(px(LABEL_WIDTH)).pr(px(END_WIDTH)).child(tick_row(&scale, muted)));
+        crate::look::card(cx)
+            .p_4()
             .flex()
             .flex_col()
-            .gap_2()
-            .child(axis("timeline-scroll", &scale, &bars, border, muted))
+            .gap_3()
+            .child(rows)
             .child(caption(muted).child(summary))
             .into_any_element()
     }
+}
+
+/// One record (or today, which is drawn a little heavier): its year and what
+/// it reported, its bar from zero, and its total.
+fn record_row(bar: &Bar, now: bool, scale: &Scale, (ink, muted, border, paper): (Hsla, Hsla, Hsla, Hsla)) -> Div {
+    let label = div()
+        .w(px(LABEL_WIDTH))
+        .flex_none()
+        .flex()
+        .flex_col()
+        .child(figure(12.).text_color(ink).child(bar.label.clone()))
+        .child(caption(muted).child(bar.note.clone()));
+    let track = div()
+        .relative()
+        .flex_1()
+        .h_full()
+        .flex()
+        .items_center()
+        .children(limit_lines(scale, border))
+        .child(div().absolute().top_0().h_full().left(relative(fraction(0, scale))).w(px(1.)).bg(muted))
+        .child(fluid_bar(bar, scale, (paper, muted), if now { 12. } else { 8. }));
+    let end = figure(12.).w(px(END_WIDTH)).flex_none().flex().justify_end().child(bar.end.clone());
+    div()
+        .flex()
+        .items_center()
+        .h(px(ROW))
+        .when(now, |row| row.border_t_1().border_color(border))
+        .child(label)
+        .child(track)
+        .child(end)
 }
 
 #[cfg(test)]

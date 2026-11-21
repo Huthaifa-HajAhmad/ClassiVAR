@@ -9,6 +9,7 @@ use classivar_core::combining_table::Counts;
 use classivar_core::{Assessment, Class, Direction, TABLE_ROWS, TableRow, combining_table};
 
 use super::*;
+use crate::look::figure;
 
 /// The classes the table has rows for, in the order they are drawn.
 const GROUPS: [Class; 4] = [Class::Pathogenic, Class::LikelyPathogenic, Class::Benign, Class::LikelyBenign];
@@ -82,77 +83,129 @@ fn hint(row: &TableRow, counts: &Counts, given: &[Class]) -> Option<String> {
     Some(format!("needs {}", parts.join(" + ")))
 }
 
-/// One row of the table: a "met" mark when the evidence meets it, its text, and
-/// what a part-way row still needs.
-fn table_line(row: &TableRow, met: bool, hint: Option<String>, muted: Hsla) -> Div {
-    let mark = div().w(px(52.)).flex_none().when(met, |cell| {
-        cell.child(
-            div()
-                .px_2()
-                .rounded_sm()
-                .text_xs()
-                .font_weight(FontWeight::BOLD)
-                .bg(direction_colour(row.side))
-                .text_color(direction_ink())
-                .child("✓ met"),
+/// For each need of a row, how many criteria the evidence holds towards it and
+/// how many it asks for: one dot per criterion, filled when held. Extra
+/// criteria never overflow a need.
+fn pips(row: &TableRow, counts: &Counts) -> Vec<(usize, usize)> {
+    let short = row.shortfall(counts);
+    row.needs
+        .iter()
+        .map(|need| {
+            let missing = short.iter().find(|s| s.strength == need.strength).map_or(0, |s| s.at_least);
+            (need.at_least - missing, need.at_least)
+        })
+        .collect()
+}
+
+/// Rows the evidence meets in one class group, and how many rows the group has.
+fn tally(class: Class, met: &[&TableRow]) -> (usize, usize) {
+    let rows = TABLE_ROWS.iter().filter(|row| row.class == class).count();
+    (met.iter().filter(|row| row.class == class).count(), rows)
+}
+
+/// One row of the table: a check when the evidence meets it, its text, a note
+/// for the ClinGen row and what a part-way row still needs, and one dot per
+/// criterion it asks for, filled where the evidence holds one.
+fn table_line(row: &TableRow, met: bool, hint: Option<String>, counts: &Counts, cx: &App) -> Div {
+    let theme = cx.theme();
+    let (ink, muted) = (theme.foreground, theme.muted_foreground);
+    let colour = direction_colour(row.side);
+    let mark =
+        div().size(px(18.)).flex_none().flex().items_center().justify_center().rounded_full().when(met, |mark| {
+            mark.bg(colour).text_color(direction_ink()).text_xs().font_weight(FontWeight::BOLD).child("✓")
+        });
+    let notes: Vec<String> =
+        row.clingen_2020_addition.then(|| "added by ClinGen in 2020".to_string()).into_iter().chain(hint).collect();
+    let words = div()
+        .flex_1()
+        .min_w_0()
+        .flex()
+        .flex_col()
+        .child(
+            figure(12.)
+                .text_color(if met { ink } else { muted })
+                .when(!met, |text| text.font_weight(FontWeight::NORMAL))
+                .child(if met { format!("{} · met", row.text()) } else { row.text() }),
         )
-    });
-    let text =
-        div().text_xs().when(met, |text| text.font_weight(FontWeight::BOLD)).when(!met, |text| text.text_color(muted));
+        .when(!notes.is_empty(), |words| words.child(caption(muted).child(notes.join(" · "))));
+    let mut dots = div().flex_none().flex().items_center().gap(px(8.));
+    for (held, asked) in pips(row, counts) {
+        let group = (0..asked).map(|i| {
+            let dot = div().size(px(7.)).rounded_full();
+            if i < held { dot.bg(colour) } else { dot.border_1().border_color(muted.opacity(0.6)) }
+        });
+        dots = dots.child(div().flex().gap(px(3.)).children(group));
+    }
     div()
         .flex()
         .items_center()
-        .gap_2()
-        .h(px(22.))
+        .gap_3()
+        .px_2()
+        .py(px(6.))
+        .rounded(px(7.))
+        .when(met, |line| line.bg(theme.popover))
         .child(mark)
-        .child(text.child(row.text()))
-        .when(row.clingen_2020_addition, |line| line.child(caption(muted).child("added by ClinGen in 2020")))
-        .when_some(hint, |line, hint| line.child(caption(muted).child(hint)))
+        .child(words)
+        .child(dots)
 }
 
 impl Workbench {
     /// The 2015 combining table with the rows the evidence meets marked. Shown
     /// only where the class is shown, like the points scale.
     pub(super) fn combining_table(&self, result: &Assessment, cx: &mut Context<Self>) -> AnyElement {
-        let (border, muted) = (cx.theme().border, cx.theme().muted_foreground);
-        let dark = cx.theme().is_dark();
+        let muted = cx.theme().muted_foreground;
         let counts = Counts::from_items(&result.items);
         // The classes the evidence already has. A row that would give one of them
         // again is worth no hint: adding to it would change nothing.
         let given: Vec<Class> = result.table_rows.iter().map(|row| row.class).collect();
-        let mut table = div().flex().flex_col().gap_1();
-        for class in GROUPS {
-            let mut group = div().flex().flex_col().border_t_1().border_color(border).pt_1().child(
-                div().flex().child(
-                    div()
-                        .px_2()
-                        .rounded_sm()
-                        .text_xs()
-                        .font_weight(FontWeight::BOLD)
-                        .bg(class_fill(class, dark))
-                        .text_color(class_ink(class, dark))
-                        .child(class.label()),
-                ),
-            );
-            for row in TABLE_ROWS.iter().filter(|row| row.class == class) {
-                let met = result.table_rows.contains(&row);
-                group = group.child(table_line(row, met, hint(row, &counts, &given), muted));
-            }
-            table = table.child(group);
-        }
+        let groups = GROUPS.into_iter().map(|class| {
+            let rows = TABLE_ROWS
+                .iter()
+                .filter(|row| row.class == class)
+                .map(|row| table_line(row, result.table_rows.contains(&row), hint(row, &counts, &given), &counts, cx));
+            crate::look::card(cx)
+                .flex_1()
+                .min_w(px(300.))
+                .flex()
+                .flex_col()
+                .gap_1()
+                .child(group_head(class, tally(class, &result.table_rows), cx))
+                .children(rows)
+        });
         div()
             .flex()
             .flex_col()
-            .gap_2()
-            .child(caption(muted).child(summary(result)))
-            .child(table)
-            .child(
-                caption(muted).child(
-                    "≥ means \"at least\". Each row lists what the evidence on one side must hold. A row that is part of the way met says what it still needs.",
-                ),
-            )
+            .gap_3()
+            .child(div().text_sm().child(summary(result)))
+            .child(div().flex().flex_wrap().gap_3().children(groups))
+            .child(caption(muted).child(
+                "≥ means \"at least\". Each row lists what the evidence on one side must hold; each dot is one criterion it asks for, filled where your evidence holds one. A row that is part of the way met says what it still needs.",
+            ))
             .into_any_element()
     }
+}
+
+/// The class a group gives, on its own colour, and how many of its rows are met.
+fn group_head(class: Class, (met, rows): (usize, usize), cx: &App) -> Div {
+    let dark = cx.theme().is_dark();
+    let count = if met == 0 { format!("{rows} rows") } else { format!("{met} of {rows} met") };
+    div()
+        .flex()
+        .items_center()
+        .justify_between()
+        .pb_1()
+        .child(
+            div()
+                .px_2()
+                .py(px(2.))
+                .rounded_full()
+                .text_xs()
+                .font_weight(FontWeight::SEMIBOLD)
+                .bg(class_fill(class, dark))
+                .text_color(class_ink(class, dark))
+                .child(class.label()),
+        )
+        .child(crate::look::eyebrow(count, cx))
 }
 
 #[cfg(test)]
@@ -163,7 +216,7 @@ mod tests {
     use classivar_core::TABLE_ROWS;
     use classivar_core::combining_table::{self, Counts};
 
-    use super::{hint, is_shown, summary};
+    use super::{hint, is_shown, pips, summary};
 
     /// Four Strong pathogenic criteria (16 points) against two Strong benign ones (−8):
     /// rows are met on both sides, and the points alone would say Likely pathogenic.
@@ -208,6 +261,23 @@ mod tests {
         ]);
         assert!(!contradiction.conflicts.is_empty() && contradiction.both_sides_met);
         assert!(!is_shown(&contradiction));
+    }
+
+    fn row(text: &str) -> &'static classivar_core::TableRow {
+        TABLE_ROWS.iter().find(|row| row.text() == text).expect(text)
+    }
+
+    #[test]
+    fn the_dots_show_how_much_of_each_need_the_evidence_holds() {
+        let counts = Counts { very_strong: 1, moderate: 3, ..Counts::default() };
+        assert_eq!(
+            pips(row("≥1 Very strong + ≥2 Moderate"), &counts),
+            [(1, 1), (2, 2)],
+            "more than needed fills, never overflows"
+        );
+        assert_eq!(pips(row("≥1 Very strong + ≥1 Strong"), &counts), [(1, 1), (0, 1)]);
+        assert_eq!(pips(row("≥2 Strong"), &counts), [(0, 2)]);
+        assert_eq!(pips(row("≥1 Stand-alone"), &counts), [(0, 1)], "pathogenic evidence fills no benign dot");
     }
 
     fn hint_for(row_text: &str, counts: &Counts, given: &[Class]) -> Option<String> {

@@ -12,6 +12,7 @@
 
 use super::*;
 
+mod block_tip;
 mod column;
 mod combining_table;
 mod criteria;
@@ -28,6 +29,7 @@ mod history;
 mod insights;
 mod inspector;
 mod lanes;
+mod makeup;
 mod picture;
 mod point_axis;
 mod rail;
@@ -44,11 +46,6 @@ mod verdict;
 mod welcome;
 mod welcome_more;
 mod what_if;
-
-/// A section heading in the results pane.
-fn heading(text: impl Into<SharedString>) -> Div {
-    div().text_base().font_weight(FontWeight::SEMIBOLD).pb_3().child(text.into())
-}
 
 impl Workbench {
     /// Today's evidence, scored. An earlier record is scored the way it was made, as in the history table.
@@ -89,14 +86,7 @@ impl Workbench {
 
 impl Workbench {
     fn workspace(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        // While a question waits on screen, it owns the keyboard: the question
-        // window takes the focus, and Tab cannot walk out to the controls
-        // behind it. Enter and Space keep their normal meaning on whichever
-        // control inside the window has the focus; Escape (and the window's
-        // Cancel button) is handled by the global key observer.
-        if self.confirm.is_some() && !self.confirm_focus.is_focused(window) {
-            window.focus(&self.confirm_focus, cx);
-        }
+        self.hold_focus_for_question(window, cx);
         if self.welcome && !self.has_case_data(cx) {
             return self.welcome_screen(cx);
         }
@@ -108,12 +98,7 @@ impl Workbench {
         let (incomplete, reevaluation) = self.compare_with_records();
         let variant = self.variant_name(cx);
         let (background, foreground) = (cx.theme().background, cx.theme().foreground);
-        let (width, height) = (f32::from(window.viewport_size().width), f32::from(window.viewport_size().height));
-        let (rail, sheet) = (width >= rail::RAIL_FROM, if self.reading { 0. } else { sheet_width(width) });
-        self.rail_shown.set(rail);
-        self.stage_width.set(stage_width(width, rail, sheet));
-        // The top bar, the banner, the stage toolbar and the class readout under the dial take about 330 px.
-        self.stage_height.set(height - 330.);
+        let (rail, sheet) = self.measure_stage(window);
         let middle = div().flex_1().min_w_0().h_full().flex().flex_col().child(self.results_panel(
             &result,
             reevaluation.as_ref(),
@@ -138,20 +123,55 @@ impl Workbench {
             })
             .child(self.top_bar(cx))
             .children(self.file_status_banner(cx))
-            .child(
-                div()
-                    .flex()
-                    .flex_1()
-                    .min_h_0()
-                    .gap_4()
-                    .px_4()
-                    .pb_4()
-                    .when(rail, |body| body.child(self.rail(variant.as_deref(), cx)))
-                    .child(middle)
-                    .when(!self.reading, |body| body.child(self.criteria_panel(&result, sheet, cx))),
-            )
+            .child(self.stage_row(&result, middle, (rail, sheet), variant.as_deref(), cx))
             .children(self.confirm_modal(cx))
             .into_any_element()
+    }
+}
+
+impl Workbench {
+    /// While a question waits on screen, it owns the keyboard: the question
+    /// window takes the focus, and Tab cannot walk out to the controls behind
+    /// it. Enter and Space keep their normal meaning on whichever control
+    /// inside the window has the focus; Escape (and the window's Cancel
+    /// button) is handled by the global key observer.
+    fn hold_focus_for_question(&self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.confirm.is_some() && !self.confirm_focus.is_focused(window) {
+            window.focus(&self.confirm_focus, cx);
+        }
+    }
+
+    /// Note how much room the picture and the rail have in a window this size.
+    /// Returns whether the rail shows and how wide the editor sheet is (0 when hidden).
+    fn measure_stage(&self, window: &Window) -> (bool, f32) {
+        let (width, height) = (f32::from(window.viewport_size().width), f32::from(window.viewport_size().height));
+        let (rail, sheet) = (width >= rail::RAIL_FROM, if self.reading { 0. } else { sheet_width(width) });
+        self.rail_shown.set(rail);
+        self.stage_width.set(stage_width(width, rail, sheet));
+        // The top bar, the banner, the stage toolbar and the class readout under the dial take about 330 px.
+        self.stage_height.set(height - 330.);
+        (rail, sheet)
+    }
+
+    /// The row under the top bar: the rail, the middle panel and the editor sheet.
+    fn stage_row(
+        &self,
+        result: &Assessment,
+        middle: Div,
+        (rail, sheet): (bool, f32),
+        variant: Option<&str>,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        div()
+            .flex()
+            .flex_1()
+            .min_h_0()
+            .gap_4()
+            .px_4()
+            .pb_4()
+            .when(rail, |body| body.child(self.rail(variant, cx)))
+            .child(middle)
+            .when(!self.reading, |body| body.child(self.criteria_panel(result, sheet, cx)))
     }
 }
 
@@ -167,10 +187,10 @@ impl Render for Workbench {
     }
 }
 
-/// A section of the explanation inside the stage: a hairline above it and room
-/// around it, rather than another grey box.
-fn explanation_section(cx: &Context<Workbench>) -> Div {
-    div().pt_6().border_t_1().border_color(cx.theme().border)
+/// A section of the explanation inside the stage: its label and title, then its
+/// content (usually a card). Space separates sections, not lines.
+fn explanation_section(label: &str, title: &str, cx: &Context<Workbench>) -> Div {
+    div().pt_4().flex().flex_col().gap_3().child(crate::look::section_head(label, title, cx))
 }
 
 /// The width of the criteria sheet at the right for a window `window` pixels wide.

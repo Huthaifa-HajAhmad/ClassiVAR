@@ -64,69 +64,58 @@ fn picture_note(picture: Picture) -> &'static str {
     }
 }
 
+/// The name of a picture (marked when chosen) and a line about it.
+fn picture_words(picture: Picture, chosen: bool, (ink, muted): (Hsla, Hsla)) -> Div {
+    let name = if chosen { format!("{} · chosen", picture.name()) } else { picture.name().to_string() };
+    div()
+        .flex_1()
+        .min_w_0()
+        .flex()
+        .flex_col()
+        .items_start()
+        .gap_1()
+        .child(div().text_base().font_weight(FontWeight::SEMIBOLD).text_color(ink).child(name))
+        .child(div().w_full().text_xs().text_color(muted).whitespace_normal().text_left().child(picture_note(picture)))
+}
+
 impl Workbench {
     /// Three cards, one per picture; the one chosen is marked, and the choice is remembered.
     pub(super) fn picture_choices(&self, cx: &mut Context<Self>) -> Div {
-        let theme = cx.theme();
-        let (ink, muted, line, dark) = (theme.foreground, theme.muted_foreground, theme.border, theme.is_dark());
         let mut row = div().flex().flex_wrap().gap_4();
         for picture in Picture::ALL {
-            let chosen = self.picture == picture;
-            row = row.child(
-                Button::new(SharedString::from(format!("welcome-picture-{}", picture.name().to_lowercase())))
-                    .ghost()
-                    .flex_1()
-                    .min_w(px(200.))
-                    .h_auto()
-                    .p_4()
-                    .rounded(px(crate::look::CARD_RADIUS))
-                    .bg(theme.popover)
-                    .border_1()
-                    .border_color(if chosen { ink } else { line })
-                    .accessibility_label(format!("Draw the class as a {}", picture.name().to_lowercase()))
-                    .selected(chosen)
-                    .toggled(chosen)
-                    .child(
-                        div()
-                            .w_full()
-                            .flex()
-                            .items_center()
-                            .gap_4()
-                            .child(div().w(px(96.)).flex().justify_center().child(sketch(picture, dark)))
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .min_w_0()
-                                    .flex()
-                                    .flex_col()
-                                    .items_start()
-                                    .gap_1()
-                                    .child(div().text_base().font_weight(FontWeight::SEMIBOLD).text_color(ink).child(
-                                        if chosen {
-                                            format!("{} · chosen", picture.name())
-                                        } else {
-                                            picture.name().to_string()
-                                        },
-                                    ))
-                                    .child(
-                                        div()
-                                            .w_full()
-                                            .text_xs()
-                                            .text_color(muted)
-                                            .whitespace_normal()
-                                            .text_left()
-                                            .child(picture_note(picture)),
-                                    ),
-                            ),
-                    )
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.picture = picture;
-                        crate::settings::save_picture(picture);
-                        cx.notify();
-                    })),
-            );
+            row = row.child(self.picture_card(picture, cx));
         }
         div().flex().flex_col().gap_3().child(eyebrow("Choose how the class is drawn", cx)).child(row)
+    }
+
+    /// One picture's card: a small drawing, its name and a line about it.
+    fn picture_card(&self, picture: Picture, cx: &mut Context<Self>) -> Button {
+        let theme = cx.theme();
+        let (ink, muted, line, dark) = (theme.foreground, theme.muted_foreground, theme.border, theme.is_dark());
+        let chosen = self.picture == picture;
+        Button::new(SharedString::from(format!("welcome-picture-{}", picture.name().to_lowercase())))
+            .ghost()
+            .flex_1()
+            .min_w(px(200.))
+            .h_auto()
+            .p_4()
+            .rounded(px(crate::look::CARD_RADIUS))
+            .bg(theme.popover)
+            .border_1()
+            .border_color(if chosen { crate::look::edge(cx) } else { line })
+            .accessibility_label(format!("Draw the class as a {}", picture.name().to_lowercase()))
+            .selected(chosen)
+            .toggled(chosen)
+            .child(
+                div()
+                    .w_full()
+                    .flex()
+                    .items_center()
+                    .gap_4()
+                    .child(div().w(px(96.)).flex().justify_center().child(sketch(picture, dark)))
+                    .child(picture_words(picture, chosen, (ink, muted))),
+            )
+            .on_click(cx.listener(move |this, _, _, cx| this.choose_picture(picture, cx)))
     }
 
     /// What the app does and what it does not, in three short statements.

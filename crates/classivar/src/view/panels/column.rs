@@ -16,11 +16,16 @@ use std::time::Duration;
 
 use classivar_core::Assessment;
 
+use super::block_tip::floating;
 use super::evidence_stack::{Step, bars, steps};
 use super::point_axis::{fraction, points_text, widened};
 use super::*;
 use crate::look::{MONO, figure};
 use crate::view::describe::Scale;
+mod layout;
+mod parts;
+use layout::{Arrangement, CAPTION_OVERHANG, GAP, READOUT_MIN, arrange, tip_left};
+use parts::{bands, earlier_column, foot, marker, trail, zone_names};
 
 const HEIGHT: f32 = 360.;
 const TODAY_WIDTH: f32 = 112.;
@@ -50,11 +55,42 @@ pub(super) struct Earlier {
 }
 
 impl Workbench {
-    pub(super) fn column(&self, result: &Assessment, class: Class, cx: &mut Context<Self>) -> AnyElement {
+    /// The class readout and the column. Beside each other while the readout keeps its
+    /// room; otherwise the readout goes above and the column scrolls sideways if it must.
+    pub(super) fn column_with_readout(
+        &self,
+        readout: Div,
+        result: &Assessment,
+        class: Class,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let earlier = self.earlier_totals();
+        let stage = self.stage_width.get();
+        let column = self.column(result, class, &earlier, tip_left(earlier.len(), stage), cx);
+        match arrange(stage, earlier.len()) {
+            Arrangement::Beside => {
+                div().flex().items_center().gap(px(GAP)).child(readout.flex_1().min_w(px(READOUT_MIN))).child(column)
+            }
+            Arrangement::Stacked => div()
+                .flex()
+                .flex_col()
+                .gap_4()
+                .child(readout)
+                .child(div().id("column-scroll").overflow_x_scroll().pl(px(CAPTION_OVERHANG)).child(column)),
+        }
+    }
+
+    fn column(
+        &self,
+        result: &Assessment,
+        class: Class,
+        earlier: &[Earlier],
+        tip_at: f32,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let theme = cx.theme();
         let (dark, ink, muted) = (theme.is_dark(), theme.foreground, theme.muted_foreground);
         let steps = steps(&result.items);
-        let earlier = self.earlier_totals();
         let scale = widened(&scale_for(self.rules), &bars(&steps));
         let left = earlier.len() as f32 * EARLIER_PITCH;
         let width = left + TODAY_WIDTH + LABEL_ROOM;
@@ -74,8 +110,10 @@ impl Workbench {
                 .collect();
             picture = picture.child(trail(dots, ink));
         }
+        let tip = self.column_tip(result, &steps, &scale, tip_at, cx);
         picture
             .child(self.capsule(&steps, result.total_points, &scale, class, left, cx))
+            .children(tip)
             .child(zone_names(&scale, class, left + TODAY_WIDTH + 12., (ink, muted)))
             .child(foot("Today", "your evidence", left, TODAY_WIDTH, ink, muted))
             .into_any_element()
@@ -128,9 +166,11 @@ impl Workbench {
         let colour = direction_colour(step.direction);
         let ink = cx.theme().foreground;
         let tall = height * HEIGHT >= 15.;
-        let code = step.code.clone();
+        let (code, hover) = (step.code.clone(), step.code.clone());
+        let selector = format!("column-{}", step.code);
         div()
-            .id(SharedString::from(format!("column-{}", step.code)))
+            .id(SharedString::from(selector.clone()))
+            .debug_selector(move || selector)
             .absolute()
             .left(px(10.))
             .right(px(10.))
@@ -138,7 +178,9 @@ impl Workbench {
             .h(relative(height))
             .py(px(1.))
             .cursor_pointer()
+            .hover(|style| style.opacity(0.88))
             .on_click(cx.listener(move |this, _, _, cx| this.choose_block(&code, cx)))
+            .on_hover(cx.listener(move |this, over: &bool, _, cx| this.hover_over(&hover, *over, cx)))
             .child(
                 div()
                     .size_full()
@@ -164,6 +206,23 @@ impl Workbench {
             .into_any_element()
     }
 
+    /// The hover card for the block under the pointer, at the block's height and `tip_at` across (see `layout::tip_left`).
+    fn column_tip(
+        &self,
+        result: &Assessment,
+        steps: &[Step],
+        scale: &Scale,
+        tip_at: f32,
+        cx: &App,
+    ) -> Option<AnyElement> {
+        let code = self.hovered.as_deref()?;
+        let step = steps.iter().find(|step| step.code == code)?;
+        let card = self.block_tip(result, code, cx)?;
+        let (top, height) = span(step.from.min(step.to), step.from.max(step.to), scale);
+        let middle = (top + height / 2.) * HEIGHT;
+        Some(floating(card, (tip_at, (middle - 48.).clamp(0., HEIGHT - 96.))))
+    }
+
     /// The total of each earlier report whose class is shown, oldest first. A
     /// report with a withheld class or no counted evidence is left out, so the
     /// picture never places a class the engine does not give.
@@ -184,171 +243,6 @@ impl Workbench {
         out.sort_by_key(|report| report.year);
         out
     }
-}
-
-/// The class bands as stacked fills, the class shown (if any) in full colour.
-/// The end bands carry the rounded corners, since a clip does not round its children.
-fn bands(scale: &Scale, class: Option<Class>, dark: bool, corner: f32) -> Vec<Div> {
-    let last = scale.zones.len().saturating_sub(1);
-    scale
-        .zones
-        .iter()
-        .enumerate()
-        .map(|(i, (zone, from, to))| {
-            let (top, height) = span(*from, *to, scale);
-            let alpha = if class == Some(*zone) {
-                1.0
-            } else if class.is_some() {
-                0.6
-            } else {
-                0.4
-            };
-            div()
-                .absolute()
-                .left_0()
-                .w_full()
-                .top(relative(top))
-                .h(relative(height))
-                .bg(Rgba { a: alpha, ..class_fill(*zone, dark) })
-                .when(i == last, |band| band.rounded_t(px(corner)))
-                .when(i == 0, |band| band.rounded_b(px(corner)))
-        })
-        .collect()
-}
-
-fn earlier_column(report: &Earlier, left: f32, scale: &Scale, dark: bool, (ink, muted): (Hsla, Hsla)) -> Div {
-    let at = level(report.total, scale) * HEIGHT;
-    div()
-        .child(
-            div()
-                .absolute()
-                .left(px(left))
-                .top_0()
-                .w(px(EARLIER_WIDTH))
-                .h(px(HEIGHT))
-                .rounded(px(15.))
-                .overflow_hidden()
-                .children(bands(scale, None, dark, 15.)),
-        )
-        .child(
-            div()
-                .absolute()
-                .left(px(left + EARLIER_WIDTH / 2. - 6.))
-                .top(px(at - 6.))
-                .size(px(12.))
-                .rounded_full()
-                .bg(ink),
-        )
-        .child(
-            figure(11.)
-                .absolute()
-                .left(px(left - 10.))
-                .w(px(EARLIER_WIDTH + 20.))
-                .top(px(at - 24.))
-                .flex()
-                .justify_center()
-                .text_color(ink)
-                .child(points_text(report.total)),
-        )
-        .child(foot(&report.name, &report.year.to_string(), left - 17., EARLIER_WIDTH + 34., ink, muted))
-}
-
-/// The name under a column, cut short rather than wrapped.
-fn foot(name: &str, note: &str, left: f32, width: f32, ink: Hsla, muted: Hsla) -> Div {
-    div()
-        .absolute()
-        .left(px(left))
-        .w(px(width))
-        .top(px(HEIGHT + 8.))
-        .flex()
-        .flex_col()
-        .items_center()
-        .text_xs()
-        .child(
-            div()
-                .w_full()
-                .truncate()
-                .text_center()
-                .text_color(ink)
-                .font_weight(FontWeight::SEMIBOLD)
-                .child(name.to_string()),
-        )
-        .child(div().w_full().truncate().text_center().text_color(muted).child(note.to_string()))
-}
-
-/// The total as a line across the capsule with its value at the right; outlined when `paper` is `None` (the preview).
-fn marker(points: i32, scale: &Scale, left: f32, ink: Hsla, paper: Option<Hsla>) -> Div {
-    let at = level(points, scale) * HEIGHT;
-    let sign = if points > 0 { "+" } else { "" };
-    let tag = figure(13.)
-        .absolute()
-        .left(px(left + TODAY_WIDTH + 8.))
-        .top(px(at - 11.))
-        .px_2()
-        .h(px(22.))
-        .flex()
-        .items_center()
-        .rounded_full()
-        .child(format!("{sign}{}", points_text(points)));
-    let tag = match paper {
-        Some(paper) => tag.bg(ink).text_color(paper),
-        None => tag.border_1().border_dashed().border_color(ink).text_color(ink),
-    };
-    div()
-        .child(
-            div()
-                .absolute()
-                .left(px(left - 6.))
-                .w(px(TODAY_WIDTH + 12.))
-                .top(px(at - 1.5))
-                .h(px(3.))
-                .rounded_full()
-                .bg(ink)
-                .when(paper.is_none(), |line| line.opacity(0.5)),
-        )
-        .child(tag)
-}
-
-/// The band names beside the capsule, and the point value at each class limit.
-fn zone_names(scale: &Scale, class: Class, left: f32, (ink, muted): (Hsla, Hsla)) -> Div {
-    let mut names = div();
-    for (zone, from, to) in &scale.zones {
-        let middle = (level(*from, scale) + level(*to, scale)) / 2. * HEIGHT;
-        let active = *zone == class;
-        names = names.child(
-            figure(11.)
-                .absolute()
-                .left(px(left + 40.))
-                .top(px(middle - 8.))
-                .whitespace_nowrap()
-                .text_color(if active { ink } else { muted })
-                .when(!active, |d| d.font_weight(FontWeight::NORMAL))
-                .child(zone.short()),
-        );
-    }
-    names
-}
-
-/// A dotted line joining the earlier reports' dots to today's total.
-fn trail(dots: Vec<(f32, f32)>, ink: Hsla) -> impl IntoElement {
-    let dots = Rc::new(dots);
-    canvas(
-        |_, _, _| (),
-        move |bounds, _, window, _| {
-            let mut path = PathBuilder::stroke(px(1.5)).dash_array(&[px(2.), px(4.)]);
-            for (i, (x, y)) in dots.iter().enumerate() {
-                let at = point(bounds.origin.x + px(*x), bounds.origin.y + px(*y));
-                if i == 0 { path.move_to(at) } else { path.line_to(at) }
-            }
-            if let Ok(path) = path.build() {
-                window.paint_path(path, ink.opacity(0.6));
-            }
-        },
-    )
-    .absolute()
-    .top_0()
-    .left_0()
-    .size_full()
 }
 
 #[cfg(test)]

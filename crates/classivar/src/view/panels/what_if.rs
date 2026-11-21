@@ -8,8 +8,11 @@
 
 use classivar_core::{Assessment, Direction};
 
-use super::point_axis::{Bar, axis, points_text, widened};
+use super::point_axis::{
+    Bar, class_strip, fluid_bar, fraction, limit_lines, points_text, signed, tick_row, widened, zone_labels,
+};
 use super::*;
+use crate::look::{eyebrow, figure};
 
 /// The possible moves as outlined bars, up first. Empty when no class is known
 /// (the engine gives no moves then), or when the class has nowhere to go.
@@ -44,24 +47,84 @@ fn moves(result: &Assessment) -> Vec<Bar> {
     [up, down].into_iter().flatten().collect()
 }
 
+/// Width of the column that names each move, and the height of one row.
+const LABEL_WIDTH: f32 = 92.;
+const ROW: f32 = 34.;
+
+/// One move in words, for example "Up: 1 more point of pathogenic evidence reaches Likely pathogenic."
+fn move_sentence(way: &str, kind: &str, next: classivar_core::NextClass) -> String {
+    let n = next.points_needed;
+    let verb = if n == 1 { "reaches" } else { "reach" };
+    format!("{way}: {n} more point{} of {kind} evidence {verb} {}.", plural(n), next.class.label())
+}
+
 impl Workbench {
-    /// The outlined bars with the class zones, and a line saying what they mean.
-    pub(super) fn what_if(&self, result: &Assessment, cx: &mut Context<Self>) -> AnyElement {
-        let (border, muted) = (cx.theme().border, cx.theme().muted_foreground);
+    /// What would change the class: the moves in words, then as outlined bars from the total.
+    pub(super) fn what_changes(&self, result: &Assessment, cx: &mut Context<Self>) -> AnyElement {
+        let muted = cx.theme().muted_foreground;
+        let up = result.to_upgrade.map(|next| move_sentence("Up", "pathogenic", next));
+        let down = result.to_downgrade.map(|next| move_sentence("Down", "benign", next));
         let bars = moves(result);
-        if bars.is_empty() {
-            return div().into_any_element();
-        }
-        let scale = widened(&scale_for(self.rules), &bars);
+        crate::look::card(cx)
+            .p_4()
+            .flex()
+            .flex_col()
+            .gap_4()
+            .child(div().flex().flex_col().gap_1().text_sm().children(up).children(down))
+            .when_some(result.class().filter(|_| !bars.is_empty()), |card, class| {
+                card.child(self.moves_chart(result.total_points, class, &bars, cx))
+            })
+            .child(caption(muted).child(
+                "Outlined bars are moves that are possible, not evidence that is applied. Evidence that could move the class would come from kinds of evidence you have not used yet.",
+            ))
+            .into_any_element()
+    }
+
+    /// The class strip with the total, the move up above it and the move down below it.
+    fn moves_chart(&self, total: i32, class: Class, bars: &[Bar], cx: &App) -> Div {
+        let theme = cx.theme();
+        let (ink, muted, paper, border) = (theme.foreground, theme.muted_foreground, theme.muted, theme.border);
+        let scale = widened(&scale_for(self.rules), bars);
+        let at = fraction(total, &scale);
+        let row = |label: Div, track: Div| {
+            div().flex().items_center().h(px(ROW)).child(label.w(px(LABEL_WIDTH)).flex_none()).child(
+                track.relative().flex_1().h_full().flex().items_center().children(limit_lines(&scale, border)).child(
+                    div().absolute().top_0().h_full().left(relative(at)).ml(px(-1.)).w(px(2.)).bg(ink.opacity(0.35)),
+                ),
+            )
+        };
+        let lane = |bar: &Bar| {
+            let label = div()
+                .flex()
+                .flex_col()
+                .child(figure(12.).child(bar.label.clone()))
+                .child(caption(muted).child(bar.note.clone()));
+            row(label, div().child(fluid_bar(bar, &scale, (paper, muted), 14.)))
+        };
+        let pill = figure(12.)
+            .absolute()
+            .left(relative(at))
+            .ml(px(-20.))
+            .w(px(40.))
+            .h(px(20.))
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded_full()
+            .bg(ink)
+            .text_color(theme.popover)
+            .child(signed(total));
+        let strip =
+            row(eyebrow("Now", cx), div().child(class_strip(&scale, class, (theme.popover, ink), 12.)).child(pill));
+        let (ups, downs): (Vec<&Bar>, Vec<&Bar>) = bars.iter().partition(|bar| bar.to > bar.from);
         div()
             .flex()
             .flex_col()
-            .gap_2()
-            .child(axis("what-if-scroll", &scale, &bars, border, muted))
-            .child(caption(muted).child(
-                "Outlined bars show how far the total would have to move to reach the next class. Nothing is applied.",
-            ))
-            .into_any_element()
+            .child(div().pl(px(LABEL_WIDTH)).child(zone_labels(&scale, class, (ink, muted), None)))
+            .children(ups.into_iter().map(lane))
+            .child(strip)
+            .children(downs.into_iter().map(lane))
+            .child(div().pl(px(LABEL_WIDTH)).child(tick_row(&scale, muted)))
     }
 }
 

@@ -10,6 +10,7 @@ impl Workbench {
         self.reading = false;
         self.comparison = false;
         self.inspected = None;
+        self.hovered = None;
         self.preview = false;
         self.mode = mode;
         if mode == Mode::NewVariant {

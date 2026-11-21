@@ -79,6 +79,7 @@ impl Workbench {
                 crate::look::segment(id, label, self.comparison == comparison, cx).on_click(cx.listener(
                     move |this, _, _, cx| {
                         this.comparison = comparison;
+                        this.hovered = None;
                         this.result_scroll.set_offset(point(px(0.), px(0.)));
                         this.preview = false;
                         cx.notify();
@@ -99,20 +100,17 @@ impl Workbench {
         let muted = cx.theme().muted_foreground;
         body.child(self.hero(result, variant, cx))
             .when(!result.items.is_empty(), |pane| {
-                pane.child(
-                    explanation_section(cx).child(heading("What it is made of")).child(self.evidence_lanes(result, cx)),
-                )
+                pane.child(explanation_section("Composition", "What it is made of", cx).child(self.makeup(result, cx)))
             })
             .when(combining_table::is_shown(result), |pane| {
                 pane.child(
-                    explanation_section(cx)
-                        .child(heading("What the 2015 table says"))
+                    explanation_section("2015 table", "What the 2015 table says", cx)
                         .child(self.combining_table(result, cx)),
                 )
             })
             .when(result.class().is_some(), |pane| {
                 pane.child(
-                    explanation_section(cx).child(heading("What would change it")).child(self.what_changes(result, cx)),
+                    explanation_section("Moves", "What would change it", cx).child(self.what_changes(result, cx)),
                 )
             })
             .when(result.class().is_none() && result.has_evidence, |pane| {
@@ -124,11 +122,14 @@ impl Workbench {
                 )
             })
             .when(self.has_case_data(cx), |pane| {
-                pane.child(explanation_section(cx).child(heading("Notes")).child(self.notes(result, variant, cx)))
+                pane.child(
+                    explanation_section("Notes", "Notes on this result", cx).child(self.notes(result, variant, cx)),
+                )
             })
             .when(result.class().is_some(), |pane| {
                 pane.child(
-                    div().child(heading("About these rules")).child(caption(muted).child(rules_about_text(self.rules))),
+                    explanation_section("Rules", "About these rules", cx)
+                        .child(caption(muted).child(rules_about_text(self.rules))),
                 )
             })
             .into_any_element()
@@ -143,37 +144,46 @@ impl Workbench {
         variant: Option<&str>,
         cx: &mut Context<Self>,
     ) -> Vec<Div> {
-        let border = cx.theme().border;
-        let mut sections = vec![div().child(heading("Verdict against the latest report")).child(self.verdict_card(
-            reevaluation.filter(|_| incomplete.is_empty()),
-            incomplete,
-            cx,
-        ))];
+        let mut sections =
+            vec![explanation_section("Verdict", "Verdict against the latest report", cx).child(self.verdict_card(
+                reevaluation.filter(|_| incomplete.is_empty()),
+                incomplete,
+                cx,
+            ))];
         if let Some(re) = reevaluation {
             if let Some(focus) = self.report_focus(re, cx) {
                 sections.insert(0, focus);
             }
             if incomplete.is_empty() && re.verdict.is_some() {
                 sections.push(
-                    div().child(heading("What changed since the latest record")).child(self.reasons_list(re, cx)),
+                    explanation_section("Changes", "What changed since the latest record", cx)
+                        .child(self.reasons_list(re, cx)),
                 );
             }
             if !re.records.is_empty() {
                 if re.today.as_ref().is_ok_and(|today| today.class().is_some()) {
-                    sections
-                        .push(div().child(heading("Records against today, in points")).child(self.timeline(re, cx)));
+                    sections.push(
+                        explanation_section("Timeline", "Records against today, in points", cx)
+                            .child(self.timeline(re, cx)),
+                    );
                 }
-                sections.push(div().child(heading("History against today's rules")).child(self.history_table(re, cx)));
+                sections.push(
+                    explanation_section("History", "History against today's rules", cx)
+                        .child(crate::look::card(cx).p_4().child(self.history_table(re, cx))),
+                );
             }
             // Today's own notes stay visible while a record is being edited.
             if let (Editing::Record(_), Ok(today)) = (self.editing, &re.today) {
-                sections.push(div().child(heading("Notes on your evidence")).child(self.notes(today, variant, cx)));
+                sections.push(
+                    explanation_section("Notes", "Notes on your evidence", cx).child(self.notes(today, variant, cx)),
+                );
             }
         }
         if self.learning && self.records.iter().any(|r| r.class == Some(Class::Vus)) {
-            sections.push(div().child(heading("What the VUS sub-tiers mean")).child(self.tier_reference(cx)));
+            sections.push(
+                explanation_section("Reference", "What the VUS sub-tiers mean", cx).child(self.tier_reference(cx)),
+            );
         }
-        sections.push(div().pt_2().border_t_1().border_color(border));
         sections
     }
 

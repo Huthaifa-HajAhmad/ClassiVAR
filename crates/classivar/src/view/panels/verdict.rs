@@ -13,23 +13,8 @@ impl Workbench {
         let (border, muted) = (cx.theme().border, cx.theme().muted_foreground);
         let card = crate::look::card(cx).flex().flex_col().gap_2().p_4();
         let warn = |text: String| notice(text, warning_fill(), warning_ink());
-
         let Some(re) = re else {
-            return card
-                .child(warn(format!(
-                    "Choose the class each record reported to get a verdict. Missing for: {}.",
-                    incomplete.join(", ")
-                )))
-                .when_some(self.records.iter().position(|r| r.class.is_none()), |card, index| {
-                    card.child(Button::new("edit-incomplete-report").small().label("Edit unfinished report").on_click(
-                        cx.listener(move |this, _, window, cx| {
-                            this.reading = false;
-                            this.show_record(index, window, cx);
-                            cx.notify();
-                        }),
-                    ))
-                })
-                .into_any_element();
+            return self.unfinished_card(card, incomplete, cx);
         };
         let today = match &re.today {
             Ok(today) => today,
@@ -59,6 +44,25 @@ impl Workbench {
         .child(div().text_sm().child(detail))
         .children(self.reported_tier_note(latest))
         .child(caption(muted).child("This is a candidate for you to review, not a decision. Check each change below."))
+        .into_any_element()
+    }
+
+    /// The card shown while a record has no class yet: it names them and offers to edit the first.
+    fn unfinished_card(&self, card: Div, incomplete: &[String], cx: &mut Context<Self>) -> AnyElement {
+        card.child(notice(
+            format!("Choose the class each record reported to get a verdict. Missing for: {}.", incomplete.join(", ")),
+            warning_fill(),
+            warning_ink(),
+        ))
+        .when_some(self.records.iter().position(|r| r.class.is_none()), |card, index| {
+            card.child(Button::new("edit-incomplete-report").small().label("Edit unfinished report").on_click(
+                cx.listener(move |this, _, window, cx| {
+                    this.reading = false;
+                    this.show_record(index, window, cx);
+                    cx.notify();
+                }),
+            ))
+        })
         .into_any_element()
     }
 

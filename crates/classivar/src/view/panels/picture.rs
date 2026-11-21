@@ -23,14 +23,19 @@ impl Workbench {
                 let id = format!("picture-{}", picture.name().to_lowercase());
                 segment(id, picture.name(), self.picture == picture, cx)
                     .accessibility_label(format!("Show the class as a {}", picture.name().to_lowercase()))
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.picture = picture;
-                        crate::settings::save_picture(picture);
-                        cx.notify();
-                    }))
+                    .on_click(cx.listener(move |this, _, _, cx| this.choose_picture(picture, cx)))
             })
             .collect();
         segmented(buttons, cx)
+    }
+
+    /// Show the class in `picture` and remember the choice. A hover card belongs to the picture
+    /// it was opened on, so it is dropped.
+    pub(super) fn choose_picture(&mut self, picture: Picture, cx: &mut Context<Self>) {
+        self.picture = picture;
+        self.hovered = None;
+        crate::settings::save_picture(picture);
+        cx.notify();
     }
 
     /// The class in the chosen picture, the readout, and the buttons that select a block.
@@ -43,12 +48,7 @@ impl Workbench {
                 let dial = self.dial(result, Some(class), (width, height), true, cx);
                 div().flex().flex_col().items_center().gap_2().child(dial).child(readout)
             }
-            Picture::Column => div()
-                .flex()
-                .items_center()
-                .gap_8()
-                .child(readout.flex_1().min_w(px(200.)))
-                .child(self.column(result, class, cx)),
+            Picture::Column => self.column_with_readout(readout, result, class, cx),
             Picture::Track => {
                 div().flex().flex_col().gap_4().child(readout).child(self.evidence_track(result, class, cx))
             }

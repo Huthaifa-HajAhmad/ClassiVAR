@@ -1,10 +1,8 @@
-//! Bars drawn on the points scale's own axis. "How the points add up" and the
-//! "what if" lines under "What would change it" and the records timeline all use
-//! them, so a point is the same width in each, and the class limits sit at the same point values as on
-//! the scale above. When the bars run past the scale the axis is widened (see
-//! `widened`), so the picture is wider than the scale and the class limits are
-//! read from the point values printed under the zones rather than from their
-//! position.
+//! The points axis that the pictures share: the track, the column, the "what if"
+//! moves under "What would change it" and the records timeline. Every one places
+//! points with `fraction`, so a class limit sits at the same share of the width
+//! in each. When the bars run past the scale the axis is widened (see `widened`),
+//! and the point value at each limit is printed under the zones.
 //!
 //! A bar can be filled (evidence that is applied) or outlined (a move that is only
 //! possible). That is the one visual difference, and each bar also says it in words.
@@ -14,14 +12,15 @@ use classivar_core::Direction;
 use super::*;
 use crate::view::describe::Scale;
 
-/// Width of the column with a bar's label and note, and of the one with where it ends.
-const LABEL_WIDTH: f32 = 96.0;
-const END_WIDTH: f32 = 72.0;
-
 /// A number of points with a real minus sign when it is negative ("−1", not "-1"),
 /// the same way the rest of the screen writes benign points.
 pub(super) fn points_text(points: i32) -> String {
     if points < 0 { format!("−{}", points.unsigned_abs()) } else { points.to_string() }
+}
+
+/// A signed number of points: "+4", "−4" or "0".
+pub(super) fn signed(points: i32) -> String {
+    if points > 0 { format!("+{points}") } else { points_text(points) }
 }
 
 /// One bar from `from` points to `to` points (either may be the larger).
@@ -61,113 +60,76 @@ pub(super) fn widened(scale: &Scale, bars: &[Bar]) -> Scale {
     Scale { min, max, zones }
 }
 
-/// The class zones above the bars, on the same axis as the points scale.
-fn zone_header(scale: &Scale, border: Hsla, muted: Hsla) -> Div {
-    let mut zones = div().flex().pl(px(LABEL_WIDTH));
-    for (class, from, to) in &scale.zones {
-        zones = zones.child(
-            div()
-                .w(px((to - from) as f32 * SCALE_UNIT))
-                .flex()
-                .justify_center()
-                .overflow_hidden()
-                .border_l_1()
-                .border_color(border)
-                .child(caption(muted).child(class.short())),
-        );
-    }
-    zones
+/// A thin line at every class limit, across a fluid row, so a bar can be read against the limits.
+pub(super) fn limit_lines(scale: &Scale, colour: Hsla) -> Vec<Div> {
+    scale
+        .zones
+        .iter()
+        .skip(1)
+        .map(|(_, from, _)| {
+            div().absolute().top_0().h_full().left(relative(fraction(*from, scale))).w(px(1.)).bg(colour)
+        })
+        .collect()
 }
 
-/// The point value at each class limit, under the zones, so a limit can be read
-/// off the picture the way it can be on the scale above. The first limit is left
-/// out: its label would hang off the left edge of the axis.
-fn tick_values(scale: &Scale) -> Vec<i32> {
-    scale.zones.iter().skip(1).map(|(_, from, _)| *from).collect()
-}
-
-fn ticks(scale: &Scale, muted: Hsla) -> Div {
-    let x_of = |points: i32| (points - scale.min) as f32 * SCALE_UNIT;
-    let mut marks = div().relative().w(px(x_of(scale.max))).h(px(16.));
-    for value in tick_values(scale) {
-        marks = marks.child(
+/// The class zones as one rounded strip across a fluid row, on the panel colour
+/// so a pale class still shows on a card. The class shown is in full colour with
+/// an ink edge (like the dial's rim); the others are quieter.
+pub(super) fn class_strip(scale: &Scale, class: Class, (paper, ink): (Hsla, Hsla), height: f32) -> Div {
+    let dark = paper.l < 0.5;
+    let mut strip = div().relative().w_full().h(px(height)).rounded_full().overflow_hidden().bg(paper);
+    for (zone, from, to) in &scale.zones {
+        let (left, width) = reach(*from, *to, scale);
+        let active = class == *zone;
+        strip = strip.child(
             div()
                 .absolute()
-                .left(px(x_of(value) - 10.))
-                .w(px(20.))
-                .flex()
-                .justify_center()
-                .text_xs()
-                .text_color(muted)
-                .child(value.to_string()),
+                .top_0()
+                .h_full()
+                .left(relative(left))
+                .w(relative(width))
+                .bg(Rgba { a: if active { 1.0 } else { 0.4 }, ..class_fill(*zone, dark) })
+                .when(active, |zone| zone.border_2().border_color(ink.opacity(crate::look::EDGE_STRENGTH))),
         );
     }
-    div().pl(px(LABEL_WIDTH)).child(marks)
+    strip
 }
 
-/// One bar with its label, its note and where it ends. Thin lines mark the class
-/// limits so the bar can be read against them.
-pub(super) fn bar_row(bar: &Bar, scale: &Scale, border: Hsla, muted: Hsla, label: impl IntoElement) -> Div {
-    let x_of = |points: i32| (points - scale.min) as f32 * SCALE_UNIT;
-    let (left, right) = (bar.from.min(bar.to), bar.from.max(bar.to));
-    let mut track = div().relative().flex_none().w(px(x_of(scale.max))).h(px(36.));
-    for edge in scale.zones.iter().map(|(_, from, _)| *from) {
-        track = track.child(div().absolute().top(px(0.)).left(px(x_of(edge))).w(px(1.)).h_full().bg(border));
-    }
-    let colour: Rgba = if bar.neutral { muted.into() } else { direction_colour(bar.direction) };
-    track = track.child(
-        div()
-            .absolute()
-            .top(px(9.))
-            .left(px(x_of(left)))
-            .w(px(((right - left) as f32 * SCALE_UNIT).max(3.)))
-            .h(px(18.))
-            .rounded_sm()
-            .when(!bar.hollow, |fill| fill.bg(colour))
-            .when(bar.hollow, |outline| outline.border_2().border_color(colour)),
-    );
-    div()
-        .flex()
-        .items_center()
-        .child(
-            div()
-                .w(px(LABEL_WIDTH))
-                .flex_none()
-                .flex()
-                .flex_col()
-                .child(label)
-                .child(caption(muted).child(bar.note.clone())),
-        )
-        .child(track)
-        .child(div().w(px(END_WIDTH)).flex_none().pl_2().child(caption(muted).child(bar.end.clone())))
+/// A bar from `from` to `to` across a fluid row, `height` pixels tall, with a
+/// dot where it ends. Filled for evidence that is applied; a dashed outline on a
+/// light tint for a move that is only possible.
+pub(super) fn fluid_bar(bar: &Bar, scale: &Scale, (paper, muted): (Hsla, Hsla), height: f32) -> Div {
+    let colour: Hsla = if bar.neutral { muted } else { direction_colour(bar.direction).into() };
+    let (left, width) = reach(bar.from, bar.to, scale);
+    let span = div()
+        .absolute()
+        .top_0()
+        .h_full()
+        .left(relative(left))
+        .w(relative(width))
+        .min_w(px(3.))
+        .rounded_full()
+        .when(!bar.hollow, |fill| fill.bg(colour))
+        .when(bar.hollow, |outline| outline.bg(colour.opacity(0.12)).border_2().border_dashed().border_color(colour));
+    let dot = height + 6.;
+    let end = div()
+        .absolute()
+        .top(px(-3.))
+        .left(relative(fraction(bar.to, scale)))
+        .ml(px(-dot / 2.))
+        .size(px(dot))
+        .rounded_full()
+        .bg(colour)
+        .border_2()
+        .border_color(paper);
+    div().relative().w_full().h(px(height)).child(span).child(end)
 }
 
-/// The zones, the point value at each limit, and one row per bar, in a box that
-/// scrolls sideways when the window is narrow.
-pub(super) fn axis(id: &'static str, scale: &Scale, bars: &[Bar], border: Hsla, muted: Hsla) -> AnyElement {
-    axis_rows(
-        id,
-        scale,
-        border,
-        muted,
-        bars.iter().map(|bar| {
-            bar_row(bar, scale, border, muted, div().text_xs().font_weight(FontWeight::BOLD).child(bar.label.clone()))
-        }),
-    )
-}
-
-pub(super) fn axis_rows(
-    id: &'static str,
-    scale: &Scale,
-    border: Hsla,
-    muted: Hsla,
-    bars: impl IntoIterator<Item = impl IntoElement>,
-) -> AnyElement {
-    let mut rows = div().flex().flex_col().child(zone_header(scale, border, muted)).child(ticks(scale, muted));
-    for bar in bars {
-        rows = rows.child(bar);
-    }
-    div().id(id).overflow_x_scroll().child(rows).into_any_element()
+/// The span between two totals on a fluid axis, as its left edge and its width
+/// (shares of the axis). Either total may be the larger.
+pub(super) fn reach(from: i32, to: i32, scale: &Scale) -> (f32, f32) {
+    let left = fraction(from.min(to), scale);
+    (left, fraction(from.max(to), scale) - left)
 }
 
 /// Where `points` sits across a fluid axis (the evidence track): 0.0 at the left edge, 1.0 at the right.
@@ -176,8 +138,16 @@ pub(super) fn fraction(points: i32, scale: &Scale) -> f32 {
     ((points - scale.min) as f32 / span).clamp(0.0, 1.0)
 }
 
-/// The class names above their zones; the class shown is in full ink.
-pub(super) fn zone_labels(scale: &Scale, class: Class, ink: Hsla, muted: Hsla) -> Div {
+/// Whether a zone name fits in a zone that takes `share` of a picture `width` pixels wide
+/// (about 6.5 px per letter of 12 px text, plus a little room at each side).
+fn name_fits(name: &str, share: f32, width: f32) -> bool {
+    share * width >= name.chars().count() as f32 * 6.5 + 12.
+}
+
+/// The class names over the zones; the class shown is in full ink. With the picture's `width` in pixels, each zone
+/// gets its full name where it fits and its short one (B, LB, VUS, LP, P) where it
+/// does not; without it, every zone gets the short name in the monospaced face.
+pub(super) fn zone_labels(scale: &Scale, class: Class, (ink, muted): (Hsla, Hsla), width: Option<f32>) -> Div {
     let mut row = div().relative().w_full().h(px(18.));
     for (zone, from, to) in &scale.zones {
         let (left, right) = (fraction(*from, scale), fraction(*to, scale));
@@ -191,9 +161,13 @@ pub(super) fn zone_labels(scale: &Scale, class: Class, ink: Hsla, muted: Hsla) -
                 .justify_center()
                 .overflow_hidden()
                 .text_xs()
+                .when(width.is_none(), |name| name.font_family(crate::look::MONO).text_size(px(11.)))
                 .text_color(if active { ink } else { muted })
                 .font_weight(if active { FontWeight::BOLD } else { FontWeight::NORMAL })
-                .child(if right - left > 0.12 { zone.label() } else { zone.short() }),
+                .child(match width {
+                    Some(width) if name_fits(zone.label(), right - left, width) => zone.label(),
+                    _ => zone.short(),
+                }),
         );
     }
     row
@@ -224,15 +198,15 @@ mod tests {
     // Explicit imports on purpose; see the note in `view.rs` tests.
     use classivar_core::RuleSet;
 
-    use super::{points_text, scale_for, tick_values};
+    use super::{fraction, name_fits, points_text, reach, scale_for};
 
     #[test]
-    fn the_ticks_name_every_class_limit_but_the_first() {
+    fn a_reach_covers_its_points_whichever_way_it_runs() {
         let scale = scale_for(RuleSet::builtin().expect("the built-in rules are valid"));
-        let limits: Vec<i32> = scale.zones.iter().map(|(_, from, _)| *from).collect();
-        let ticks = tick_values(&scale);
-        assert!(!ticks.is_empty());
-        assert_eq!(ticks, limits[1..], "every limit but the one off the left edge");
+        let (left, width) = reach(5, -1, &scale);
+        assert_eq!(reach(-1, 5, &scale), (left, width), "a move down covers the same span as one up");
+        assert!((left - fraction(-1, &scale)).abs() < 1e-6);
+        assert!((left + width - fraction(5, &scale)).abs() < 1e-6);
     }
 
     #[test]
@@ -240,5 +214,14 @@ mod tests {
         assert_eq!(points_text(0), "0");
         assert_eq!(points_text(4), "4");
         assert_eq!(points_text(-6), "−6", "a real minus sign, not a hyphen");
+    }
+
+    #[test]
+    fn a_full_zone_name_is_used_only_where_it_fits() {
+        let name = "Uncertain significance (VUS)";
+        assert!(!name_fits(name, 0.3, 500.), "150 px is too narrow for the long name");
+        assert!(name_fits(name, 0.3, 1000.), "300 px holds it");
+        assert!(name_fits("Benign", 0.1, 600.));
+        assert!(!name_fits("Benign", 0.05, 600.), "30 px is too narrow even for a short name");
     }
 }

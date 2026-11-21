@@ -76,4 +76,27 @@ mod tests {
             }
         }
     }
+
+    /// The text colour laid over `ground` at `strength`, as #rrggbb.
+    fn blend(ink: &str, ground: &str, strength: f32) -> String {
+        let mix = |at| {
+            let value = channel(ink, at) * strength + channel(ground, at) * (1.0 - strength);
+            (value * 255.0).round() as u8
+        };
+        format!("#{:02x}{:02x}{:02x}", mix(1), mix(3), mix(5))
+    }
+
+    #[test]
+    fn the_soft_emphasis_edge_still_reaches_3_to_1_on_every_surface_it_marks() {
+        let file: Value = serde_json::from_str(THEMES).expect("the theme file is JSON");
+        for theme in file["themes"].as_array().expect("a list of themes") {
+            let name = theme["name"].as_str().unwrap();
+            let colour = |key: &str| theme["colors"][key].as_str().unwrap_or_else(|| panic!("{name}: no {key}"));
+            for ground in ["background", "muted.background", "popover.background"] {
+                let edge = blend(colour("foreground"), colour(ground), crate::look::EDGE_STRENGTH);
+                let ratio = contrast(&edge, colour(ground));
+                assert!(ratio >= 3.0, "{name}: the edge on {ground} is {ratio:.2}:1, needs 3");
+            }
+        }
+    }
 }

@@ -20,8 +20,9 @@ use std::time::Duration;
 
 use classivar_core::{Assessment, Direction};
 
+use super::block_tip::floating_at;
 use super::evidence_stack::{Step, bars, steps, summary};
-use super::point_axis::{fraction, points_text, tick_row, widened, zone_labels};
+use super::point_axis::{fraction, signed, tick_row, widened, zone_labels};
 use super::*;
 use crate::view::describe::Scale;
 
@@ -88,8 +89,12 @@ fn pill_offset(at: f32) -> f32 {
     }
 }
 
-fn signed(points: i32) -> String {
-    if points > 0 { format!("+{points}") } else { points_text(points) }
+/// Where a block's hover card is anchored, as a share of the track, and whether
+/// the card ends there (true) or starts there (false). A block in the left half
+/// opens its card rightward from its left edge; one in the right half ends its
+/// card at its right edge. Either way the card stays inside the track.
+fn tip_anchor(block: &Block) -> (f32, bool) {
+    if block.left + block.width / 2. < 0.5 { (block.left, false) } else { (block.left + block.width, true) }
 }
 
 fn motion(ms: u64) -> Animation {
@@ -114,17 +119,23 @@ impl Workbench {
                 band.child(div().absolute().top_0().h_full().left(relative(left)).w(relative(right - left)).bg(fill));
             band = band.child(div().absolute().top_0().h_full().left(relative(left)).w(px(1.)).bg(border));
         }
+        let blocks = blocks(&steps, &scale);
         let band = band
             // The preview line goes under the blocks; the total's line goes over them.
             .children(self.ghost_marker(&scale, height, ink))
-            .children(blocks(&steps, &scale).iter().map(|block| self.block(block, lanes, cx)))
+            .children(blocks.iter().map(|block| self.block(block, lanes, cx)))
             .child(self.marker(result.total_points, &scale, height, (ink, paper)));
+        // The card hangs under the band, outside its clipped edges, so it never hides a block.
+        let tip = self.hovered.as_deref().and_then(|code| {
+            let block = blocks.iter().find(|block| block.code == code)?;
+            Some(floating_at(self.block_tip(result, code, cx)?, tip_anchor(block), height + 6.))
+        });
         div()
             .flex()
             .flex_col()
             .gap_1()
-            .child(zone_labels(&scale, class, ink, muted))
-            .child(band)
+            .child(zone_labels(&scale, class, (ink, muted), Some(self.stage_width.get())))
+            .child(div().relative().child(band).children(tip))
             .child(tick_row(&scale, muted))
             .child(self.track_buttons(&steps, cx))
             .child(caption(muted).child(summary(&steps)))
@@ -150,10 +161,12 @@ impl Workbench {
             .when(set_aside, |face| face.border_2().border_dashed().border_color(colour).text_color(ink))
             .when(selected && !set_aside, |face| face.border_2().border_color(ink))
             .child(block.label.clone());
-        let code = block.code.clone();
+        let (code, hover) = (block.code.clone(), block.code.clone());
         let width = block.width;
+        let selector = format!("block-{}", block.code);
         div()
-            .id(SharedString::from(format!("block-{}", block.code)))
+            .id(SharedString::from(selector.clone()))
+            .debug_selector(move || selector)
             .absolute()
             .top(px(LANE_START + lane as f32 * LANE_PITCH))
             .h(px(LANE_HEIGHT))
@@ -162,6 +175,7 @@ impl Workbench {
             .cursor_pointer()
             .hover(|style| style.opacity(0.85))
             .on_click(cx.listener(move |this, _, _, cx| this.choose_block(&code, cx)))
+            .on_hover(cx.listener(move |this, over: &bool, _, cx| this.hover_over(&hover, *over, cx)))
             .child(face)
             .with_animation(
                 SharedString::from(format!("grow-{}-{}-{}", block.code, block.from, block.to)),
@@ -268,7 +282,7 @@ mod tests {
     use classivar_core::{Applied, Direction, RuleSet, Strength};
 
     use super::super::point_axis::fraction;
-    use super::{band_height, blocks, lane_count, pill_offset, scale_for, steps};
+    use super::{band_height, blocks, lane_count, pill_offset, scale_for, steps, tip_anchor};
 
     #[test]
     fn a_point_value_maps_across_the_track_and_stays_inside_it() {
@@ -318,5 +332,17 @@ mod tests {
         assert_eq!(lanes(&[Applied::new("BP7", Strength::Supporting)]), 1);
         assert_eq!(lanes(&[Applied::new("PM2", Strength::Supporting), Applied::new("BP7", Strength::Supporting)]), 2);
         assert!(band_height(2) > band_height(1));
+    }
+
+    #[test]
+    fn a_hover_card_opens_away_from_the_nearer_edge_of_the_track() {
+        let rules = RuleSet::builtin().unwrap();
+        let result = rules.assess(&[Applied::new("PM2", Strength::Supporting)]).unwrap();
+        let block = blocks(&steps(&result.items), &scale_for(rules)).remove(0);
+        let early = super::Block { left: 0.05, width: 0.2, ..block.clone() };
+        assert_eq!(tip_anchor(&early), (0.05, false), "left half: the card starts at the block's left edge");
+        let late = super::Block { left: 0.7, width: 0.25, ..block };
+        let (at, ends_there) = tip_anchor(&late);
+        assert!((at - 0.95).abs() < 1e-6 && ends_there, "right half: the card ends at the block's right edge");
     }
 }

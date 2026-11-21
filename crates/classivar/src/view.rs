@@ -63,12 +63,6 @@ use file_io::{default_save_folder, suggested_file_name, write_case};
 use watchers::{repaint_on_change, watch_gene_box, watch_keys, watch_record_name};
 use widgets::{class_badge, notice};
 
-/// Width of one point in the evidence lanes.
-const POINT_WIDTH: f32 = 36.0;
-/// Width of one point on the points scale. Chosen so the whole scale fits the
-/// result pane at the 960 px minimum window width.
-const SCALE_UNIT: f32 = 20.0;
-
 /// The largest a case file may be before it is refused without reading it.
 const MAX_CASE_BYTES: u64 = 4 * 1024 * 1024;
 /// What a record is called when its name box is empty.
@@ -202,6 +196,9 @@ pub struct Workbench {
     baseline: Option<usize>,
     comparison: bool,
     inspected: Option<String>,
+    /// The criterion under the pointer on the dial, the column or the track, for its hover card.
+    /// Dropped when the picture, the tab or the mode changes.
+    hovered: Option<String>,
     preview: bool,
     /// The total the track marker last slid from and to, so a new total animates from where the marker was.
     needle: Cell<(i32, i32)>,
@@ -287,6 +284,7 @@ impl Workbench {
             baseline: None,
             comparison: false,
             inspected: None,
+            hovered: None,
             preview: false,
             needle: Cell::new((0, 0)),
             result_scroll: ScrollHandle::new(),

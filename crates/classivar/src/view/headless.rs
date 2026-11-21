@@ -289,6 +289,45 @@ fn clicking_a_dial_slice_selects_it_and_a_second_click_previews_without_it(cx: &
 }
 
 #[gpui::test]
+fn hovering_a_dial_slice_or_a_column_or_track_block_shows_its_card_and_leaving_hides_it(cx: &mut TestAppContext) {
+    let (workbench, cx) = example_at(cx, ThemeMode::Dark, (960., 600.));
+    workbench.update_in(cx, |this, _, _| this.picture = Picture::Dial);
+    draw(cx);
+    let target = workbench.update_in(cx, |this, _, cx| {
+        let result = this.rules.assess(&super::to_applied(&this.today)).expect("the example can be scored");
+        this.slice_centre(&result, "PM5", cx)
+    });
+    let away = gpui::point(gpui::px(4.), gpui::px(4.));
+    cx.simulate_mouse_move(target.expect("the dial was painted with a PM5 slice"), None, Default::default());
+    workbench.read_with(cx, |this, _| assert_eq!(this.hovered.as_deref(), Some("PM5")));
+    draw(cx);
+    cx.simulate_mouse_move(away, None, Default::default());
+    workbench.read_with(cx, |this, _| assert_eq!(this.hovered, None, "leaving the dial hides the card"));
+
+    workbench.update_in(cx, |this, _, _| this.picture = Picture::Column);
+    draw(cx);
+    // Two earlier reports do not fit beside the readout here, so the column sits below it: scroll to it.
+    workbench.update_in(cx, |this, _, _| this.result_scroll.set_offset(gpui::point(gpui::px(0.), gpui::px(-300.))));
+    draw(cx);
+    let block = cx.debug_bounds("column-PM5").expect("the column has a PM5 block");
+    cx.simulate_mouse_move(block.center(), None, Default::default());
+    workbench.read_with(cx, |this, _| assert_eq!(this.hovered.as_deref(), Some("PM5")));
+    draw(cx);
+    cx.simulate_mouse_move(away, None, Default::default());
+    workbench.read_with(cx, |this, _| assert_eq!(this.hovered, None));
+
+    workbench.update_in(cx, |this, _, _| this.picture = Picture::Track);
+    draw(cx);
+    let block = cx.debug_bounds("block-PM5").expect("the track has a PM5 block");
+    cx.simulate_mouse_move(block.center(), None, Default::default());
+    workbench.read_with(cx, |this, _| assert_eq!(this.hovered.as_deref(), Some("PM5")));
+    draw(cx);
+    cx.simulate_mouse_move(away, None, Default::default());
+    workbench.read_with(cx, |this, _| assert_eq!(this.hovered, None));
+    workbench.read_with(cx, |this, _| assert_eq!(this.inspected, None, "hovering never selects"));
+}
+
+#[gpui::test]
 fn the_rail_opens_an_earlier_report_and_returns_to_today(cx: &mut TestAppContext) {
     let (workbench, cx) = example_at(cx, ThemeMode::Dark, (1240., 900.));
     for (selector, expected) in [("rail-record-0", Editing::Record(0)), ("rail-record-today", Editing::Today)] {

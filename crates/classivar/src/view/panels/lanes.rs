@@ -1,39 +1,8 @@
-//! What the result is made of, what would change it, and the notes.
+//! The history table's chips and the notes on a result.
 
 use super::*;
-use classivar_core::Item;
 
 impl Workbench {
-    pub(super) fn evidence_lanes(&self, result: &Assessment, cx: &mut Context<Self>) -> AnyElement {
-        let (border, muted) = (cx.theme().border, cx.theme().muted_foreground);
-        let mut lanes = div().flex().flex_col();
-        for category in Category::ALL {
-            let items: Vec<_> = result
-                .items
-                .iter()
-                .filter(|i| self.rules.criterion(&i.code).is_some_and(|c| c.category == category))
-                .collect();
-            let mut track = div().flex().flex_wrap().items_center().gap_1().min_h(px(30.)).flex_1();
-            if items.is_empty() {
-                track = track.child(caption(muted).child("none"));
-            }
-            for item in items {
-                track = lane_item(track, item, muted);
-            }
-            lanes = lanes.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .py_1()
-                    .border_t_1()
-                    .border_color(border)
-                    .child(div().w(px(120.)).flex_none().text_xs().text_color(muted).child(category.label()))
-                    .child(track),
-            );
-        }
-        lanes.into_any_element()
-    }
-
     /// A chip for one criterion cell of the history table.
     pub(super) fn evidence_chip(
         &self,
@@ -42,7 +11,7 @@ impl Workbench {
         changed: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let (muted, foreground) = (cx.theme().muted_foreground, cx.theme().foreground);
+        let muted = cx.theme().muted_foreground;
         let cell = div().flex().items_center().gap_1().p_1().rounded_sm();
         let Some(strength) = strength else {
             return cell.text_color(muted).child("–").into_any_element();
@@ -50,7 +19,7 @@ impl Workbench {
         let direction = self.rules.criterion(code).map_or(Direction::Pathogenic, |c| c.direction);
         let points = self.rules.magnitude(strength);
         let sign = if direction == Direction::Pathogenic { "+" } else { "−" };
-        cell.when(changed, |d| d.border_2().border_color(foreground))
+        cell.when(changed, |d| d.border_2().border_color(crate::look::edge(cx)))
             .child(
                 div()
                     .px_1()
@@ -62,32 +31,6 @@ impl Workbench {
                     .child(format!("{sign}{points}")),
             )
             .child(div().text_xs().child(strength.label()))
-            .into_any_element()
-    }
-
-    pub(super) fn what_changes(&self, result: &Assessment, cx: &mut Context<Self>) -> AnyElement {
-        let muted = cx.theme().muted_foreground;
-        let mut list = div().flex().flex_col().gap_1().text_sm();
-        if let Some(next) = result.to_upgrade {
-            list = list.child(format!(
-                "Up: {} more point{} of pathogenic evidence {} {}.",
-                next.points_needed,
-                plural(next.points_needed),
-                if next.points_needed == 1 { "reaches" } else { "reach" },
-                next.class.label()
-            ));
-        }
-        if let Some(next) = result.to_downgrade {
-            list = list.child(format!(
-                "Down: {} more point{} of benign evidence {} {}.",
-                next.points_needed,
-                plural(next.points_needed),
-                if next.points_needed == 1 { "reaches" } else { "reach" },
-                next.class.label()
-            ));
-        }
-        list.child(self.what_if(result, cx))
-            .child(caption(muted).child("The evidence that could move it is in the lanes marked none."))
             .into_any_element()
     }
 
@@ -121,36 +64,6 @@ impl Workbench {
             .children(texts.into_iter().map(|text| note_row(text, muted)))
             .into_any_element()
     }
-}
-
-/// One criterion in its lane: a bar as wide as its points, then its sign and strength.
-/// A criterion that is listed but not counted is only named.
-fn lane_item(track: Div, item: &Item, muted: Hsla) -> Div {
-    if !item.counted {
-        return track.child(caption(muted).pr_2().child(format!(
-            "{} {}: listed, not counted",
-            item.code,
-            item.strength.label()
-        )));
-    }
-    let width = (item.points.unsigned_abs() as f32 * POINT_WIDTH).max(POINT_WIDTH);
-    let sign = if item.points > 0 { "+" } else { "−" };
-    track
-        .child(
-            div()
-                .w(px(width))
-                .h(px(26.))
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded_r_md()
-                .bg(direction_colour(item.direction))
-                .text_color(direction_ink())
-                .text_xs()
-                .font_weight(FontWeight::BOLD)
-                .child(item.code.clone()),
-        )
-        .child(caption(muted).pr_2().child(format!("{sign}{} {}", item.points.unsigned_abs(), item.strength.label())))
 }
 
 /// One note: a small "!" mark and the text.

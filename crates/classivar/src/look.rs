@@ -84,6 +84,21 @@ pub fn panel(cx: &App) -> Div {
         .shadow(elevation(theme.is_dark()))
 }
 
+/// How strong an emphasis edge is, as a share of the text colour. A full-strength
+/// line reads as a bright white stroke in the dark theme; this keeps the outline
+/// clear (it is a shape cue, not only a colour) without shouting.
+pub const EDGE_STRENGTH: f32 = 0.55;
+
+/// The faint edge on a dial slice under the pointer. It stays lighter than `EDGE_STRENGTH`,
+/// so a slice that is only hovered never looks as marked as one that is chosen.
+pub const HOVER_STRENGTH: f32 = 0.3;
+
+/// The line around the one thing in a group that is marked: the class shown,
+/// the picture chosen, a history cell that changed.
+pub fn edge(cx: &App) -> Hsla {
+    cx.theme().foreground.opacity(EDGE_STRENGTH)
+}
+
 /// A card inside a panel: a quieter fill, no shadow.
 pub fn card(cx: &App) -> Div {
     div().bg(cx.theme().muted).rounded(px(CARD_RADIUS)).p_3()
@@ -98,6 +113,17 @@ pub fn eyebrow(text: impl AsRef<str>, cx: &App) -> Div {
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(cx.theme().muted_foreground)
         .child(text.as_ref().to_uppercase())
+}
+
+/// The head of a section: a small label over a title, for example "2015 TABLE"
+/// over "What the 2015 table says".
+pub fn section_head(label: &str, title: &str, cx: &App) -> Div {
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(2.))
+        .child(eyebrow(label, cx))
+        .child(div().text_size(px(18.)).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).child(title.to_string()))
 }
 
 /// Monospaced text for numbers and codes, at `size` pixels.
