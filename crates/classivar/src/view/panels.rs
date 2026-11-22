@@ -133,7 +133,7 @@ impl Workbench {
             .text_color(foreground)
             .child(self.top_bar(unsaved, cx))
             .children(self.file_status_banner(unsaved, cx))
-            .child(self.stage_row(&result, middle, (rail, sheet), variant.as_deref(), cx))
+            .child(self.stage_row(middle, (rail, sheet), variant.as_deref(), cx))
             .children(self.confirm_modal(cx))
             .into_any_element()
     }
@@ -168,14 +168,7 @@ impl Workbench {
     }
 
     /// The row under the top bar: the rail, the middle panel and the editor sheet.
-    fn stage_row(
-        &self,
-        result: &Assessment,
-        middle: Div,
-        (rail, sheet): (bool, f32),
-        variant: Option<&str>,
-        cx: &mut Context<Self>,
-    ) -> Div {
+    fn stage_row(&self, middle: Div, (rail, sheet): (bool, f32), variant: Option<&str>, cx: &mut Context<Self>) -> Div {
         div()
             .flex()
             .flex_1()
@@ -185,7 +178,7 @@ impl Workbench {
             .pb_4()
             .when(rail, |body| body.child(self.rail(variant, cx)))
             .child(middle)
-            .when(!self.reading, |body| body.child(self.criteria_panel(result, sheet, cx)))
+            .when(!self.reading, |body| body.child(self.criteria_panel(sheet, cx)))
     }
 }
 

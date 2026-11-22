@@ -63,17 +63,19 @@ pub(super) fn segments(steps: &[Step], scale: &Scale) -> Vec<Segment> {
 }
 
 /// The slices that get their code written on them: wide enough for the text, and not
-/// over an earlier slice that already has its code. Opposite evidence covers the same
-/// angles near zero, so two codes would be written on top of each other. The hover card,
-/// the chips under the picture and the track still name every slice.
+/// covered by a slice painted after them. Opposite evidence covers the same angles near
+/// zero and the later slice is drawn on top, so its code is the one that is readable; a
+/// code written over it would show two codes on one slice. The hover card, the chips
+/// under the picture and the track still name every slice.
 pub(super) fn labelled(slices: &[Segment], radius: f32, needs: f32) -> Vec<&Segment> {
     let mut chosen: Vec<&Segment> = Vec::new();
-    for slice in slices.iter().filter(|s| (s.start - s.end) * radius >= needs) {
+    for slice in slices.iter().rev().filter(|s| (s.start - s.end) * radius >= needs) {
         let free = chosen.iter().all(|kept| slice.end >= kept.start || slice.start <= kept.end);
         if free {
             chosen.push(slice);
         }
     }
+    chosen.reverse();
     chosen
 }
 
@@ -145,7 +147,7 @@ mod tests {
             rules.assess(&[Applied::new("PM2", Strength::Supporting), Applied::new("BS4", Strength::Strong)]).unwrap();
         let slices = segments(&steps(&result.items), &scale);
         let shown = labelled(&slices, 180., 0.);
-        assert_eq!(shown.iter().map(|s| s.code.as_str()).collect::<Vec<_>>(), ["PM2"], "BS4 spans PM2's angles");
+        assert_eq!(shown.iter().map(|s| s.code.as_str()).collect::<Vec<_>>(), ["BS4"], "BS4 is painted over PM2");
         let apart =
             rules.assess(&[Applied::new("PS1", Strength::Strong), Applied::new("PM2", Strength::Supporting)]).unwrap();
         assert_eq!(

@@ -4,7 +4,7 @@ use super::*;
 use classivar_core::rules::StrengthGuide;
 
 impl Workbench {
-    pub(super) fn criteria_panel(&self, result: &Assessment, width: f32, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn criteria_panel(&self, width: f32, cx: &mut Context<Self>) -> AnyElement {
         // The gene sources take the whole sheet while open; Back returns to the evidence.
         if let Some(sources) = self.gene_drawer(cx) {
             return crate::look::panel(cx)
@@ -30,7 +30,7 @@ impl Workbench {
             .gap_4()
             .child(self.case_panel(cx))
             // Child 1: the category chips under the picture scroll the sheet here.
-            .child(self.criteria_bar(result, cx))
+            .child(self.criteria_bar(cx))
             .children(self.helper_section(cx))
             .children(self.criteria_sections(cx));
 

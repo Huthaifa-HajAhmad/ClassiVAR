@@ -5,15 +5,15 @@
 use super::*;
 
 impl Workbench {
-    /// Above the sections: how many criteria are applied, the points on each side,
-    /// Fold all / Open all, and Clear criteria once there is something to clear.
-    pub(super) fn criteria_bar(&self, result: &Assessment, cx: &mut Context<Self>) -> Div {
-        let muted = cx.theme().muted_foreground;
+    /// Above the sections: how many criteria are applied, a fold-all button, and Clear criteria
+    /// once there is something to clear. The points are in the readout, so they are not repeated here.
+    pub(super) fn criteria_bar(&self, cx: &mut Context<Self>) -> Div {
         let applied = self.current().len();
         let all_folded = self.folded.len() == Category::ALL.len();
         let fold = Button::new("criteria-fold")
             .icon(Icon::new(if all_folded { IconName::ChevronDown } else { IconName::ChevronUp }))
-            .label(if all_folded { "Open all" } else { "Fold all" })
+            .accessibility_label(if all_folded { "Open every kind of evidence" } else { "Fold every kind of evidence" })
+            .tooltip(if all_folded { "Open all" } else { "Fold all" })
             .small()
             .ghost()
             .on_click(cx.listener(move |this, _, _, cx| {
@@ -30,11 +30,6 @@ impl Workbench {
                 if applied == 0 { "Criteria".to_string() } else { format!("Criteria · {applied} applied") },
                 cx,
             ))
-            .child(crate::look::figure(11.).text_color(muted).child(format!(
-                "+{} / −{} pts",
-                result.pathogenic_points,
-                result.benign_points.abs()
-            )))
             .child(div().flex_1())
             .child(fold)
             .when(applied > 0, |bar| {
