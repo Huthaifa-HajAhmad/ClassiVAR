@@ -28,10 +28,13 @@ impl Workbench {
                         .justify_between()
                         .gap_3()
                         .child(div().text_xl().font_weight(FontWeight::SEMIBOLD).child("Compare a report with today"))
-                        .child(self.report_picker(re, index, cx)),
+                        .when(re.records.len() > 1, |head| head.child(self.report_picker(re, index, cx))),
                 )
                 .child(report_outcomes(record, re, cx))
-                .child(div().flex().child(super::picture::status_pill(self.rules, cx)))
+                // The review status goes with a class the engine gives; with none, there is nothing to qualify.
+                .when(shows_a_class(record, re), |panel| {
+                    panel.child(div().flex().child(super::picture::status_pill(self.rules, cx)))
+                })
                 .when(count > 0, |panel| {
                     panel.child(crate::look::eyebrow(format!("Changed criteria · {count}"), cx)).child(rows)
                 })
@@ -80,13 +83,26 @@ fn change_row(code: &str, earlier: Option<&str>, today: Option<&str>, cx: &App) 
         .child(strength(today, ink).font_weight(FontWeight::SEMIBOLD))
 }
 
+/// The words of one tile: the engine's total, or `none` when the report has no counted criteria.
+fn outcome_text(result: &Result<classivar_core::Assessment, classivar_core::AssessError>, none: &str) -> String {
+    match result {
+        Ok(a) if !a.has_evidence => none.to_string(),
+        other => Workbench::total_text(other),
+    }
+}
+
+/// Does the engine give a class for this report or for today's evidence?
+fn shows_a_class(record: &classivar_core::Rescored, re: &Reevaluation) -> bool {
+    [&record.assessment, &re.today].into_iter().any(|a| a.as_ref().is_ok_and(|a| a.class().is_some()))
+}
+
 /// What the lab said, what its own evidence gives under the loaded rules, and what today gives.
 fn report_outcomes(record: &classivar_core::Rescored, re: &Reevaluation, cx: &Context<Workbench>) -> Div {
     let mut outcomes = div().flex().flex_wrap().gap_3();
     for (label, value) in [
         ("Lab reported", record.reported_class.label().to_owned()),
-        ("Its evidence, these rules", Workbench::total_text(&record.assessment)),
-        ("Today's evidence", Workbench::total_text(&re.today)),
+        ("Its evidence, these rules", outcome_text(&record.assessment, "No criteria listed")),
+        ("Today's evidence", outcome_text(&re.today, "No criteria applied")),
     ] {
         outcomes = outcomes.child(
             crate::look::card(cx)

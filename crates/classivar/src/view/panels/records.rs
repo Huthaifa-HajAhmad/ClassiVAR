@@ -47,12 +47,12 @@ impl Workbench {
             .child(crate::look::eyebrow("Reports", cx))
             .child(crate::look::segmented(chips, cx).flex_wrap())
             .child(div().flex().gap_2().child(
-                Button::new("record-add").label("+ Add record").small().ghost().on_click(cx.listener(
-                    |this, _, window, cx| {
+                Button::new("record-add").icon(Icon::new(IconName::Plus)).label("Add record").small().ghost().on_click(
+                    cx.listener(|this, _, window, cx| {
                         this.add_record(window, cx);
                         cx.notify();
-                    },
-                )),
+                    }),
+                ),
             ))
     }
 
@@ -71,6 +71,7 @@ impl Workbench {
             .when(!self.records.is_empty(), |d| {
                 d.child(
                     Button::new("copy-latest")
+                        .icon(Icon::new(IconName::Copy))
                         .label("Start from the latest record's evidence")
                         .small()
                         .outline()
@@ -108,6 +109,7 @@ impl Workbench {
                 "Year",
                 div().flex().items_center().justify_between().w_full().child(self.record_year_buttons(i, cx)).child(
                     Button::new(SharedString::from(format!("record-remove-{i}")))
+                        .icon(Icon::new(IconName::Delete))
                         .label("Remove record")
                         .small()
                         .ghost()

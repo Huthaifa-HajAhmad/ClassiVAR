@@ -1,8 +1,7 @@
 //! The window frame: the title bar drawn by the app, on the same canvas colour
 //! as the page so the window reads as one surface. It carries the logo mark (a
-//! small dial in ink, the app's signature picture), the name, and where you are:
-//! the case and whose evidence is open. It holds no controls, so the whole bar
-//! stays a place to drag the window.
+//! small dial in ink, the app's signature picture) and the name. It holds no
+//! controls and no case text, so the whole bar stays a place to drag the window.
 
 use gpui_kit::component::TitleBar;
 
@@ -37,32 +36,10 @@ fn logo(ink: Hsla) -> impl IntoElement {
 }
 
 impl Workbench {
-    /// Where the curator is, for the title bar: the case, and whose evidence is open.
-    fn whereabouts(&self, cx: &App) -> Option<(String, Option<String>)> {
-        if self.welcome && !self.has_case_data(cx) {
-            return None;
-        }
-        let case = match self.variant_name(cx) {
-            Some(name) => name,
-            None => "New assessment".to_string(),
-        };
-        let scope = (self.mode == Mode::ReportedVariant).then(|| self.editing_label());
-        Some((case, scope))
-    }
-
+    /// The title bar holds only the mark and the name. Where you are (the case and
+    /// the report) is on the rail, so it is not said twice.
     pub(in crate::view) fn frame(&self, cx: &App) -> TitleBar {
         let theme = cx.theme();
-        let (ink, muted, line) = (theme.foreground, theme.muted_foreground, theme.border);
-        let place = self.whereabouts(cx).map(|(case, scope)| {
-            div()
-                .flex()
-                .items_center()
-                .gap_2()
-                .min_w_0()
-                .child(div().w(px(1.)).h(px(14.)).bg(line))
-                .child(div().text_sm().text_color(ink).truncate().child(case))
-                .children(scope.map(|scope| div().text_sm().text_color(muted).truncate().child(format!("· {scope}"))))
-        });
         TitleBar::new().bg(theme.background).border_color(theme.background).child(
             div()
                 .flex()
@@ -70,9 +47,8 @@ impl Workbench {
                 .gap_3()
                 .px_3()
                 .min_w_0()
-                .child(logo(ink))
-                .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child("ClassiVAR"))
-                .children(place),
+                .child(logo(theme.foreground))
+                .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child("ClassiVAR")),
         )
     }
 }

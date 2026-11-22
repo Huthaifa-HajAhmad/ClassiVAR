@@ -4,7 +4,19 @@ use super::*;
 use classivar_core::rules::StrengthGuide;
 
 impl Workbench {
-    pub(super) fn criteria_panel(&self, result: &Assessment, width: f32, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn criteria_panel(&self, width: f32, cx: &mut Context<Self>) -> AnyElement {
+        // The gene sources take the whole sheet while open; Back returns to the evidence.
+        if let Some(sources) = self.gene_drawer(cx) {
+            return crate::look::panel(cx)
+                .flex()
+                .flex_col()
+                .w(px(width))
+                .h_full()
+                .flex_none()
+                .overflow_hidden()
+                .child(sources)
+                .into_any_element();
+        }
         let list = div()
             .id("criteria")
             .track_scroll(&self.handles.criteria_scroll)
@@ -17,20 +29,10 @@ impl Workbench {
             .flex_col()
             .gap_4()
             .child(self.case_panel(cx))
-            .when_some(self.category, |list, category| {
-                list.child(
-                    Button::new("clear-category")
-                        .small()
-                        .label(format!("{} - Show all criteria", category.label()))
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.category = None;
-                            cx.notify();
-                        })),
-                )
-            })
+            // Child 1: the category chips under the picture scroll the sheet here.
+            .child(self.criteria_bar(cx))
             .children(self.helper_section(cx))
-            .child(self.criteria_group(Direction::Pathogenic, "For disease (pathogenic)", result.pathogenic_points, cx))
-            .child(self.criteria_group(Direction::Benign, "Against disease (benign)", result.benign_points, cx));
+            .children(self.criteria_sections(cx));
 
         crate::look::panel(cx)
             .flex()
@@ -44,80 +46,26 @@ impl Workbench {
             .into_any_element()
     }
 
-    /// The title of the list (which evidence is being edited), how many criteria are applied, and Clear.
+    /// The title of the list: whose evidence is being edited. The lab's name is in the
+    /// rail and the record form, so the label names only the year.
     fn criteria_header(&self, cx: &mut Context<Self>) -> Div {
         let (border, muted) = (cx.theme().border, cx.theme().muted_foreground);
-        let applied = self.current().len();
-        let clear_label = match self.editing {
-            Editing::Today => "Clear".to_string(),
-            Editing::Record(i) => format!("Clear {}", self.records[i].label),
-        };
-        let count = if applied == 0 {
-            "Click a code to apply it. You decide which criteria apply.".to_string()
-        } else {
-            format!("{applied} applied")
+        let whose = match self.editing {
+            Editing::Today => "Today (you)".to_string(),
+            Editing::Record(i) => format!("Earlier report · {}", self.records[i].year),
         };
         div()
             .flex()
-            .items_center()
-            .justify_between()
-            .gap_2()
+            .flex_col()
+            .gap_0p5()
             .px_5()
             .pt_4()
             .pb_3()
             .border_b_1()
             .border_color(border)
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .flex_col()
-                    .gap_0p5()
-                    .child(crate::look::eyebrow(self.editing_label(), cx))
-                    .child(div().text_lg().font_weight(FontWeight::SEMIBOLD).child("Evidence"))
-                    .child(caption(muted).child(count)),
-            )
-            .child(Button::new("clear").label(clear_label).small().ghost().on_click(cx.listener(|this, _, _, cx| {
-                if !this.current().is_empty() {
-                    this.ask(Confirm::Clear(this.editing));
-                }
-                cx.notify();
-            })))
-    }
-
-    /// The criteria of one direction, grouped by category. `points` is the total of that side
-    /// (positive for pathogenic, zero or negative for benign).
-    fn criteria_group(&self, direction: Direction, title: &'static str, points: i32, cx: &mut Context<Self>) -> Div {
-        let muted = cx.theme().muted_foreground;
-        let sign = if direction == Direction::Pathogenic { "+" } else { "−" };
-        let mut group = div().flex().flex_col().gap_0p5().child(
-            div()
-                .flex()
-                .items_center()
-                .gap_2()
-                .px_2()
-                .pb_1()
-                .child(div().size(px(8.)).rounded_full().bg(direction_colour(direction)))
-                .child(div().text_base().font_weight(FontWeight::SEMIBOLD).child(title))
-                .child(div().flex_1())
-                .child(crate::look::figure(12.).text_color(muted).child(format!("{sign}{} pts", points.abs()))),
-        );
-        let rules = self.rules;
-        for category in
-            Category::ALL.into_iter().filter(|category| self.category.is_none_or(|chosen| chosen == *category))
-        {
-            let in_category: Vec<&'static Criterion> =
-                rules.criteria.iter().filter(|c| c.direction == direction && c.category == category).collect();
-            if in_category.is_empty() {
-                continue;
-            }
-            group = group.child(div().px_2().pt_3().pb_1().child(crate::look::eyebrow(category.label(), cx)));
-            for c in in_category {
-                group = group.child(self.criterion_row(c, cx));
-            }
-        }
-        group
+            .child(crate::look::eyebrow(whose, cx))
+            .child(div().text_lg().font_weight(FontWeight::SEMIBOLD).child("Evidence"))
+            .child(caption(muted).child("Click a code to apply it. You decide which criteria apply."))
     }
 
     /// The questions that set a criterion's strength. Nothing is applied until one is answered.

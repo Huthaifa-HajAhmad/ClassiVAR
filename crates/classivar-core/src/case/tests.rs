@@ -60,6 +60,7 @@ fn checked_identity() -> VariantIdentity {
         grch38: Some("NC_000017.11:g.43057065dup".into()),
         grch37: Some("NC_000017.10:g.41209082dup".into()),
         mane_select: Some("NM_007294.4:c.5266dup".into()),
+        coding: Vec::new(),
         protein: Some("NP_009225.1:p.Gln1756ProfsTer?".into()),
         gene: Some("BRCA1".into()),
         clinvar_variation: Some(17677),
@@ -118,6 +119,14 @@ fn long_identity_condition_or_source_text_is_refused_by_name() {
     let mut case = full_sample();
     case.records[0].source.as_mut().unwrap().stated_criteria = Some("P".repeat(301));
     assert!(refused(case).contains("Lab A"));
+}
+
+#[test]
+fn too_many_coding_names_are_refused_with_their_own_message() {
+    let mut case = full_sample();
+    case.identity.as_mut().unwrap().coding = (0..5).map(|i| format!("NM_00000{i}.1:c.1A>G")).collect();
+    let message = CaseFile::from_json(&case.to_json(), rules()).unwrap_err().to_string();
+    assert!(message.contains("5 RefSeq coding names") && message.contains("at most 4"), "{message}");
 }
 
 #[test]

@@ -30,7 +30,14 @@ pub(super) fn open(cx: &mut TestAppContext, theme_mode: ThemeMode) -> (Entity<Wo
     // The same call `main` makes, so the window has the toolkit's root around it (which owns Tab).
     let (handle, workbench) = cx
         .update(|cx| {
-            open_window(WindowOptions::default(), cx, |window, cx| cx.new(|cx| Workbench::new(rules(), window, cx)))
+            open_window(WindowOptions::default(), cx, |window, cx| {
+                cx.new(|cx| {
+                    let mut workbench = Workbench::new(rules(), window, cx);
+                    // The real settings file may name another picture; tests start from the dial.
+                    workbench.picture = crate::settings::Picture::Dial;
+                    workbench
+                })
+            })
         })
         .expect("the window opens");
     (workbench, VisualTestContext::from_window(handle, cx).into_mut())

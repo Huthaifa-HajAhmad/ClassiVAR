@@ -168,7 +168,7 @@ impl Workbench {
         let mut rows = div().flex().flex_col();
         if let Some(class) = today {
             let head = div().pl(px(LABEL_WIDTH)).pr(px(END_WIDTH)).pb_1().flex().flex_col().gap_1();
-            rows = rows.child(head.child(zone_labels(&scale, class, (ink, muted), None)).child(class_strip(
+            rows = rows.child(head.child(zone_labels(&scale, Some(class), (ink, muted), None)).child(class_strip(
                 &scale,
                 class,
                 (theme.popover, ink),

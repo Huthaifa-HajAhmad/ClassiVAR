@@ -162,6 +162,9 @@ impl Workbench {
         self.mode = if self.records.is_empty() { Mode::NewVariant } else { Mode::ReportedVariant };
         self.gene_link = case.gene_decision;
         self.case_gene = case.gene.clone();
+        self.pending_gene_box = None;
+        self.typing_condition = false;
+        self.gene_cards_open = false;
         self.gene_error = None;
         // A question or an open guide belongs to the case that was on screen.
         self.confirm = None;
@@ -209,6 +212,7 @@ impl Workbench {
                         .child(div().flex_1().min_w_0().py_1().text_sm().child(status.text.clone()))
                         .child(
                             Button::new("file-status-dismiss")
+                                .icon(Icon::new(IconName::Close))
                                 .label("Dismiss")
                                 .small()
                                 .ghost()
@@ -234,6 +238,9 @@ impl Workbench {
         self.today.clear();
         self.records.clear();
         self.editing = Editing::Today;
+        self.pending_gene_box = None;
+        self.typing_condition = false;
+        self.gene_cards_open = false;
         self.gene_link = GeneDecision::NotDecided;
         self.gene_error = None;
         self.file_status = None;

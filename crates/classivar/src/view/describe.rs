@@ -33,9 +33,6 @@ pub(super) fn scale_for(rules: &RuleSet) -> Scale {
     }
 }
 
-/// How many detail lines a source card shows before "Show all".
-pub(super) const CARD_LINES: usize = 2;
-
 pub(super) fn describe_panelapp(found: &Fetched<PanelAppGene>) -> (String, Vec<String>) {
     let gene = &found.value;
     if gene.entries.is_empty() {

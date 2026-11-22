@@ -61,6 +61,7 @@ impl Workbench {
                         .small()
                         .ghost()
                         .toggled(self.reading)
+                        .icon(Icon::new(if self.reading { IconName::Minimize } else { IconName::Maximize }))
                         .label(if self.reading { "Show editor" } else { "Expand" })
                         .accessibility_label(if self.reading { "Show editor" } else { "Expand explanation" })
                         .on_click(cx.listener(|this, _, _, cx| {

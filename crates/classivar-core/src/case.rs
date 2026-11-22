@@ -17,7 +17,7 @@ use crate::assess::{Applied, AssessError, Counting};
 use crate::condition::{Condition, MAX_CONDITION_CHARS};
 use crate::model::Class;
 use crate::rules::{RuleSet, RuleSetRef};
-use crate::variant::VariantIdentity;
+use crate::variant::{MAX_CODING_NAMES, VariantIdentity};
 
 /// The version of the file layout. Raise it when a change would make an old
 /// reader misunderstand a new file.
@@ -127,6 +127,8 @@ pub enum CaseError {
     UnknownFormat(u32),
     #[error("{place} is longer than {max} characters, so this cannot be a ClassiVAR case file")]
     TooLong { place: String, max: usize },
+    #[error("the variant identity lists {0} RefSeq coding names and this program opens at most {MAX_CODING_NAMES}")]
+    TooManyCodingNames(usize),
     #[error("this file holds {0} earlier records and this program opens at most {MAX_RECORDS}")]
     TooManyRecords(usize),
     #[error("{place} cannot be scored with the current rules: {error}")]
@@ -178,6 +180,9 @@ impl CaseFile {
                 place: format!("The variant identity's {field}"),
                 max: crate::variant::MAX_IDENTITY_CHARS,
             });
+        }
+        if let Some(identity) = self.identity.as_ref().filter(|i| i.too_many_coding()) {
+            return Err(CaseError::TooManyCodingNames(identity.coding.len()));
         }
         for record in &self.records {
             check_record(record, &capped)?;

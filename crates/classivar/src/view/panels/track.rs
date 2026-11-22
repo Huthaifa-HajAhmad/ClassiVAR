@@ -40,7 +40,7 @@ fn lane_count(steps: &[Step]) -> usize {
     if has(Direction::Pathogenic) && has(Direction::Benign) { 2 } else { 1 }
 }
 
-fn band_height(lanes: usize) -> f32 {
+pub(super) fn band_height(lanes: usize) -> f32 {
     LANE_START + lanes as f32 * LANE_PITCH + PILL_ROOM
 }
 
@@ -147,7 +147,7 @@ impl Workbench {
             .flex()
             .flex_col()
             .gap_1()
-            .child(zone_labels(&scale, class, (ink, muted), Some(self.stage.width.get())))
+            .child(zone_labels(&scale, Some(class), (ink, muted), Some(self.stage.width.get())))
             .child(div().relative().child(band).children(tip))
             .child(tick_row(&scale, muted))
             .child(self.track_buttons(&steps, cx))

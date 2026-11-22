@@ -15,15 +15,20 @@ use super::*;
 mod block_tip;
 mod column;
 mod combining_table;
+mod condition_pick;
 mod criteria;
+mod criteria_sections;
 mod criterion_row;
 mod dial;
 mod dial_geometry;
+mod empty_track;
 mod evidence_stack;
 mod frame;
 mod gene_cards;
+mod gene_drawer;
 mod helper_bar;
 mod helpers;
+mod source_inheritance;
 
 pub(super) use helpers::POPULATION_BOXES;
 mod hero;
@@ -40,6 +45,7 @@ mod rail;
 mod record_fields;
 mod records;
 mod report_focus;
+mod reported_hero;
 mod results;
 mod strength_ladder;
 mod suggest;
@@ -127,7 +133,7 @@ impl Workbench {
             .text_color(foreground)
             .child(self.top_bar(unsaved, cx))
             .children(self.file_status_banner(unsaved, cx))
-            .child(self.stage_row(&result, middle, (rail, sheet), variant.as_deref(), cx))
+            .child(self.stage_row(middle, (rail, sheet), variant.as_deref(), cx))
             .children(self.confirm_modal(cx))
             .into_any_element()
     }
@@ -162,14 +168,7 @@ impl Workbench {
     }
 
     /// The row under the top bar: the rail, the middle panel and the editor sheet.
-    fn stage_row(
-        &self,
-        result: &Assessment,
-        middle: Div,
-        (rail, sheet): (bool, f32),
-        variant: Option<&str>,
-        cx: &mut Context<Self>,
-    ) -> Div {
+    fn stage_row(&self, middle: Div, (rail, sheet): (bool, f32), variant: Option<&str>, cx: &mut Context<Self>) -> Div {
         div()
             .flex()
             .flex_1()
@@ -179,13 +178,16 @@ impl Workbench {
             .pb_4()
             .when(rail, |body| body.child(self.rail(variant, cx)))
             .child(middle)
-            .when(!self.reading, |body| body.child(self.criteria_panel(result, sheet, cx)))
+            .when(!self.reading, |body| body.child(self.criteria_panel(sheet, cx)))
     }
 }
 
 impl Render for Workbench {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.settle_focus(window, cx);
+        if let Some(gene) = self.pending_gene_box.take() {
+            self.boxes.gene.update(cx, |input, cx| input.set_value(gene, window, cx));
+        }
         let frame = self.frame(cx);
         div()
             .size_full()

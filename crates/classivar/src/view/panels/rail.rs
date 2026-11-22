@@ -51,7 +51,14 @@ impl Workbench {
                     .flex()
                     .flex_col()
                     .gap_1()
-                    .child(eyebrow("Case", cx))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .child(eyebrow("Case", cx))
+                            .child(self.clear_case_button(cx)),
+                    )
                     .child(div().text_lg().font_weight(FontWeight::SEMIBOLD).child(title))
                     .when(!self.case_gene.is_empty(), |d| d.child(figure_line(self.case_gene.clone(), muted))),
             )
@@ -101,12 +108,26 @@ impl Workbench {
             }));
         list = list.child(with_dot(button, chosen, cx).debug_selector(|| "rail-record-today".into()));
         if self.mode == Mode::ReportedVariant {
-            list = list.child(Button::new("record-add").label("+ Add record").small().ghost().on_click(cx.listener(
-                |this, _, window, cx| {
-                    this.add_record(window, cx);
-                    cx.notify();
-                },
-            )));
+            list = list.child(
+                div()
+                    .pt_2()
+                    .flex()
+                    .flex_col()
+                    .items_start()
+                    .gap_1()
+                    .child(
+                        Button::new("rail-record-add")
+                            .icon(Icon::new(IconName::Plus))
+                            .label("Add record")
+                            .small()
+                            .ghost()
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                this.add_record(window, cx);
+                                cx.notify();
+                            })),
+                    )
+                    .children(self.clinvar_import_row(true, cx)),
+            );
         }
         list
     }

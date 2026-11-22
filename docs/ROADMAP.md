@@ -387,3 +387,56 @@ Read before deciding:
 What would change if the cap is raised: `max_strength` for PM6 in the rule file; the de novo test that expects PM6 at Very Strong to fall to Strong; the PM6 note and the "use PS2 for Very strong" message; the rule version; and this roadmap and `docs/ARCHITECTURE.md`. No engine change is needed: `read_de_novo` already reads PM6 through the same cap as PS2.
 
 Related safeguard (added 2026-11-07): if a curator clicks both "Apply PS2 ..." and "Apply PM6 ..." for one de novo total, the assessment counts both criteria, so the engine now raises a double-counting warning (the same pattern as PVS1 + PP3). No class is withheld; the curator removes one. Keep the warning unless a qualified reviewer decides that two independent observations can justify both codes; Table 2 offers either code for one total.
+
+## UI polish pass (2026-11-22)
+
+No clinical rule, number or class changed. Built on `feat/scientific-remediation` (v1.0.0) as branch `feat/ui-polish`.
+
+- **Title bar** holds only the mark and the name. The case and the open report are on the rail, so they are no longer said twice.
+- **Header** is grouped (mode and note, rules status, Rules / Open / Save with icons, a sun and moon theme switch) with a line between groups. The research-use note gives way in a narrow window.
+- **Variant card** gives the RefSeq coding name (`NM_…:c.…`) when the registry names no MANE Select transcript (`VariantIdentity.coding`, at most 4, older files open with it empty). The genome positions follow in their own band.
+- **Clear.** The sheet's button is now "Clear criteria" and is disabled when there is nothing to clear (it used to do nothing, silently). A new **Clear case** button (top of the case form) empties the variant, gene, condition, reports and criteria after a question.
+- **Earlier report without criteria** (most ClinVar imports): the middle panel shows the class the lab stated, marked as the lab's own and not scored, with the categories to enter its criteria.
+- **Category chips** under the dial scroll the sheet to the filtered list.
+- **Gene sources drawer** opens over the sheet (Details, or "Pick from gene sources" under Condition). Each ClinGen rating can be taken as the case's condition or as the open report's condition. The inline cards and the pill row are gone.
+- **History table**: heads and the Total row have one fixed height in all three columns, the code column is wider, and the note is shorter. Compare reports shows the review-status pill only when the engine gives a class, and says "No criteria listed" instead of repeating "no counted criteria".
+- **Icons** on the buttons that have a clear picture (check, import, add, remove, copy, expand, dismiss), on gene-source rows, and on warnings.
+- **Checked:** merge gate passes, three new headless window tests, and the real window starts. **Not run:** `scripts/gui-smoke.ps1` (takes over the mouse); the drawer, the stated-class view and the header have not been looked at in the real window.
+- **Next:** look at the window in both themes; icons for the category chips and the rail; keyboard test for the drawer (Escape closes it).
+
+### Second round (2026-11-22)
+
+- **Clear** moved: "Clear case" sits beside the case name in the rail (top of the form in a narrow window); "Clear criteria" sits on the bar above the criteria and shows only when something is applied.
+- **The chosen picture shows before any evidence:** an empty Column and an empty Track, in grey, like the empty Dial.
+- **Earlier report without criteria** uses the "No class yet" layout: the stated class in the display type, in ink, with a "Stated by the lab · not scored" pill. No class colour.
+- **Gene-sources drawer** covers the right of the window over a dim page (click outside or Escape closes it). The four sources sit side by side. Every ClinGen, G2P and PanelApp record is a button that sets the condition of what is being edited; the chosen one is marked by edge, fill and tick. PanelApp ratings are pills in PanelApp's colours with their word (`design::panel_rating`, contrast-tested). The inheritance is read from PanelApp's and G2P's wording (`source_inheritance.rs`, tested); unclear wording stays unknown, and a banner asks the curator to check it.
+- **Condition:** when the sources have records, the form shows the picked condition with Change, or the button to pick one; the name box appears only after "Type a name".
+- **Gene from the variant:** a check that finds one allele with a gene checks that gene when none is set, and fills the gene box.
+- **Fewer repeats:** the sheet says "Earlier report · year" (the lab is in the rail and the form); Compare shows no report picker for a single report.
+
+
+### Third round (2026-11-22)
+
+- **Gene sources open inside the right panel** (in place of the evidence form, one source under another, Back to return; Escape also returns). The overlay drawer is gone. Record names wrap; the PanelApp rating sits on the line under the name.
+- **Welcome:** wider page (1480 px), larger dial, and Start / Review / Open as one row of real buttons with icons. The chosen picture card is marked by edge, fill and tick instead of the word "chosen".
+- **Empty column is centred** (the same room on its left as its zone names take on the right).
+- **Import from ClinVar** sits in the rail, beside Add record (in the form when the rail is folded away).
+- **Crash log:** a panic now also writes its message and backtrace to `%APPDATA%\ClassiVAR\crash.log`. A crash on clicking a lab in the rail (Windows error 0xc0000409, a Rust panic) could not be reproduced in the window tests; the log is there to catch it.
+- **Tests** no longer read the picture from the real settings file; they start from the dial.
+
+### Fourth round (2026-11-22)
+
+- **Criteria by kind of evidence:** one section per kind (Variant type, Population, …) with the codes for and against disease together, as in the 2015 table. A section folds; its heading names the applied codes as small chips. The bar above gives the count, the points on each side, Fold all / Open all and Clear criteria. A category chip under the picture opens that kind and folds the others (nothing is hidden). "More" is a chevron.
+- **ClinVar source** under a stated class is a small labelled table (submission, review status, last evaluated, criteria named, imported).
+- **Condition** shows as a card (name, inheritance, MONDO id) with Change and Type a name.
+- **Rail actions** Add record and Import from ClinVar are two quiet buttons aligned with the stops.
+- `scripts/gui-smoke.ps1` clicks "Add record" (the button lost its "+" in the first round).
+
+### Review fixes (2026-11-22)
+
+- **The sources remember whose condition they choose** (`sources_for`): a button in the case form always chooses the case's condition, even while an earlier report is open; the report's own form chooses the report's.
+- **A cleared or newly opened case** no longer receives a gene queued by a late registry answer, and leaves "Type a name" mode.
+- "More" keeps its word beside the chevron. The crash log also works on macOS and restarts from empty past 256 KB. More than four coding names in a saved case get their own message. The rail's Add record has its own id.
+- **Decided, no change:** the history table's note no longer repeats `UNVERIFIED rules vX`; the status pill appears on Compare reports whenever the engine gives a class there (today's or the lab's recorded evidence), which is where those classes are shown. The pill is also always in the top bar.
+- **Still to do by a person:** run `scripts/gui-smoke.ps1` with the machine free, and look at the drawer, the stated-class view and the grouped criteria in both themes.
+

@@ -147,11 +147,11 @@ pub(super) fn name_fits(name: &str, share: f32, width: f32) -> bool {
 /// The class names over the zones; the class shown is in full ink. With the picture's `width` in pixels, each zone
 /// gets its full name where it fits and its short one (B, LB, VUS, LP, P) where it
 /// does not; without it, every zone gets the short name in the monospaced face.
-pub(super) fn zone_labels(scale: &Scale, class: Class, (ink, muted): (Hsla, Hsla), width: Option<f32>) -> Div {
+pub(super) fn zone_labels(scale: &Scale, class: Option<Class>, (ink, muted): (Hsla, Hsla), width: Option<f32>) -> Div {
     let mut row = div().relative().w_full().h(px(18.));
     for (zone, from, to) in &scale.zones {
         let (left, right) = (fraction(*from, scale), fraction(*to, scale));
-        let active = *zone == class;
+        let active = Some(*zone) == class;
         row = row.child(
             div()
                 .absolute()

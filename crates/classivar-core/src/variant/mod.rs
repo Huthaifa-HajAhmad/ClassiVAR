@@ -10,6 +10,6 @@ pub mod query;
 mod tests;
 
 pub use accessions::Build;
-pub use identity::{MAX_IDENTITY_CHARS, VariantIdentity};
+pub use identity::{MAX_CODING_NAMES, MAX_IDENTITY_CHARS, VariantIdentity};
 pub use notation::{Notation, NotationProblem, parse};
 pub use query::{QueryProblem, RegistryQuery};

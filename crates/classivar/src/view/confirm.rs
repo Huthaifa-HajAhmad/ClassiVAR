@@ -16,6 +16,7 @@ impl Workbench {
                     record.evidence.clear();
                 }
             }
+            Confirm::ClearCase => self.start_over(window, cx),
             Confirm::StartFromLatest => self.start_from_latest(),
             Confirm::OpenCase(case) => self.apply_case(*case, window, cx),
             Confirm::RemoveRecord(index, _) => self.remove_record(index, window, cx),
@@ -26,6 +27,18 @@ impl Workbench {
             }
         }
         cx.notify();
+    }
+
+    /// Empty the whole form, not only the criteria: the case, then the gene and its lookups.
+    fn start_over(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.clear_case(window, cx);
+        self.case_gene.clear();
+        self.gene = GeneChecks::idle();
+        self.lookup_id += 1;
+        self._lookup_tasks.clear();
+        self.gene_cards_open = false;
+        self.typing_condition = false;
+        self.boxes.gene.update(cx, |input, cx| input.set_value("", window, cx));
     }
 
     pub(super) fn cancel_confirm(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -43,6 +56,10 @@ impl Workbench {
         match confirm {
             Confirm::Clear(scope) => {
                 format!("Clear every criterion from {}? This cannot be undone.", self.scope_label(*scope))
+            }
+            Confirm::ClearCase => {
+                "Clear the whole case? The variant, gene, condition, every report and every criterion are removed. This cannot be undone."
+                    .to_string()
             }
             Confirm::StartFromLatest => {
                 "Replace today's evidence with a copy of the latest record's evidence? Today's criteria will be lost."

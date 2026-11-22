@@ -64,9 +64,9 @@ fn picture_note(picture: Picture) -> &'static str {
     }
 }
 
-/// The name of a picture (marked when chosen) and a line about it.
-fn picture_words(picture: Picture, chosen: bool, (ink, muted): (Hsla, Hsla)) -> Div {
-    let name = if chosen { format!("{} · chosen", picture.name()) } else { picture.name().to_string() };
+/// The name of a picture and a line about it. The chosen card is marked by its edge, fill and tick.
+fn picture_words(picture: Picture, (ink, muted): (Hsla, Hsla)) -> Div {
+    let name = picture.name().to_string();
     div()
         .flex_1()
         .min_w_0()
@@ -100,7 +100,7 @@ impl Workbench {
             .h_auto()
             .p_4()
             .rounded(px(crate::look::CARD_RADIUS))
-            .bg(theme.popover)
+            .bg(if chosen { theme.muted } else { theme.popover })
             .border_1()
             .border_color(if chosen { crate::look::edge(cx) } else { line })
             .accessibility_label(format!("Draw the class as a {}", picture.name().to_lowercase()))
@@ -113,7 +113,10 @@ impl Workbench {
                     .items_center()
                     .gap_4()
                     .child(div().w(px(96.)).flex().justify_center().child(sketch(picture, dark)))
-                    .child(picture_words(picture, chosen, (ink, muted))),
+                    .child(picture_words(picture, (ink, muted)))
+                    .when(chosen, |row| {
+                        row.child(Icon::new(IconName::CircleCheck).w(px(18.)).h(px(18.)).flex_none().text_color(ink))
+                    }),
             )
             .on_click(cx.listener(move |this, _, _, cx| this.choose_picture(picture, cx)))
     }

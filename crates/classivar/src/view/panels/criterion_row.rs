@@ -159,7 +159,9 @@ impl Workbench {
         let word = if open { "Less" } else { "More" };
         let code = c.code.clone();
         Button::new(SharedString::from(format!("detail-{}", c.code)))
+            .icon(Icon::new(if open { IconName::ChevronUp } else { IconName::ChevronDown }))
             .label(word)
+            .tooltip(if open { "Hide the rule" } else { "Read the rule" })
             .accessibility_label(format!("{word} about {}: {}", c.code, c.title))
             .small()
             .ghost()

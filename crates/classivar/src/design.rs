@@ -90,6 +90,18 @@ pub fn class_ink(class: Class, dark: bool) -> Rgba {
     if matches!(class, Class::Pathogenic | Class::Benign) { rgb(0xffffff) } else { rgb(0x0b0b0b) }
 }
 
+/// The fill and text of a PanelApp rating, in PanelApp's traffic-light colours.
+/// Always drawn with the rating's word, never as colour alone.
+pub fn panel_rating(confidence: classivar_sources::panelapp::Confidence) -> (Rgba, Rgba) {
+    use classivar_sources::panelapp::Confidence;
+    match confidence {
+        Confidence::Green => (rgb(0xcdebd3), rgb(0x0b3a17)),
+        Confidence::Amber => (rgb(0xffe0a6), rgb(0x3d2600)),
+        Confidence::Red => (rgb(0xf8d0cc), rgb(0x5c0f0b)),
+        Confidence::NotRated => (rgb(0xe6e5e0), rgb(0x2b2b2b)),
+    }
+}
+
 /// The fill of every warning and blocking notice. The kit's own warning pair is
 /// hard to read (about 1.8:1 in the light theme), so the app uses its own pair,
 /// which reads the same in both themes.
@@ -133,8 +145,18 @@ mod tests {
     // `#[test]` macro (through `gpui_kit::*`), which replaces Rust's.
     use super::{
         CLASSES, Direction, class_fill, class_ink, confirm_fill, confirm_ink, contrast, direction_colour,
-        direction_ink, warning_fill, warning_ink,
+        direction_ink, panel_rating, warning_fill, warning_ink,
     };
+    use classivar_sources::panelapp::Confidence;
+
+    #[test]
+    fn panelapp_rating_pairs_reach_wcag_aa_contrast() {
+        for confidence in [Confidence::Green, Confidence::Amber, Confidence::Red, Confidence::NotRated] {
+            let (fill, ink) = panel_rating(confidence);
+            let ratio = contrast(fill, ink);
+            assert!(ratio >= 4.5, "{confidence:?}: {ratio:.2}:1");
+        }
+    }
 
     #[test]
     fn class_colours_reach_wcag_aa_contrast_for_their_text() {

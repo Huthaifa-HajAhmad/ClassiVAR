@@ -66,10 +66,9 @@ impl Workbench {
                             .child(today.child(today_total)),
                     ),
             )
-            .child(caption(muted).child(format!(
-                "Records are scored the way they were made (criteria that no longer count are still counted). Today's evidence uses today's rules. {}. An outlined cell differs from the latest record. The criterion and Today columns stay in place while the records scroll sideways.",
-                rules_tag(self.rules)
-            )))
+            .child(caption(muted).child(
+                "Records are scored the way they were made, so criteria that no longer count are still counted. Today uses today's rules. An outlined cell differs from the latest record.",
+            ))
             .into_any_element()
     }
 
@@ -119,8 +118,12 @@ impl Workbench {
 }
 
 const HISTORY_ROW_H: f32 = 36.;
-const HISTORY_LABEL_W: f32 = 48.;
-const HISTORY_COL_W: f32 = 120.;
+const HISTORY_LABEL_W: f32 = 76.;
+const HISTORY_COL_W: f32 = 132.;
+/// The height of a column head and of the Total row. Every column uses the same
+/// number, so the three stacks line up whatever the text inside wraps to.
+const HISTORY_HEAD_H: f32 = 44.;
+const HISTORY_TOTAL_H: f32 = 60.;
 
 fn history_cell(content: AnyElement) -> Div {
     div().flex_1().min_w(px(HISTORY_COL_W)).px_1().child(content)
@@ -129,9 +132,10 @@ fn history_cell(content: AnyElement) -> Div {
 /// A two-line column head: a title and a muted line under it.
 fn history_head(title: String, note: String, muted: Hsla) -> Div {
     div()
+        .h(px(HISTORY_HEAD_H))
         .flex()
         .flex_col()
-        .py_1()
+        .justify_center()
         .child(div().text_xs().font_weight(FontWeight::SEMIBOLD).truncate().child(title))
         .child(caption(muted).truncate().child(note))
 }
@@ -139,14 +143,13 @@ fn history_head(title: String, note: String, muted: Hsla) -> Div {
 /// The three column heads: the codes, one for each record, and today.
 fn history_heads(re: &Reevaluation, muted: Hsla) -> (Div, Div, Div) {
     let labels = div().flex().flex_col().child(history_head("Criterion".into(), "code".into(), muted));
-    let mut heads = div().flex().items_start().py_1();
+    let mut heads = div().flex().items_start();
     for r in &re.records {
         let reported = match &r.reported_tier {
             Some(tier) => format!("reported {} · {tier}", r.reported_class.short()),
             None => format!("reported {}", r.reported_class.short()),
         };
-        // The head of a record has no padding of its own: its cell supplies it.
-        let head = history_head(format!("{} · {}", r.label, r.year), reported, muted).py_0();
+        let head = history_head(format!("{} · {}", r.label, r.year), reported, muted);
         heads = heads.child(history_cell(head.into_any_element()));
     }
     let records = div().flex().flex_col().w_full().min_w(px(HISTORY_COL_W * re.records.len() as f32)).child(heads);
@@ -156,12 +159,9 @@ fn history_heads(re: &Reevaluation, muted: Hsla) -> (Div, Div, Div) {
 
 /// The "Total" row of the three columns.
 fn history_totals(re: &Reevaluation, border: Hsla, muted: Hsla) -> (Div, Div, Div) {
-    let labels = div()
-        .py_1()
-        .border_t_1()
-        .border_color(border)
-        .child(div().text_xs().font_weight(FontWeight::SEMIBOLD).child("Total"));
-    let mut records = div().flex().items_start().py_1().border_t_1().border_color(border);
+    let total_row = || div().h(px(HISTORY_TOTAL_H)).pt_2().border_t_1().border_color(border);
+    let labels = total_row().child(div().text_xs().font_weight(FontWeight::SEMIBOLD).child("Total"));
+    let mut records = total_row().flex().items_start();
     for r in &re.records {
         let mut col = div().flex().flex_col().child(div().text_sm().child(Workbench::total_text(&r.assessment)));
         if r.consistency() == Consistency::Differs {
@@ -172,10 +172,7 @@ fn history_totals(re: &Reevaluation, border: Hsla, muted: Hsla) -> (Div, Div, Di
         }
         records = records.child(history_cell(col.into_any_element()));
     }
-    let today = div()
-        .py_1()
-        .border_t_1()
-        .border_color(border)
-        .child(div().text_sm().font_weight(FontWeight::BOLD).child(Workbench::total_text(&re.today)));
+    let today =
+        total_row().child(div().text_sm().font_weight(FontWeight::BOLD).child(Workbench::total_text(&re.today)));
     (labels, records, today)
 }

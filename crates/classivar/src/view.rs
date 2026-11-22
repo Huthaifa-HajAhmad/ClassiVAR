@@ -23,7 +23,7 @@ use classivar_sources::{
     panelapp::{self, Confidence, Instance, PanelAppGene},
 };
 use gpui_kit::component::{
-    ActiveTheme, Disableable, Selectable, Sizable, Theme, ThemeMode,
+    ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable, Theme, ThemeMode,
     button::{Button, ButtonCustomVariant, ButtonVariants},
     input::{Input, InputEvent, InputState},
 };
@@ -50,6 +50,8 @@ mod headless;
 mod headless_case;
 #[cfg(test)]
 mod headless_keys;
+#[cfg(test)]
+mod headless_polish;
 mod helper_state;
 #[cfg(test)]
 mod real_case;
@@ -70,8 +72,8 @@ use types::*;
 use variant_state::VariantState;
 
 use describe::{
-    CARD_LINES, describe_clingen, describe_g2p, describe_panelapp, discouraged_row_note, plural, rules_about_text,
-    rules_tag, scale_for, tiers_are_ranged,
+    describe_clingen, describe_g2p, describe_panelapp, discouraged_row_note, plural, rules_about_text, rules_tag,
+    scale_for, tiers_are_ranged,
 };
 use evidence::{carry_forward, open_notes, to_applied};
 use file_io::{default_save_folder, suggested_file_name, write_case};
@@ -119,8 +121,14 @@ pub struct Workbench {
     case_gene: String,
     /// Whether the four source cards are shown. They are tall, so the curator can hide them.
     gene_cards_open: bool,
-    /// Cards that show all their lines instead of the first few.
-    expanded_cards: HashSet<&'static str>,
+    /// Whose condition the open gene sources are choosing: the case's (today) or an earlier report's.
+    sources_for: Editing,
+    /// The kinds of evidence folded away in the criteria list.
+    folded: HashSet<Category>,
+    /// The curator chose to type the condition instead of picking it from the gene sources.
+    typing_condition: bool,
+    /// A gene taken from the checked variant, written into the gene box on the next draw (that needs the window).
+    pending_gene_box: Option<String>,
     /// Criteria whose full note and source are open.
     open_details: HashSet<String>,
     /// The criterion whose strength guide is waiting for an answer.
@@ -177,7 +185,10 @@ impl Workbench {
             gene_error: None,
             case_gene: String::new(),
             gene_cards_open: false,
-            expanded_cards: HashSet::new(),
+            sources_for: Editing::Today,
+            folded: HashSet::new(),
+            typing_condition: false,
+            pending_gene_box: None,
             open_details: HashSet::new(),
             guide_open: None,
             guide_gene_level: None,
