@@ -62,6 +62,21 @@ pub(super) fn segments(steps: &[Step], scale: &Scale) -> Vec<Segment> {
         .collect()
 }
 
+/// The slices that get their code written on them: wide enough for the text, and not
+/// over an earlier slice that already has its code. Opposite evidence covers the same
+/// angles near zero, so two codes would be written on top of each other. The hover card,
+/// the chips under the picture and the track still name every slice.
+pub(super) fn labelled(slices: &[Segment], radius: f32, needs: f32) -> Vec<&Segment> {
+    let mut chosen: Vec<&Segment> = Vec::new();
+    for slice in slices.iter().filter(|s| (s.start - s.end) * radius >= needs) {
+        let free = chosen.iter().all(|kept| slice.end >= kept.start || slice.start <= kept.end);
+        if free {
+            chosen.push(slice);
+        }
+    }
+    chosen
+}
+
 /// Which slice a pointer at `(x, y)` is over, if any. `ring` is the inner and outer radius of the evidence ring.
 pub(super) fn segment_at(
     segments: &[Segment],
@@ -85,7 +100,7 @@ mod tests {
     use classivar_core::{Applied, RuleSet, Strength};
 
     use super::super::evidence_stack::steps;
-    use super::{angle_of, polar, radius_for, segment_at, segments};
+    use super::{angle_of, labelled, polar, radius_for, segment_at, segments};
     use crate::view::describe::Scale;
     use crate::view::describe::scale_for;
 
@@ -120,6 +135,24 @@ mod tests {
         assert_eq!(radius_for(2000., 2000.), super::MAX_RADIUS);
         let middle = radius_for(500., 400.);
         assert!(middle > super::MIN_RADIUS && middle < super::MAX_RADIUS);
+    }
+
+    #[test]
+    fn two_slices_over_the_same_angles_never_both_get_their_code_written() {
+        let rules = RuleSet::builtin().unwrap();
+        let scale = scale_for(rules);
+        let result =
+            rules.assess(&[Applied::new("PM2", Strength::Supporting), Applied::new("BS4", Strength::Strong)]).unwrap();
+        let slices = segments(&steps(&result.items), &scale);
+        let shown = labelled(&slices, 180., 0.);
+        assert_eq!(shown.iter().map(|s| s.code.as_str()).collect::<Vec<_>>(), ["PM2"], "BS4 spans PM2's angles");
+        let apart =
+            rules.assess(&[Applied::new("PS1", Strength::Strong), Applied::new("PM2", Strength::Supporting)]).unwrap();
+        assert_eq!(
+            labelled(&segments(&steps(&apart.items), &scale), 180., 0.).len(),
+            2,
+            "end-to-end slices both keep theirs"
+        );
     }
 
     #[test]

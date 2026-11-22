@@ -16,7 +16,7 @@ use std::time::Duration;
 use classivar_core::Assessment;
 
 use super::block_tip::{TIP_WIDTH, floating};
-use super::dial_geometry::{Segment, angle_of, polar, radius_for, segment_at, segments};
+use super::dial_geometry::{Segment, angle_of, labelled, polar, radius_for, segment_at, segments};
 use super::evidence_stack::{bars, steps};
 use super::point_axis::{points_text, widened};
 use super::*;
@@ -233,7 +233,7 @@ fn labels(face: &Face) -> Vec<AnyElement> {
         out.push(place(face, points_text(*from), at, face.muted, false));
     }
     let middle = (face.ring().0 + face.ring().1) / 2.;
-    for slice in face.slices.iter().filter(|slice| (slice.start - slice.end) * middle >= 34.) {
+    for slice in labelled(&face.slices, middle, 34.) {
         let (x, y) = polar(face.centre(), middle, (slice.start + slice.end) / 2.);
         out.push(
             figure(11.)
