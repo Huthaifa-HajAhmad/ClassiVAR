@@ -18,6 +18,8 @@ Reading a paper does not show how evidence adds up. Seeing it does.
 
 ## 3. Users
 
+> **Changed 2026-11-22:** ClassiVAR is an explanation tool. The learning layer (F5), the practice shelf (F8), lessons and practice cases below were dropped; a criterion's rule text opens on demand. They are kept as history.
+
 1. **Primary:** the owner, learning curation while doing it.
 2. **Later:** colleagues on the owner's team (Windows and macOS), after a qualified reviewer has checked the content.
 

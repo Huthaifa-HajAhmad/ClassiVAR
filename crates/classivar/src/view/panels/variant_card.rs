@@ -9,30 +9,7 @@ use classivar_core::{Condition, Inheritance};
 use classivar_sources::allele_registry::Lookup as Found;
 
 use super::*;
-
-/// The lines of an identity card, in the order shown. Only what the registry gave.
-pub(super) fn identity_lines(identity: &VariantIdentity) -> Vec<String> {
-    let mut lines = Vec::new();
-    if let Some(name) = &identity.mane_select {
-        let gene = identity.gene.as_deref().map(|g| format!(" ({g})")).unwrap_or_default();
-        lines.push(format!("MANE Select: {name}{gene}"));
-    }
-    if let Some(protein) = &identity.protein {
-        lines.push(format!("Protein: {protein}"));
-    }
-    lines.extend(identity.grch38.as_ref().map(|g| format!("GRCh38: {g}")));
-    lines.extend(identity.grch37.as_ref().map(|g| format!("GRCh37: {g}")));
-    let mut ids = Vec::new();
-    ids.extend(identity.allele_id.clone());
-    ids.extend(identity.clinvar_variation.map(|id| format!("ClinVar VCV{id:09}")));
-    ids.extend(identity.dbsnp.map(|rs| format!("rs{rs}")));
-    if identity.allele_id.is_none() {
-        ids.push("not yet registered (no CA id)".into());
-    }
-    lines.push(ids.join(" · "));
-    lines.push(format!("Checked with {} on {}.", identity.checked_with, identity.checked_on));
-    lines
-}
+use crate::view::variant::curation_is_chosen;
 
 /// A warning when the checked variant lies in another gene than the case's.
 pub(super) fn gene_mismatch(identity: Option<&VariantIdentity>, case_gene: &str) -> Option<String> {
@@ -51,7 +28,7 @@ impl Workbench {
             .gap_2()
             .child(div().flex_1().min_w_0().child(Input::new(&self.boxes.variant).aria_label("Variant name")));
         let check = Button::new("variant-check")
-            .label("Check variant")
+            .label("Check")
             .accessibility_label("Check the variant with the ClinGen Allele Registry")
             .small()
             .outline()
@@ -61,7 +38,7 @@ impl Workbench {
             .flex()
             .flex_col()
             .gap_2()
-            .child(super::records::form_row("Variant", row.child(check), cx))
+            .child(super::records::form_row("Description", row.child(check), cx))
             .when(self.variant_needs_build(cx), |d| d.child(self.build_choice(cx)))
             .children(self.variant.problem.clone().map(|p| notice(p, warning_fill(), warning_ink())))
             .child(self.variant_answer(cx))
@@ -122,23 +99,6 @@ impl Workbench {
             .into_any_element()
     }
 
-    /// One identity: the registry's names for it, one per line.
-    fn identity_card(&self, identity: &VariantIdentity, changed: bool, cx: &mut Context<Self>) -> Div {
-        let muted = cx.theme().muted_foreground;
-        let lines = identity_lines(identity);
-        crate::look::card(cx)
-            .p_2()
-            .flex()
-            .flex_col()
-            .gap_1()
-            .text_xs()
-            .child(crate::look::eyebrow("Checked variant", cx))
-            .children(lines.into_iter().map(|line| div().child(line)))
-            .when(changed, |d| {
-                d.child(caption(muted).child("The variant box changed since this check. Check again to update it."))
-            })
-    }
-
     /// Several alleles for one id (a multi-allelic rsID): the curator picks one.
     fn allele_choices(&self, list: &[VariantIdentity], cx: &mut Context<Self>) -> Div {
         let mut column = div().flex().flex_col().gap_1().child(
@@ -183,7 +143,7 @@ impl Workbench {
             .flex_col()
             .gap_2()
             .child(super::records::form_row(
-                "Condition",
+                "Name",
                 div().w_full().child(Input::new(&self.variant.condition_input).aria_label("Condition")),
                 cx,
             ))
@@ -198,24 +158,26 @@ impl Workbench {
         if curations.is_empty() {
             return None;
         }
-        let mut row = div()
-            .flex()
-            .flex_wrap()
-            .items_center()
-            .gap_1()
-            .child(caption(cx.theme().muted_foreground).child("From ClinGen:"));
+        let chosen_now = self.variant.condition.as_ref();
+        let mut pills = div().flex().flex_wrap().gap_2();
         for (i, curation) in curations.iter().take(4).enumerate() {
             let label = format!("{} ({}, {})", curation.disease, curation.inheritance, curation.classification);
+            // The pill of the condition now set is filled and ticked; the others offer "+".
+            let chosen = curation_is_chosen(chosen_now, curation);
             let picked = curation.clone();
-            row = row.child(
-                Button::new(SharedString::from(format!("condition-clingen-{i}")))
-                    .label(label.clone())
+            pills = pills.child(
+                crate::look::choice_pill(format!("condition-clingen-{i}"), &label, chosen, cx)
                     .accessibility_label(format!("Use {label} as the case's condition"))
-                    .small()
-                    .ghost()
+                    .tooltip(label.clone())
                     .on_click(cx.listener(move |this, _, window, cx| this.use_curation(&picked, window, cx))),
             );
         }
+        let row = div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(caption(cx.theme().muted_foreground).child("Or choose a condition ClinGen rated for this gene:"))
+            .child(pills);
         Some(row)
     }
 
@@ -303,7 +265,8 @@ mod tests {
     // Explicit imports: `use super::*` would bring in GPUI's own `#[test]` macro.
     use classivar_core::variant::VariantIdentity;
 
-    use super::{gene_mismatch, identity_lines, source_text};
+    use super::super::identity_card::identity_view;
+    use super::{gene_mismatch, source_text};
 
     fn brca1() -> VariantIdentity {
         VariantIdentity {
@@ -322,13 +285,24 @@ mod tests {
 
     #[test]
     fn the_identity_card_names_only_what_the_registry_gave() {
-        let lines = identity_lines(&brca1());
-        assert_eq!(lines[0], "MANE Select: NM_007294.4:c.5266dup (BRCA1)");
-        assert!(lines.iter().any(|l| l == "GRCh38: NC_000017.11:g.43057065dup"));
-        assert!(!lines.iter().any(|l| l.starts_with("GRCh37")), "no GRCh37 was given");
-        assert!(lines.contains(&"CA003404 · ClinVar VCV000017677 · rs80357906".to_string()), "{lines:?}");
+        let view = identity_view(&brca1());
+        assert_eq!(view.heading, "MANE Select");
+        assert_eq!(view.name.as_deref(), Some("NM_007294.4:c.5266dup"));
+        assert_eq!(view.gene.as_deref(), Some("BRCA1"));
+        assert_eq!(view.builds, vec![("GRCh38", "NC_000017.11:g.43057065dup".to_string())], "no GRCh37 was given");
+        assert_eq!(view.ids, ["CA003404", "VCV000017677", "rs80357906"]);
+        assert_eq!(view.checked, "ClinGen Allele Registry · 2026-11-21");
         let unregistered = VariantIdentity { allele_id: None, ..brca1() };
-        assert!(identity_lines(&unregistered).iter().any(|l| l.contains("not yet registered")));
+        assert!(identity_view(&unregistered).ids.iter().any(|id| id.contains("not yet registered")));
+    }
+
+    #[test]
+    fn without_a_mane_select_transcript_the_genomic_name_leads_and_is_not_repeated() {
+        let genomic = VariantIdentity { mane_select: None, gene: None, ..brca1() };
+        let view = identity_view(&genomic);
+        assert_eq!(view.heading, "Genomic, GRCh38");
+        assert_eq!(view.name.as_deref(), Some("NC_000017.11:g.43057065dup"));
+        assert!(view.builds.is_empty(), "the name is not repeated as a build row");
     }
 
     #[test]

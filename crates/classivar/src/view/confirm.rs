@@ -17,7 +17,6 @@ impl Workbench {
                 }
             }
             Confirm::StartFromLatest => self.start_from_latest(),
-            Confirm::LoadExample => self.load_example(window, cx),
             Confirm::OpenCase(case) => self.apply_case(*case, window, cx),
             Confirm::RemoveRecord(index, _) => self.remove_record(index, window, cx),
             Confirm::CloseWindow => window.remove_window(),
@@ -49,16 +48,9 @@ impl Workbench {
                 "Replace today's evidence with a copy of the latest record's evidence? Today's criteria will be lost."
                     .to_string()
             }
-            Confirm::LoadExample => {
-                "Load the fictional example? It replaces the variant and gene, today's evidence and all records."
-                    .to_string()
-            }
             Confirm::OpenCase(case) => format!(
                 "Open the case for {}? It replaces today's evidence, the records and the gene decision on screen.",
                 if case.variant.is_empty() { "an unnamed variant" } else { case.variant.as_str() }
-            ),
-            Confirm::NewGene(symbol) if self.example => format!(
-                "This is the fictional example: the criteria and records on screen are the demo's, not a real variant. Start a real case for {symbol}? This clears them."
             ),
             Confirm::NewGene(symbol) => format!(
                 "You are switching from {} to {}. The evidence, records, gene decision and variant name belong to {}. Start a new case for {}? This clears them.",

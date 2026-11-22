@@ -2,7 +2,7 @@
 
 The workbench explains how chosen evidence leads to a classification and how that evidence compares with an earlier report.
 
-The opening screen offers both workflows and a separate fictional case.
+The opening screen offers both workflows and opening a saved case. (A fictional demo case was offered until 2026-11-22; it was removed when the app became an explanation tool.)
 
 ## In scope
 
@@ -12,8 +12,8 @@ Status on 2026-11-04 is in `docs/ROADMAP.md` and in `docs/AUDIT-2026-11-04.md` s
 2. **Reported-variant path:** enter the existing class and what each lab used; see a side-by-side history against today's rules, with a verdict ("holds", "upgrade candidate", "downgrade candidate") and reasons.
 3. **Gene checks:** gene-disease validity and gene-specific rule-set lookup (OMIM, DECIPHER, PanelApp, ClinGen) with manual override and "source and date" on every answer.
 4. **ClinVar record import** for the reported-variant path.
-5. **Learning layer** on every criterion, and a short lesson set (see below).
-6. **Practice shelf** with a small set of solved cases.
+5. ~~Learning layer and lesson set~~ dropped 2026-11-22: each criterion's rule text opens on demand instead.
+6. ~~Practice shelf~~ dropped 2026-11-22.
 7. **Windows and macOS builds.**
 
 ## Not covered: other frameworks
@@ -24,7 +24,7 @@ ClassiVAR scores germline sequence variants with the ACMG/AMP 2015 criteria and 
 
 Population and prediction fetching, gene-specific rule overlays, the saved re-check list, slide and PDF export, shared cases, web build, VUS tier numbers, accounts.
 
-## Lesson set for the MVP (proposal)
+## Lesson set for the MVP (dropped 2026-11-22, kept as history)
 
 0. The framework and its vocabulary
 1. Evidence types and where to find them
@@ -44,9 +44,9 @@ Population and prediction fetching, gene-specific rule overlays, the saved re-ch
 | M3 | Reported-variant view | **Done 2026-11-03; phase B 2026-11-04.** Engine (`reevaluate`, 16 tests), records strip, history table, reasons and verdict work in the real app with a fictional example, and each VUS record can name its sub-tier with the definition and source shown. Remove now asks first, and record labels stay unique. Still needed: lab names typed by hand (text box), ClinVar fills (M5), three more sample variants. |
 | M4 | Gene checks | **Four sources done 2026-11-03** in `classivar-sources`: ClinGen gene-disease validity, Gene2Phenotype, PanelApp England, PanelApp Australia. 29 offline tests, 5 live tests run and passing (2026-11-04). Shown in the app, each with its own date; a failure is shown as a failure; "not found" only when the service says so; your own yes/no answer on the gene-disease link, and a warning stays until you confirm. Still needed: GenCC (bulk file, no API yet), gene-specific rule-set (VCEP) lookup (the ClinGen CSpec registry has a public JSON API that is not used yet), OMIM (key pending), saving downloads to disk for offline use, smarter choice of which panels to show. |
 | M5 | ClinVar import | A ClinVar record fills the reported-variant view |
-| M6 | Lessons and practice shelf | Lessons 0-6 written with sources; at least 10 solved cases; answer stays hidden until commit |
+| M6 | ~~Lessons and practice shelf~~ | Dropped 2026-11-22 |
 | M7 | Content review | A qualified reviewer has checked the rule file and lessons; status changes to "reviewed" |
-| M8 | Packaging | Installer for Windows and a macOS app that a colleague can run unaided |
+| M8 | Packaging | Installer for Windows and a macOS app that a colleague can run unaided. **Built 2026-11-22** (v1.0.0, `docs/RELEASE.md`); signing and a colleague's unaided run are open. |
 
 ## Acceptance for the MVP
 

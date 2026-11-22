@@ -6,7 +6,7 @@
 # ClassiVAR is verifiably the front window, and captures only the client area.
 #
 # Controls are found by accessible name, so renaming these means updating the
-# script: "Theme: light. Switch to dark.", "PVS1:*not applied*", "PVS1 Very
+# script: "Dark theme", "PVS1:*not applied*", "PVS1 Very
 # strong:*", "PVS1 strength: Very strong*", "BRCA1". Text boxes are found by
 # their aria labels. The script never calls the gene sources, so it runs
 # offline; the live source tests cover the network.
@@ -67,6 +67,9 @@ try {
     }
     $h = $proc.MainWindowHandle
     if ($h -eq 0) { throw "ClassiVAR did not open a window" }
+    # The app opens maximized; the checks below assume its restored 1240 x 900 window.
+    [ClassiVarSmokeWin]::ShowWindow($h, 9) | Out-Null
+    Start-Sleep -Milliseconds 600
     $shots = @()
 
     function Focus-App {
@@ -319,12 +322,15 @@ try {
     $light = Capture "01-light"
     if ($light.Background.R -lt 200) { throw "the app did not start in the light theme" }
 
-    Click-Button-Like "Theme:*Switch to dark*"
+    Click-Button "Dark theme"
     $dark = Capture "02-dark"
     if ($dark.Background.R -gt 80) { throw "the background did not change from light to dark" }
     $saved = (Get-Content $settings -Raw).Trim()
     if ($saved -ne "theme=dark") { throw "the theme choice was not saved (settings: $saved)" }
-    Find-Button-Like "Theme: dark. Switch to light.*" | Out-Null
+    $darkHalf = Find-Button "Dark theme"
+    $state = $null
+    try { $state = $darkHalf.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Current.ToggleState } catch {}
+    if ("$state" -ne "On") { throw "the Dark half of the theme switch is not marked as chosen" }
 
     Click-Button "Evidence helpers"
     Set-GeneText "brc"
@@ -683,16 +689,23 @@ try {
         throw "the case evidence was lost when the gene box was cleared"
     }
 
-    # The path that once overflowed the stack: Reported variant, then the example.
+    # The path that once overflowed the stack: Reported variant with an earlier record.
+    # The record is entered by hand: it reported VUS with PM2.
     Click-Button "Reported variant"
-    Click-Button "Load example"
-    Start-Sleep -Milliseconds 400
-    if (@(Names | Where-Object { $_ -eq "Yes, continue" }).Count -eq 1) {
-        Click-Button "Yes, continue"
-    }
-    Find-Button-Like "Lab A*" | Out-Null
-    # Removing a record must ask first, not delete on one click.
-    Click-Button-Like "Lab A*"
+    Click-Button "+ Add record"
+    Find-Button-Like "Record 1*" | Out-Null
+    # The record's form sits below the case sections; a control off screen ignores a click.
+    Scroll-To-Button "This record reported Uncertain*"
+    Click-Button-Like "This record reported Uncertain*"
+    Start-Sleep -Milliseconds 300
+    $vus = Find-Button-Like "This record reported Uncertain*"
+    $state = $null
+    try { $state = $vus.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Current.ToggleState } catch {}
+    if ("$state" -ne "On") { throw "choosing VUS for the new record did not take (toggle state '$state')" }
+    Scroll-To-Button "PM2:*not applied*"
+    Click-Button-Like "PM2:*not applied*"
+    Find-Button-Like "PM2:*applied*" | Out-Null
+    Click-Button-Like "Record 1*"
     # The name box renames the record as you type.
     Set-BoxText "Lab or source name" "Quest Dx"
     Find-Button-Like "Quest Dx*" | Out-Null
@@ -702,6 +715,7 @@ try {
     Press-Key "{PGUP}"
     Press-Key "{PGUP}"
     Press-Key "{PGUP}"
+    # Removing a record must ask first, not delete on one click.
     Click-Button "Remove record"
     Start-Sleep -Milliseconds 300
     if (@(Names | Where-Object { $_ -eq "Yes, continue" }).Count -ne 1) {
@@ -746,26 +760,6 @@ try {
     Click-Button "Cancel"
     $reported = Capture "07-reported"
 
-    # The loaded example is fictional, and the gene box is empty on it, so the
-    # old "same gene, different gene" guard cannot notice a first gene check:
-    # checking a gene on the example asks first. Escape leaves it intact.
-    Set-GeneText "brca2"
-    # The editor sheet may be scrolled down here, with the gene box above the view.
-    Scroll-To-Button "Check gene"
-    Click-Button "Check gene"
-    if (@(Names | Where-Object { $_ -eq "Yes, continue" }).Count -ne 1) {
-        throw "checking a gene on the fictional example did not ask first"
-    }
-    $guard = Capture "07b-example-gene-guard"
-    Press-Escape
-    if (@(Names | Where-Object { $_ -eq "Yes, continue" }).Count -ne 0) {
-        throw "Escape did not close the gene question"
-    }
-    if (@(Names | Where-Object { $_ -like "PM2:*applied*" }).Count -ne 1) {
-        throw "the gene question on the example lost the example's evidence"
-    }
-    Set-GeneText ""
-
     Click-Button "Compare reports"
     # The history table: the criterion and Today columns are frozen, and the
     # records between them scroll sideways. The table is plain text, so these are
@@ -784,7 +778,7 @@ try {
     Find-Button-Like "Save case*" | Out-Null
     Find-Button-Like "PM2:*applied*" | Out-Null
 
-    Click-Button-Like "Theme:*Switch to light*"
+    Click-Button "Light theme"
     $back = Capture "08-light-again"
     if ($back.Background.R -lt 200) { throw "the background did not return to light" }
 

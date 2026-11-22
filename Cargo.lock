@@ -959,10 +959,11 @@ checksum = "1c133bc6a41be0d194c306b5506d15e6feeea7b1d6604bd3f8310dfb2ca96486"
 
 [[package]]
 name = "classivar"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "classivar-core",
  "classivar-sources",
+ "embed-resource",
  "gpui-kit",
  "gpui-pre",
  "serde_json",
@@ -970,7 +971,7 @@ dependencies = [
 
 [[package]]
 name = "classivar-core"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -980,7 +981,7 @@ dependencies = [
 
 [[package]]
 name = "classivar-sources"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "classivar-core",
  "csv",

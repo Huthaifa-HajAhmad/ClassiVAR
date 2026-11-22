@@ -7,7 +7,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-classivar-core = { version = "0.1.0", path = "../classivar-core" }
+classivar-core = { version = "1.0.0", path = "../classivar-core" }
 csv = "1.4.0"
 roxmltree = "0.21.2"
 serde = { version = "1.0.229", features = ["derive"] }

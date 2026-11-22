@@ -1,0 +1,194 @@
+# Builds the installers for a release and attaches them to a draft GitHub
+# release. Run it by pushing a tag such as v1.0.0, or by hand from the Actions
+# tab. The release stays a draft until a person checks it and publishes it
+# (docs/RELEASE.md).
+#
+# Signing happens only when the signing secrets exist. Without them the build
+# still succeeds, the files are unsigned, and the job warns. When the secrets
+# exist, the job checks the real files and fails if the signature is not valid.
+# An unsigned Windows installer shows a SmartScreen warning, and macOS refuses to
+# open an unsigned, unnotarized app until the user allows it in System Settings.
+#   Windows: WINDOWS_CERTIFICATE (base64 .pfx), WINDOWS_CERTIFICATE_PASSWORD
+#   macOS:   APPLE_CERTIFICATE (base64 .p12), APPLE_CERTIFICATE_PASSWORD,
+#            APPLE_SIGNING_IDENTITY (for example "Developer ID Application: Name (TEAMID)"),
+#            and, to notarize, APPLE_ID, APPLE_PASSWORD (app-specific), APPLE_TEAM_ID
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  PACKAGER_VERSION: 0.11.8
+
+permissions:
+  contents: read
+
+# One release run per tag at a time; a second run waits instead of racing the first.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            formats: nsis
+          - os: macos-15-intel
+            formats: app,dmg
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      # Whether the signing secrets are configured. A secret cannot be read in `if:` directly.
+      HAS_WINDOWS_CERT: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
+      HAS_APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_SIGNING_IDENTITY != '' }}
+      HAS_APPLE_NOTARY: ${{ secrets.APPLE_ID != '' && secrets.APPLE_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - run: rustup show
+      # The merge gate's offline tests, so a release is never built from a red tree.
+      - run: cargo test --workspace --locked
+      - run: cargo install cargo-packager --locked --version "$PACKAGER_VERSION"
+        shell: bash
+
+      - name: Import the Windows signing certificate
+        if: runner.os == 'Windows' && env.HAS_WINDOWS_CERT == 'true'
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        shell: pwsh
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP "signing.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password | Out-Null
+          Remove-Item $pfx
+
+      # cargo-packager signs and notarizes only when `signing-identity` is in its
+      # config, so the identity is added to the macOS table (the last table in the
+      # file, which the check below insists on). cargo-packager imports the
+      # certificate into its own keychain from APPLE_CERTIFICATE.
+      - name: Set the macOS signing identity
+        if: runner.os == 'macOS' && env.HAS_APPLE_CERT == 'true'
+        shell: bash
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          manifest=crates/classivar/Cargo.toml
+          last_table=$(grep '^\[' "$manifest" | tail -1)
+          [ "$last_table" = "[package.metadata.packager.macos]" ] || { echo "::error::the macOS packager table must be the last table in $manifest"; exit 1; }
+          printf 'signing-identity = "%s"\n' "$APPLE_SIGNING_IDENTITY" >> "$manifest"
+          grep -q '^signing-identity = ' "$manifest"
+
+      # Two build steps, because cargo-packager treats an empty APPLE_CERTIFICATE
+      # variable as a certificate. The signing variables exist only in the first.
+      - name: Build the installers (signed)
+        if: runner.os == 'macOS' && env.HAS_APPLE_CERT == 'true'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: cargo packager -p classivar --release -f "${{ matrix.formats }}"
+
+      - name: Build the installers (unsigned)
+        if: runner.os != 'macOS' || env.HAS_APPLE_CERT != 'true'
+        shell: bash
+        run: cargo packager -p classivar --release -f "${{ matrix.formats }}"
+
+      - name: Sign the Windows installer
+        if: runner.os == 'Windows' && env.HAS_WINDOWS_CERT == 'true'
+        shell: pwsh
+        run: |
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match "x64" } | Select-Object -Last 1
+          if ($null -eq $signtool) { throw "signtool.exe (x64) was not found in the Windows SDK on this runner" }
+          Get-ChildItem target/packages -Filter *.exe | ForEach-Object {
+            & $signtool.FullName sign /a /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $_.FullName
+            if ($LASTEXITCODE -ne 0) { throw "signing $($_.Name) failed" }
+          }
+
+      # The signature is read from the files, not inferred from the secrets.
+      - name: Check the Windows signature
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem target/packages -Filter *.exe
+          if ($files.Count -eq 0) { throw "no installer was built" }
+          foreach ($file in $files) {
+            $status = (Get-AuthenticodeSignature $file.FullName).Status
+            if ($env:HAS_WINDOWS_CERT -eq 'true' -and $status -ne 'Valid') { throw "$($file.Name): signature is $status" }
+            if ($status -ne 'Valid') { Write-Host "::warning::$($file.Name) is NOT signed (signature status: $status). Windows will show a SmartScreen warning." }
+            else { Write-Host "$($file.Name): signature is valid." }
+          }
+
+      - name: Check the macOS signature
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          app=$(find target/packages -maxdepth 2 -name '*.app' | head -1)
+          [ -n "$app" ] || { echo "::error::no .app bundle was built"; exit 1; }
+          if [ "$HAS_APPLE_CERT" != "true" ]; then
+            echo "::warning::$app is NOT signed or notarized: the Apple signing secrets are missing. macOS will block it until the user allows it."
+            exit 0
+          fi
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -dv "$app" 2>&1 | grep -q "Authority=Developer ID Application" || { echo "::error::$app is not signed with a Developer ID Application certificate"; exit 1; }
+          if [ "$HAS_APPLE_NOTARY" = "true" ]; then
+            spctl -a -vv -t exec "$app"
+          else
+            echo "::warning::$app is signed but NOT notarized: APPLE_ID, APPLE_PASSWORD or APPLE_TEAM_ID is missing."
+          fi
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: installers-${{ runner.os }}
+          path: |
+            target/packages/*.exe
+            target/packages/*.dmg
+          if-no-files-found: error
+
+  # One job makes the release, so the two platforms cannot race to create it.
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: installers-*
+          merge-multiple: true
+          path: dist
+
+      - name: Create or update the draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          tag="v$version"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "$tag" ]; then
+            echo "::error::the tag ${GITHUB_REF_NAME} does not match the version $version in Cargo.toml"
+            exit 1
+          fi
+          # This version's section of CHANGELOG.md, and only that, is the release's notes.
+          awk -v v="$version" '/^## /{p=($2==v)} p' CHANGELOG.md > notes.md
+          [ -s notes.md ] || { echo "::error::CHANGELOG.md has no '## $version' section"; exit 1; }
+          ls dist
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
+          else
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" \
+              --title "ClassiVAR $version" --notes-file notes.md
+          fi
+          gh release upload "$tag" --repo "$GITHUB_REPOSITORY" --clobber dist/*

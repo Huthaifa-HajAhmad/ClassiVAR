@@ -58,9 +58,25 @@ fn makeup(items: &[Item], category_of: impl Fn(&str) -> Option<Category>) -> Mak
     Makeup { lanes, empty, longest, sides }
 }
 
+/// One line over the rows, in the place where the 2015 table has its sentence,
+/// so the two sections side by side start their cards at the same height.
+fn summary(drawn: &Makeup) -> String {
+    let criteria: usize = drawn.lanes.iter().map(|lane| lane.items.len()).sum();
+    let kinds = drawn.lanes.len();
+    let for_points: i32 = drawn.lanes.iter().map(|lane| lane.for_points).sum();
+    let against: i32 = drawn.lanes.iter().map(|lane| lane.against_points).sum();
+    format!(
+        "{criteria} {} in {kinds} {}: {} for disease, {} against.",
+        if criteria == 1 { "criterion" } else { "criteria" },
+        if kinds == 1 { "kind" } else { "kinds" },
+        signed(for_points),
+        signed(-against),
+    )
+}
+
 /// Width of the kind's name, of the two-sided bar, and of the net points.
-const NAME_WIDTH: f32 = 128.;
-const BAR_WIDTH: f32 = 112.;
+const NAME_WIDTH: f32 = 104.;
+const BAR_WIDTH: f32 = 84.;
 const NET_WIDTH: f32 = 44.;
 
 impl Workbench {
@@ -77,13 +93,14 @@ impl Workbench {
                 empty_row(&drawn.empty, cx).when(!drawn.lanes.is_empty(), |row| row.border_t_1().border_color(border)),
             );
         }
-        rows.into_any_element()
+        div().flex().flex_col().gap_3().child(div().text_sm().child(summary(&drawn))).child(rows).into_any_element()
     }
 }
 
 /// One kind: its name, its criteria as chips, the two-sided bar and the net points.
 fn lane_row(lane: &Lane, drawn: &Makeup, cx: &App) -> Div {
-    let mut chips = div().flex_1().min_w_0().flex().flex_wrap().items_center().gap_2();
+    // Clipped, so a chip in a narrow column never runs into the bar beside it.
+    let mut chips = div().flex_1().min_w_0().overflow_hidden().flex().flex_wrap().items_center().gap_2();
     for item in &lane.items {
         chips = chips.child(chip(item, cx));
     }
@@ -113,6 +130,7 @@ fn chip(item: &Item, cx: &App) -> Div {
         (tag, format!("{}: listed, not counted", item.strength.label()))
     };
     div()
+        .max_w_full()
         .flex()
         .items_center()
         .gap_2()
@@ -124,7 +142,7 @@ fn chip(item: &Item, cx: &App) -> Div {
         .border_1()
         .border_color(theme.border)
         .child(tag)
-        .child(div().text_xs().text_color(theme.muted_foreground).child(words))
+        .child(div().min_w_0().truncate().text_xs().text_color(theme.muted_foreground).child(words))
 }
 
 /// Points against the disease grow left from the zero line, points for it grow
@@ -184,7 +202,7 @@ mod tests {
     // Explicit imports on purpose; see the note in `view.rs` tests.
     use classivar_core::{Applied, Category, RuleSet, Strength};
 
-    use super::makeup;
+    use super::{makeup, summary};
 
     fn rules() -> &'static RuleSet {
         RuleSet::builtin().expect("the built-in rules are valid")
@@ -215,6 +233,22 @@ mod tests {
         assert!(drawn.empty.contains(&Category::FamilyCases));
         assert!(!drawn.empty.contains(&Category::Population));
         assert_eq!(drawn.lanes.len() + drawn.empty.len(), Category::ALL.len());
+    }
+
+    #[test]
+    fn the_summary_counts_criteria_kinds_and_both_sides() {
+        let result = rules()
+            .assess(&[
+                Applied::new("PP3", Strength::Supporting),
+                Applied::new("PM2", Strength::Supporting),
+                Applied::new("BS1", Strength::Strong),
+                Applied::new("PS3", Strength::Strong),
+            ])
+            .unwrap();
+        let text = summary(&makeup(&result.items, category_of));
+        assert_eq!(text, "4 criteria in 3 kinds: +6 for disease, −4 against.");
+        let one = rules().assess(&[Applied::new("PM2", Strength::Supporting)]).unwrap();
+        assert_eq!(summary(&makeup(&one.items, category_of)), "1 criterion in 1 kind: +1 for disease, 0 against.");
     }
 
     #[test]

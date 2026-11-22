@@ -15,10 +15,6 @@ pub(super) fn to_applied(evidence: &Evidence) -> Vec<Applied> {
         .collect()
 }
 
-pub(super) fn evidence_of(list: &[(&str, Strength)]) -> Evidence {
-    list.iter().map(|(code, strength)| (code.to_string(), Choice::new(*strength))).collect()
-}
-
 /// One thing that changed when evidence moved onto today's rules.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Change {

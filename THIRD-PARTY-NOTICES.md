@@ -1,15 +1,14 @@
-﻿# Third-party notices
+# Third-party notices
 
 ClassiVAR itself is licensed under MIT OR Apache-2.0 (see LICENSE-MIT and LICENSE-APACHE).
-It is built with the packages below. This is a list of names, versions and licences taken
-from Cargo metadata. It does **not** contain the licence texts: most of these licences
-require the text to ship with a binary, so gather the texts (for example with `cargo about`)
-before any installer is published.
+It ships with the packages below (build scripts and test-only packages are not listed). This
+is a list of names, versions and licences taken from Cargo. The licence texts are in
+THIRD-PARTY-LICENSES.html, which ships with the installers. Where a package offers a choice that includes GPL or LGPL, ClassiVAR uses
+its MIT or Apache-2.0 option.
 
 Packages offered under several licences (`A OR B`) can be used under any one of them.
 Packages under MPL-2.0 keep their own licence on their own files:
 
-- cbindgen 0.28.0
 - dwrote 0.11.5
 - option-ext 0.2.0
 
@@ -26,25 +25,18 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | aes | 0.8.4 | MIT OR Apache-2.0 |
 | ahash | 0.8.12 | MIT OR Apache-2.0 |
 | aho-corasick | 1.1.5 | Unlicense OR MIT |
-| aligned | 0.4.3 | MIT OR Apache-2.0 |
-| aligned-vec | 0.6.4 | MIT |
-| alloca | 0.4.0 | MIT |
 | allocator-api2 | 0.2.21 | MIT OR Apache-2.0 |
 | android_system_properties | 0.1.6 | MIT OR Apache-2.0 |
-| anes | 0.1.6 | MIT OR Apache-2.0 |
 | annotate-snippets | 0.12.17 | MIT OR Apache-2.0 |
 | anstyle | 1.0.14 | MIT OR Apache-2.0 |
 | anyhow | 1.0.104 | MIT OR Apache-2.0 |
-| arbitrary | 1.5.0 | MIT OR Apache-2.0 |
 | arc-swap | 1.9.3 | MIT OR Apache-2.0 |
-| arg_enum_proc_macro | 0.3.4 | MIT |
 | arraydeque | 0.5.1 | MIT/Apache-2.0 |
 | arrayref | 0.3.9 | BSD-2-Clause |
 | arrayvec | 0.7.8 | MIT OR Apache-2.0 |
 | ash | 0.38.0+1.3.281 | MIT OR Apache-2.0 |
 | ashpd | 0.13.13 | MIT |
 | as-raw-xcb-connection | 1.0.1 | MIT OR Apache-2.0 |
-| as-slice | 0.2.1 | MIT OR Apache-2.0 |
 | async-broadcast | 0.7.2 | MIT OR Apache-2.0 |
 | async-channel | 2.5.0 | Apache-2.0 OR MIT |
 | async-executor | 1.14.1 | Apache-2.0 OR MIT |
@@ -57,15 +49,10 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | async-signal | 0.2.14 | Apache-2.0 OR MIT |
 | async-task | 4.7.1 | Apache-2.0 OR MIT |
 | async-trait | 0.1.92 | MIT OR Apache-2.0 |
-| atomic | 0.5.3 | Apache-2.0/MIT |
 | atomic-waker | 1.1.2 | Apache-2.0 OR MIT |
 | atspi | 0.29.0 | Apache-2.0 OR MIT |
 | atspi-common | 0.13.0 | Apache-2.0 OR MIT |
 | atspi-proxies | 0.13.0 | Apache-2.0 OR MIT |
-| autocfg | 1.5.1 | Apache-2.0 OR MIT |
-| av1-grain | 0.2.5 | BSD-2-Clause |
-| avif-serialize | 0.8.9 | BSD-3-Clause |
-| av-scenechange | 0.14.1 | MIT |
 | backtrace | 0.3.77 | MIT OR Apache-2.0 |
 | base62 | 2.2.6 | MIT |
 | base64 | 0.22.1 | MIT OR Apache-2.0 |
@@ -74,21 +61,13 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | bitflags | 1.3.2 | MIT/Apache-2.0 |
 | bitflags | 2.13.2 | MIT OR Apache-2.0 |
 | bit-set | 0.10.0 | Apache-2.0 OR MIT |
-| bit-set | 0.11.1 | Apache-2.0 OR MIT |
-| bitstream-io | 4.10.0 | MIT/Apache-2.0 |
-| bit-vec | 0.10.1 | Apache-2.0 OR MIT |
 | bit-vec | 0.9.1 | Apache-2.0 OR MIT |
-| block | 0.1.6 | MIT |
-| block2 | 0.5.1 | MIT |
 | block2 | 0.6.2 | MIT |
 | block-buffer | 0.10.4 | MIT OR Apache-2.0 |
 | block-buffer | 0.12.1 | MIT OR Apache-2.0 |
 | blocking | 1.7.0 | Apache-2.0 OR MIT |
 | block-padding | 0.3.3 | MIT OR Apache-2.0 |
-| borsh | 1.8.1 | MIT OR Apache-2.0 |
-| borsh-derive | 1.8.1 | Apache-2.0 |
 | bstr | 1.13.1 | MIT OR Apache-2.0 |
-| built | 0.8.1 | MIT |
 | bumpalo | 3.20.3 | MIT OR Apache-2.0 |
 | bytemuck | 1.25.2 | Zlib OR Apache-2.0 OR MIT |
 | bytemuck_derive | 1.12.1 | Zlib OR Apache-2.0 OR MIT |
@@ -97,24 +76,10 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | bytes | 1.12.1 | MIT |
 | calloop | 0.14.5 | MIT |
 | calloop-wayland-source | 0.4.1 | MIT |
-| cast | 0.3.0 | MIT OR Apache-2.0 |
 | cbc | 0.1.2 | MIT OR Apache-2.0 |
-| cbindgen | 0.28.0 | MPL-2.0 |
-| cc | 1.11.0 | MIT OR Apache-2.0 |
-| c-enum | 0.2.3 | MIT OR Apache-2.0 |
-| cfg_aliases | 0.2.2 | MIT |
 | cfg-if | 1.0.5 | MIT OR Apache-2.0 |
-| chacha20 | 0.10.2 | MIT OR Apache-2.0 |
 | chrono | 0.4.45 | MIT OR Apache-2.0 |
-| ciborium | 0.2.2 | Apache-2.0 |
-| ciborium-io | 0.2.2 | Apache-2.0 |
-| ciborium-ll | 0.2.2 | Apache-2.0 |
 | cipher | 0.4.4 | MIT OR Apache-2.0 |
-| clap | 4.6.7 | MIT OR Apache-2.0 |
-| clap_builder | 4.6.7 | MIT OR Apache-2.0 |
-| clap_lex | 1.1.1 | MIT OR Apache-2.0 |
-| cocoa | 0.25.0 | MIT OR Apache-2.0 |
-| cocoa-foundation | 0.1.2 | MIT OR Apache-2.0 |
 | codespan-reporting | 0.13.1 | Apache-2.0 |
 | color_quant | 1.1.0 | MIT |
 | concurrent-queue | 2.5.0 | Apache-2.0 OR MIT |
@@ -123,27 +88,20 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | const-random | 0.1.18 | MIT OR Apache-2.0 |
 | const-random-macro | 0.1.16 | MIT OR Apache-2.0 |
 | convert_case | 0.10.0 | MIT |
-| convert_case | 0.11.0 | MIT |
 | core_detect | 1.0.0 | MIT/Apache-2.0 |
 | core_maths | 0.1.1 | MIT |
 | core-foundation | 0.10.1 | MIT OR Apache-2.0 |
 | core-foundation | 0.9.4 | MIT OR Apache-2.0 |
 | core-foundation-sys | 0.8.7 | MIT OR Apache-2.0 |
-| core-graphics | 0.23.2 | MIT OR Apache-2.0 |
 | core-graphics | 0.24.0 | MIT OR Apache-2.0 |
-| core-graphics-helmer-fork | 0.24.0 | MIT OR Apache-2.0 |
-| core-graphics-types | 0.1.3 | MIT OR Apache-2.0 |
 | core-graphics-types | 0.2.0 | MIT OR Apache-2.0 |
 | core-text | 21.0.0 | MIT OR Apache-2.0 |
 | cosmic-text | 0.19.0 | MIT OR Apache-2.0 |
 | cpufeatures | 0.2.17 | MIT OR Apache-2.0 |
 | cpufeatures | 0.3.1 | MIT OR Apache-2.0 |
 | crc32fast | 1.5.4 | MIT OR Apache-2.0 |
-| criterion | 0.8.2 | Apache-2.0 OR MIT |
-| criterion-plot | 0.8.2 | Apache-2.0 OR MIT |
 | crossbeam-deque | 0.8.8 | MIT OR Apache-2.0 |
 | crossbeam-epoch | 0.9.21 | MIT OR Apache-2.0 |
-| crossbeam-queue | 0.3.14 | MIT OR Apache-2.0 |
 | crossbeam-utils | 0.8.23 | MIT OR Apache-2.0 |
 | crunchy | 0.2.4 | MIT |
 | crypto-common | 0.1.7 | MIT OR Apache-2.0 |
@@ -161,7 +119,6 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | dirs | 6.0.0 | MIT OR Apache-2.0 |
 | dirs-sys | 0.4.1 | MIT OR Apache-2.0 |
 | dirs-sys | 0.5.0 | MIT OR Apache-2.0 |
-| dispatch | 0.2.0 | MIT |
 | dispatch2 | 0.3.1 | Zlib OR Apache-2.0 OR MIT |
 | displaydoc | 0.2.7 | MIT OR Apache-2.0 |
 | dlib | 0.5.3 | MIT |
@@ -171,7 +128,6 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | dwrote | 0.11.5 | MPL-2.0 |
 | dyn-clone | 1.0.20 | MIT OR Apache-2.0 |
 | either | 1.19.0 | MIT OR Apache-2.0 |
-| embed-resource | 3.0.12 | MIT |
 | encoding_rs | 0.8.44 | (Apache-2.0 OR MIT) AND BSD-3-Clause |
 | encoding_rs_io | 0.1.8 | MIT OR Apache-2.0 |
 | endi | 1.1.1 | MIT |
@@ -180,8 +136,6 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | enum-iterator | 2.3.0 | 0BSD |
 | enum-iterator-derive | 1.5.0 | 0BSD |
 | enumn | 0.1.14 | MIT OR Apache-2.0 |
-| equator | 0.4.2 | MIT |
-| equator-macro | 0.4.2 | MIT |
 | equivalent | 1.0.3 | Apache-2.0 OR MIT |
 | errno | 0.3.14 | MIT OR Apache-2.0 |
 | etagere | 0.2.15 | MIT/Apache-2.0 |
@@ -193,8 +147,6 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | fax | 0.2.7 | MIT |
 | fdeflate | 0.3.7 | MIT OR Apache-2.0 |
 | filedescriptor | 0.8.3 | MIT |
-| find-msvc-tools | 0.1.15 | MIT OR Apache-2.0 |
-| fixedbitset | 0.5.9 | MIT OR Apache-2.0 |
 | flate2 | 1.1.10 | MIT OR Apache-2.0 |
 | float_next_after | 1.0.0 | MIT |
 | float-cmp | 0.9.0 | MIT |
@@ -215,7 +167,6 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | futf | 0.1.5 | MIT / Apache-2.0 |
 | futures | 0.3.34 | MIT OR Apache-2.0 |
 | futures-channel | 0.3.34 | MIT OR Apache-2.0 |
-| futures-concurrency | 7.7.1 | MIT OR Apache-2.0 |
 | futures-core | 0.3.34 | MIT OR Apache-2.0 |
 | futures-executor | 0.3.34 | MIT OR Apache-2.0 |
 | futures-io | 0.3.34 | MIT OR Apache-2.0 |
@@ -232,7 +183,6 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | gif | 0.13.3 | MIT OR Apache-2.0 |
 | gif | 0.14.2 | MIT OR Apache-2.0 |
 | gimli | 0.34.0 | MIT OR Apache-2.0 |
-| gl_generator | 0.14.0 | Apache-2.0 |
 | glob | 0.3.4 | MIT OR Apache-2.0 |
 | globset | 0.4.21 | Unlicense OR MIT |
 | globwalk | 0.8.1 | MIT |
@@ -246,7 +196,6 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | gpui-kit-assets | 0.9.1 | Apache-2.0 |
 | gpui-pre | 0.3.12 | Apache-2.0 |
 | gpui-pre-apple | 0.3.12 | Apache-2.0 |
-| gpui-pre-bench-metrics | 0.3.12 | Apache-2.0 |
 | gpui-pre-collections | 0.3.12 | Apache-2.0 |
 | gpui-pre-derive-refineable | 0.3.12 | Apache-2.0 |
 | gpui-pre-http-client | 0.3.12 | Apache-2.0 |
@@ -275,7 +224,6 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | hashbrown | 0.16.1 | MIT OR Apache-2.0 |
 | hashbrown | 0.17.1 | MIT OR Apache-2.0 |
 | heapless | 0.9.3 | MIT OR Apache-2.0 |
-| heck | 0.4.1 | MIT OR Apache-2.0 |
 | heck | 0.5.0 | MIT OR Apache-2.0 |
 | hermit-abi | 0.5.3 | MIT OR Apache-2.0 |
 | hex | 0.4.3 | MIT OR Apache-2.0 |
@@ -310,13 +258,11 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | imagesize | 0.13.0 | MIT |
 | imagesize | 0.14.0 | MIT |
 | image-webp | 0.2.4 | MIT OR Apache-2.0 |
-| imgref | 1.12.3 | CC0-1.0 OR Apache-2.0 |
 | indexmap | 2.14.2 | Apache-2.0 OR MIT |
 | inotify | 0.11.5 | ISC |
 | inotify-sys | 0.1.8 | ISC |
 | inout | 0.1.4 | MIT OR Apache-2.0 |
 | instant | 0.1.13 | BSD-3-Clause |
-| interpolate_name | 0.2.4 | MIT |
 | inventory | 0.3.25 | MIT OR Apache-2.0 |
 | ipnet | 2.12.2 | MIT OR Apache-2.0 |
 | is-docker | 0.2.0 | MIT |
@@ -328,9 +274,7 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | jni-sys | 0.3.1 | MIT OR Apache-2.0 |
 | jni-sys | 0.4.1 | MIT OR Apache-2.0 |
 | jni-sys-macros | 0.4.1 | MIT OR Apache-2.0 |
-| jobserver | 0.1.35 | MIT OR Apache-2.0 |
 | js-sys | 0.3.107 | MIT OR Apache-2.0 |
-| khronos_api | 3.1.0 | Apache-2.0 |
 | khronos-egl | 6.0.0 | MIT/Apache-2.0 |
 | kqueue | 1.2.1 | MIT |
 | kqueue-sys | 1.1.2 | MIT |
@@ -339,7 +283,6 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | lazy_static | 1.5.1 | MIT OR Apache-2.0 |
 | lebe | 0.5.3 | BSD-3-Clause |
 | libc | 0.2.191 | MIT OR Apache-2.0 |
-| libfuzzer-sys | 0.4.13 | (MIT OR Apache-2.0) AND NCSA |
 | libloading | 0.8.9 | ISC |
 | libm | 0.2.16 | MIT |
 | libredox | 0.1.25 | MIT |
@@ -351,8 +294,6 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | litrs | 1.0.1 | MIT OR Apache-2.0 |
 | lock_api | 0.4.14 | MIT OR Apache-2.0 |
 | log | 0.4.35 | MIT OR Apache-2.0 |
-| loop9 | 0.1.5 | MIT |
-| lru-slab | 0.1.3 | MIT OR Apache-2.0 OR Zlib |
 | lsp-types | 0.97.0 | MIT |
 | lyon | 1.0.19 | MIT OR Apache-2.0 |
 | lyon_algorithms | 1.0.22 | MIT OR Apache-2.0 |
@@ -362,11 +303,9 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | mac | 0.1.1 | MIT/Apache-2.0 |
 | mach2 | 0.6.0 | BSD-2-Clause OR MIT OR Apache-2.0 |
 | mac-notification-sys | 0.6.15 | MIT/Apache-2.0 |
-| malloc_buf | 0.0.6 | MIT |
 | markdown | 1.0.0 | MIT |
 | markup5ever | 0.12.1 | MIT OR Apache-2.0 |
 | markup5ever_rcdom | 0.3.0 | MIT OR Apache-2.0 |
-| maybe-rayon | 0.1.1 | MIT |
 | md-5 | 0.10.6 | MIT OR Apache-2.0 |
 | memchr | 2.8.3 | Unlicense OR MIT |
 | memmap2 | 0.9.12 | MIT OR Apache-2.0 |
@@ -382,39 +321,29 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | naga-types | 30.0.1 | MIT OR Apache-2.0 |
 | ndk-sys | 0.6.0+11769913 | MIT OR Apache-2.0 |
 | new_debug_unreachable | 1.0.6 | MIT |
-| no_std_io2 | 0.9.4 | Apache-2.0 OR MIT |
 | nohash-hasher | 0.2.0 | Apache-2.0 OR MIT |
-| nom | 8.0.0 | MIT |
-| noop_proc_macro | 0.3.0 | MIT |
 | normpath | 1.5.2 | MIT OR Apache-2.0 |
 | notify | 8.2.1 | CC0-1.0 |
 | notify-rust | 4.18.2 | MIT OR Apache-2.0 |
 | notify-types | 2.2.0 | MIT OR Apache-2.0 |
-| ntapi | 0.4.3 | Apache-2.0 OR MIT |
 | num | 0.4.3 | MIT OR Apache-2.0 |
 | num_cpus | 1.17.0 | MIT OR Apache-2.0 |
 | num-bigint | 0.4.8 | MIT OR Apache-2.0 |
 | num-bigint-dig | 0.9.1 | MIT/Apache-2.0 |
 | num-complex | 0.4.6 | MIT OR Apache-2.0 |
 | num-conv | 0.2.2 | MIT OR Apache-2.0 |
-| num-derive | 0.4.2 | MIT OR Apache-2.0 |
 | num-integer | 0.1.47 | MIT OR Apache-2.0 |
 | num-iter | 0.1.46 | MIT OR Apache-2.0 |
 | num-rational | 0.4.2 | MIT OR Apache-2.0 |
 | num-traits | 0.2.19 | MIT OR Apache-2.0 |
-| objc | 0.2.7 | MIT |
-| objc_exception | 0.1.2 | MIT |
-| objc_id | 0.1.1 | MIT |
 | objc2 | 0.5.3 | MIT |
 | objc2 | 0.6.5 | MIT |
 | objc2-app-kit | 0.2.2 | MIT |
 | objc2-app-kit | 0.3.2 | Zlib OR Apache-2.0 OR MIT |
 | objc2-cloud-kit | 0.3.2 | Zlib OR Apache-2.0 OR MIT |
-| objc2-core-data | 0.2.2 | MIT |
 | objc2-core-data | 0.3.2 | Zlib OR Apache-2.0 OR MIT |
 | objc2-core-foundation | 0.3.2 | Zlib OR Apache-2.0 OR MIT |
 | objc2-core-graphics | 0.3.2 | Zlib OR Apache-2.0 OR MIT |
-| objc2-core-image | 0.2.2 | MIT |
 | objc2-core-image | 0.3.2 | Zlib OR Apache-2.0 OR MIT |
 | objc2-core-services | 0.3.2 | Zlib OR Apache-2.0 OR MIT |
 | objc2-core-text | 0.3.2 | Zlib OR Apache-2.0 OR MIT |
@@ -422,43 +351,31 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | objc2-encode | 4.1.0 | MIT |
 | objc2-foundation | 0.2.2 | MIT |
 | objc2-foundation | 0.3.2 | MIT |
-| objc2-io-surface | 0.3.2 | Zlib OR Apache-2.0 OR MIT |
-| objc2-metal | 0.2.2 | MIT |
 | objc2-metal | 0.3.2 | Zlib OR Apache-2.0 OR MIT |
-| objc2-quartz-core | 0.2.2 | MIT |
 | objc2-quartz-core | 0.3.2 | Zlib OR Apache-2.0 OR MIT |
 | objc2-security | 0.3.2 | Zlib OR Apache-2.0 OR MIT |
 | objc2-ui-kit | 0.3.2 | Zlib OR Apache-2.0 OR MIT |
 | objc2-uniform-type-identifiers | 0.3.2 | Zlib OR Apache-2.0 OR MIT |
 | objc2-user-notifications | 0.3.2 | Zlib OR Apache-2.0 OR MIT |
-| objc-foundation | 0.1.1 | MIT |
 | objc-sys | 0.3.5 | MIT |
 | object | 0.40.0 | Apache-2.0 OR MIT |
 | once_cell | 1.21.4 | MIT OR Apache-2.0 |
 | oo7 | 0.6.0 | MIT |
-| oorandom | 11.1.5 | MIT |
 | open | 5.4.5 | MIT |
 | openssl-probe | 0.2.2 | MIT OR Apache-2.0 |
 | option-ext | 0.2.0 | MPL-2.0 |
 | ordered-float | 5.5.1 | MIT |
 | ordered-stream | 0.2.0 | MIT OR Apache-2.0 |
-| page_size | 0.6.0 | MIT/Apache-2.0 |
 | parking | 2.2.1 | Apache-2.0 OR MIT |
 | parking_lot | 0.12.5 | MIT OR Apache-2.0 |
 | parking_lot_core | 0.9.12 | MIT OR Apache-2.0 |
 | paste | 1.0.15 | MIT OR Apache-2.0 |
-| pastey | 0.1.1 | MIT OR Apache-2.0 |
 | pathfinder_geometry | 0.5.1 | MIT/Apache-2.0 |
 | pathfinder_simd | 0.5.6 | MIT OR Apache-2.0 |
 | pbkdf2 | 0.12.2 | MIT OR Apache-2.0 |
 | percent-encoding | 2.3.2 | MIT OR Apache-2.0 |
-| perf-event2 | 0.7.4 | MIT OR Apache-2.0 |
-| perf-event-data | 0.1.8 | MIT OR Apache-2.0 |
-| perf-event-open-sys2 | 5.0.6 | MIT OR Apache-2.0 |
 | phf | 0.11.3 | MIT |
 | phf | 0.13.1 | MIT |
-| phf_codegen | 0.11.3 | MIT |
-| phf_generator | 0.11.3 | MIT |
 | phf_generator | 0.13.1 | MIT |
 | phf_macros | 0.13.1 | MIT |
 | phf_shared | 0.11.3 | MIT |
@@ -468,19 +385,13 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | pin-project-internal | 1.1.13 | Apache-2.0 OR MIT |
 | pin-project-lite | 0.2.17 | Apache-2.0 OR MIT |
 | piper | 0.2.5 | MIT OR Apache-2.0 |
-| pkg-config | 0.3.34 | MIT OR Apache-2.0 |
-| plotters | 0.3.7 | MIT |
-| plotters-backend | 0.3.7 | MIT |
-| plotters-svg | 0.3.7 | MIT |
 | png | 0.17.16 | MIT OR Apache-2.0 |
 | png | 0.18.1 | MIT OR Apache-2.0 |
 | polling | 3.11.0 | Apache-2.0 OR MIT |
-| pollster | 0.2.5 | Apache-2.0/MIT |
 | pollster | 0.4.0 | Apache-2.0/MIT |
 | polycool | 0.4.0 | MIT OR Apache-2.0 |
 | portable-atomic | 1.15.0 | Apache-2.0 OR MIT |
 | portable-atomic-util | 0.2.8 | Apache-2.0 OR MIT |
-| postage | 0.5.0 | MIT |
 | potential_utf | 0.1.6 | Unicode-3.0 |
 | powerfmt | 0.2.1 | MIT OR Apache-2.0 |
 | ppv-lite86 | 0.2.21 | MIT OR Apache-2.0 |
@@ -490,33 +401,18 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | proc-macro-crate | 3.5.0 | MIT OR Apache-2.0 |
 | profiling | 1.0.18 | MIT OR Apache-2.0 |
 | profiling-procmacros | 1.0.18 | MIT OR Apache-2.0 |
-| proptest | 1.12.0 | MIT OR Apache-2.0 |
-| proptest-macro | 0.6.0 | MIT OR Apache-2.0 |
 | pulp | 0.22.3 | MIT |
 | pulp-wasm-simd-flag | 0.1.1 | MIT |
 | pxfm | 0.1.30 | BSD-3-Clause OR Apache-2.0 |
 | qoi | 0.4.1 | MIT/Apache-2.0 |
-| quick-error | 1.2.3 | MIT/Apache-2.0 |
 | quick-error | 2.0.1 | MIT/Apache-2.0 |
 | quick-xml | 0.41.0 | MIT |
-| quinn | 0.11.12 | MIT OR Apache-2.0 |
-| quinn-proto | 0.11.19 | MIT OR Apache-2.0 |
-| quinn-udp | 0.5.16 | MIT OR Apache-2.0 |
 | quote | 1.0.47 | MIT OR Apache-2.0 |
-| rand | 0.10.3 | MIT OR Apache-2.0 |
-| rand | 0.8.8 | MIT OR Apache-2.0 |
 | rand | 0.9.5 | MIT OR Apache-2.0 |
-| rand_chacha | 0.3.1 | MIT OR Apache-2.0 |
 | rand_chacha | 0.9.0 | MIT OR Apache-2.0 |
-| rand_core | 0.10.1 | MIT OR Apache-2.0 |
-| rand_core | 0.6.4 | MIT OR Apache-2.0 |
 | rand_core | 0.9.5 | MIT OR Apache-2.0 |
-| rand_pcg | 0.10.2 | MIT OR Apache-2.0 |
-| rand_xorshift | 0.5.0 | MIT OR Apache-2.0 |
 | range-alloc | 0.1.5 | MIT OR Apache-2.0 |
 | rangemap | 1.8.0 | MIT/Apache-2.0 |
-| rav1e | 0.8.1 | BSD-2-Clause |
-| ravif | 0.13.0 | BSD-3-Clause |
 | raw-cpuid | 11.6.0 | MIT |
 | raw-window-handle | 0.6.2 | MIT OR Apache-2.0 OR Zlib |
 | raw-window-metal | 1.1.0 | MIT OR Apache-2.0 |
@@ -543,7 +439,6 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | ropey | 2.0.0-beta.1 | MIT OR Apache-2.0 |
 | roxmltree | 0.20.0 | MIT OR Apache-2.0 |
 | roxmltree | 0.21.2 | MIT OR Apache-2.0 |
-| rustc_version | 0.4.1 | MIT OR Apache-2.0 |
 | rustc-demangle | 0.1.28 | MIT/Apache-2.0 |
 | rustc-hash | 1.1.0 | Apache-2.0/MIT |
 | rustc-hash | 2.1.3 | Apache-2.0 OR MIT |
@@ -561,7 +456,6 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | rustls-webpki | 0.103.16 | ISC |
 | rustversion | 1.0.23 | MIT OR Apache-2.0 |
 | rustybuzz | 0.20.1 | MIT |
-| rusty-fork | 0.3.1 | MIT/Apache-2.0 |
 | ryu | 1.0.23 | Apache-2.0 OR BSL-1.0 |
 | same-file | 1.0.6 | Unlicense/MIT |
 | schannel | 0.1.30 | MIT |
@@ -569,8 +463,6 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | schemars_derive | 1.2.3 | MIT |
 | scoped-tls | 1.0.1 | MIT/Apache-2.0 |
 | scopeguard | 1.2.0 | MIT OR Apache-2.0 |
-| screencapturekit | 0.2.8 | MIT OR Apache-2.0 |
-| screencapturekit-sys | 0.2.8 | MIT OR Apache-2.0 |
 | seahash | 4.1.0 | MIT |
 | security-framework | 3.7.0 | MIT OR Apache-2.0 |
 | security-framework-sys | 2.17.0 | MIT OR Apache-2.0 |
@@ -591,9 +483,7 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | sha2 | 0.10.9 | MIT OR Apache-2.0 |
 | sha2 | 0.11.1 | MIT OR Apache-2.0 |
 | shellexpand | 3.1.2 | MIT/Apache-2.0 |
-| shlex | 2.0.1 | MIT OR Apache-2.0 |
 | signal-hook-registry | 1.4.8 | MIT OR Apache-2.0 |
-| simd_helpers | 0.1.0 | MIT |
 | simd-adler32 | 0.3.10 | MIT |
 | simdutf8 | 0.1.5 | MIT OR Apache-2.0 |
 | similar | 2.7.0 | Apache-2.0 |
@@ -615,7 +505,6 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | str_indices | 0.4.4 | MIT OR Apache-2.0 |
 | strict-num | 0.1.1 | MIT |
 | string_cache | 0.8.9 | MIT OR Apache-2.0 |
-| string_cache_codegen | 0.5.4 | MIT OR Apache-2.0 |
 | strum | 0.28.0 | MIT |
 | strum_macros | 0.28.0 | MIT |
 | subtle | 2.6.1 | BSD-3-Clause |
@@ -627,16 +516,13 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | syn | 3.0.9 | MIT OR Apache-2.0 |
 | sync_wrapper | 1.0.2 | Apache-2.0 |
 | synstructure | 0.14.0 | MIT |
-| sysinfo | 0.31.4 | MIT |
 | sys-locale | 0.3.2 | MIT OR Apache-2.0 |
 | system-configuration | 0.6.1 | MIT OR Apache-2.0 |
 | system-configuration-sys | 0.6.0 | MIT OR Apache-2.0 |
 | taffy | 0.15.1 | MIT |
-| tao-core-video-sys | 0.2.0 | MIT |
 | tauri-winrt-notification | 0.8.1 | MIT OR Apache-2.0 |
 | tempfile | 3.27.0 | MIT OR Apache-2.0 |
 | tendril | 0.4.3 | MIT/Apache-2.0 |
-| termcolor | 1.4.1 | Unlicense OR MIT |
 | thiserror | 1.0.69 | MIT OR Apache-2.0 |
 | thiserror | 2.0.21 | MIT OR Apache-2.0 |
 | thiserror-impl | 1.0.69 | MIT OR Apache-2.0 |
@@ -648,7 +534,6 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | tiny-skia | 0.11.4 | BSD-3-Clause |
 | tiny-skia-path | 0.11.4 | BSD-3-Clause |
 | tinystr | 0.8.5 | Unicode-3.0 |
-| tinytemplate | 1.2.1 | Apache-2.0 OR MIT |
 | tinyvec | 1.13.3 | Zlib OR Apache-2.0 OR MIT |
 | tokio | 1.54.1 | MIT |
 | tokio-rustls | 0.26.6 | MIT OR Apache-2.0 |
@@ -674,7 +559,6 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | ttf-parser | 0.25.1 | MIT OR Apache-2.0 |
 | typenum | 1.20.1 | MIT OR Apache-2.0 |
 | uds_windows | 1.2.1 | MIT |
-| unarray | 0.1.4 | MIT OR Apache-2.0 |
 | unicase | 2.10.0 | MIT OR Apache-2.0 |
 | unicode-bidi | 0.3.18 | MIT OR Apache-2.0 |
 | unicode-bidi-mirroring | 0.4.0 | MIT/Apache-2.0 |
@@ -698,11 +582,6 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | utf8_iter | 1.1.0 | Apache-2.0 OR MIT |
 | utf8-zero | 0.8.1 | MIT OR Apache-2.0 |
 | uuid | 1.29.0 | Apache-2.0 OR MIT |
-| v_frame | 0.3.9 | BSD-2-Clause |
-| version_check | 0.9.5 | MIT/Apache-2.0 |
-| vswhom | 0.1.0 | MIT |
-| vswhom-sys | 0.1.3 | MIT |
-| wait-timeout | 0.2.1 | MIT/Apache-2.0 |
 | waker-fn | 1.2.0 | Apache-2.0 OR MIT |
 | walkdir | 2.5.0 | Unlicense/MIT |
 | want | 0.3.2 | MIT |
@@ -741,9 +620,7 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | winapi-i686-pc-windows-gnu | 0.4.0 | MIT/Apache-2.0 |
 | winapi-util | 0.1.11 | Unlicense OR MIT |
 | winapi-x86_64-pc-windows-gnu | 0.4.0 | MIT/Apache-2.0 |
-| windows | 0.57.0 | MIT OR Apache-2.0 |
 | windows | 0.58.0 | MIT OR Apache-2.0 |
-| windows | 0.61.3 | MIT OR Apache-2.0 |
 | windows | 0.62.2 | MIT OR Apache-2.0 |
 | windows_aarch64_gnullvm | 0.48.5 | MIT OR Apache-2.0 |
 | windows_aarch64_gnullvm | 0.52.6 | MIT OR Apache-2.0 |
@@ -768,34 +645,24 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | windows_x86_64_msvc | 0.48.5 | MIT OR Apache-2.0 |
 | windows_x86_64_msvc | 0.52.6 | MIT OR Apache-2.0 |
 | windows_x86_64_msvc | 0.53.1 | MIT OR Apache-2.0 |
-| windows-capture | 1.5.0 | MIT |
-| windows-collections | 0.2.0 | MIT OR Apache-2.0 |
 | windows-collections | 0.3.2 | MIT OR Apache-2.0 |
-| windows-core | 0.57.0 | MIT OR Apache-2.0 |
 | windows-core | 0.58.0 | MIT OR Apache-2.0 |
-| windows-core | 0.61.2 | MIT OR Apache-2.0 |
 | windows-core | 0.62.2 | MIT OR Apache-2.0 |
-| windows-future | 0.2.1 | MIT OR Apache-2.0 |
 | windows-future | 0.3.2 | MIT OR Apache-2.0 |
-| windows-implement | 0.57.0 | MIT OR Apache-2.0 |
 | windows-implement | 0.58.0 | MIT OR Apache-2.0 |
 | windows-implement | 0.60.2 | MIT OR Apache-2.0 |
-| windows-interface | 0.57.0 | MIT OR Apache-2.0 |
 | windows-interface | 0.58.0 | MIT OR Apache-2.0 |
 | windows-interface | 0.59.3 | MIT OR Apache-2.0 |
 | windows-link | 0.1.3 | MIT OR Apache-2.0 |
 | windows-link | 0.2.1 | MIT OR Apache-2.0 |
-| windows-numerics | 0.2.0 | MIT OR Apache-2.0 |
 | windows-numerics | 0.3.1 | MIT OR Apache-2.0 |
 | windows-registry | 0.4.0 | MIT OR Apache-2.0 |
 | windows-registry | 0.6.1 | MIT OR Apache-2.0 |
-| windows-result | 0.1.2 | MIT OR Apache-2.0 |
 | windows-result | 0.2.0 | MIT OR Apache-2.0 |
 | windows-result | 0.3.4 | MIT OR Apache-2.0 |
 | windows-result | 0.4.1 | MIT OR Apache-2.0 |
 | windows-strings | 0.1.0 | MIT OR Apache-2.0 |
 | windows-strings | 0.3.1 | MIT OR Apache-2.0 |
-| windows-strings | 0.4.2 | MIT OR Apache-2.0 |
 | windows-strings | 0.5.1 | MIT OR Apache-2.0 |
 | windows-sys | 0.48.0 | MIT OR Apache-2.0 |
 | windows-sys | 0.52.0 | MIT OR Apache-2.0 |
@@ -803,28 +670,22 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | windows-targets | 0.48.5 | MIT OR Apache-2.0 |
 | windows-targets | 0.52.6 | MIT OR Apache-2.0 |
 | windows-targets | 0.53.5 | MIT OR Apache-2.0 |
-| windows-threading | 0.1.0 | MIT OR Apache-2.0 |
 | windows-threading | 0.2.1 | MIT OR Apache-2.0 |
 | windows-version | 0.1.7 | MIT OR Apache-2.0 |
 | winnow | 0.7.15 | MIT |
 | winnow | 1.0.4 | MIT |
-| winreg | 0.56.0 | MIT |
 | wio | 0.2.2 | MIT/Apache-2.0 |
 | wit-bindgen | 0.57.1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
 | writeable | 0.6.4 | Unicode-3.0 |
-| x11 | 2.21.0 | MIT |
 | x11rb | 0.13.2 | MIT OR Apache-2.0 |
 | x11rb-protocol | 0.13.2 | MIT OR Apache-2.0 |
-| xcb | 1.7.1 | MIT |
 | xcursor | 0.3.11 | MIT |
 | xim-ctext | 0.3.0 | MIT |
 | xim-parser | 0.2.2 | MIT |
 | xkbcommon | 0.8.0 | MIT |
 | xkeysym | 0.2.1 | MIT OR Apache-2.0 OR Zlib |
 | xml5ever | 0.18.1 | MIT OR Apache-2.0 |
-| xml-rs | 0.8.29 | MIT |
 | xmlwriter | 0.1.0 | MIT |
-| y4m | 0.8.0 | MIT |
 | yazi | 0.2.2 | Apache-2.0 OR MIT |
 | yeslogic-fontconfig-sys | 6.0.1 | MIT |
 | yoke | 0.8.4 | Unicode-3.0 |
@@ -837,7 +698,6 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | zbus-lockstep-macros | 0.5.2 | MIT |
 | zcheapstr | 1.2.0 | MIT |
 | zed-font-kit | 0.14.1-zed | MIT OR Apache-2.0 |
-| zed-scap | 0.0.8-zed | MIT |
 | zed-xim | 0.4.0-zed | MIT |
 | zeno | 0.3.3 | Apache-2.0 OR MIT |
 | zerocopy | 0.8.63 | BSD-2-Clause OR Apache-2.0 OR MIT |
@@ -849,7 +709,6 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | zerotrie | 0.2.5 | Unicode-3.0 |
 | zerovec | 0.11.9 | Unicode-3.0 |
 | zerovec-derive | 0.11.7 | Unicode-3.0 |
-| zlib-rs | 0.6.8 | Zlib |
 | zmij | 1.0.23 | MIT |
 | zune-core | 0.4.12 | MIT OR Apache-2.0 OR Zlib |
 | zune-core | 0.5.3 | MIT OR Apache-2.0 OR Zlib |

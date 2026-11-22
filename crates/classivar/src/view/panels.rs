@@ -28,6 +28,7 @@ mod helpers;
 pub(super) use helpers::POPULATION_BOXES;
 mod hero;
 mod history;
+mod identity_card;
 mod insights;
 mod inspector;
 mod interactions;
@@ -153,7 +154,8 @@ impl Workbench {
         let (width, height) = (f32::from(window.viewport_size().width), f32::from(window.viewport_size().height));
         let (rail, sheet) = (width >= rail::RAIL_FROM, if self.reading { 0. } else { sheet_width(width) });
         self.stage.rail_shown.set(rail);
-        self.stage.width.set(stage_width(width, rail, sheet));
+        self.stage.rail_width.set(rail_width(width));
+        self.stage.width.set(stage_width(width, rail.then(|| rail_width(width)), sheet));
         // The top bar, the banner, the stage toolbar and the class readout under the dial take about 330 px.
         self.stage.height.set(height - 330.);
         (rail, sheet)
@@ -201,15 +203,37 @@ fn explanation_section(label: &str, title: &str, cx: &Context<Workbench>) -> Div
     div().pt_4().flex().flex_col().gap_3().child(crate::look::section_head(label, title, cx))
 }
 
-/// The width of the criteria sheet at the right for a window `window` pixels wide.
+/// The width of the criteria sheet at the right for a window `window` pixels wide:
+/// it grows with the window, so a maximized window gives the form room too.
 fn sheet_width(window: f32) -> f32 {
-    (window * 0.3).clamp(340., 420.)
+    (window * 0.3).clamp(340., 560.)
 }
 
-/// The room left for the picture inside the middle panel.
-fn stage_width(window: f32, rail: bool, sheet: f32) -> f32 {
-    let rail = if rail { rail::RAIL_WIDTH + 16. } else { 0. };
+/// The width of the reports rail at the left, growing with the window like the sheet.
+fn rail_width(window: f32) -> f32 {
+    (window * 0.16).clamp(rail::RAIL_WIDTH, 300.)
+}
+
+/// The room left for the picture inside the middle panel. `rail` is its width, when shown.
+fn stage_width(window: f32, rail: Option<f32>, sheet: f32) -> f32 {
+    let rail = rail.map_or(0., |rail| rail + 16.);
     let sheet = if sheet > 0. { sheet + 16. } else { 0. };
     // The page margins (32) and the stage's own padding (64).
     (window - 32. - rail - sheet - 64.).max(240.)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{rail_width, sheet_width, stage_width};
+
+    #[test]
+    fn the_rail_and_the_sheet_grow_with_a_wide_window_and_keep_their_size_in_a_small_one() {
+        assert_eq!(sheet_width(960.), 340.);
+        assert_eq!(sheet_width(1240.), 372.);
+        assert_eq!(sheet_width(1920.), 560.);
+        assert_eq!(rail_width(1240.), 236.);
+        assert_eq!(rail_width(1920.), 300.);
+        let wide = stage_width(1920., Some(rail_width(1920.)), sheet_width(1920.));
+        assert!(wide > 900., "a maximized window leaves room for two columns of sections ({wide})");
+    }
 }

@@ -52,15 +52,6 @@ impl Workbench {
 
     /// Ask where to save, then write the case file there.
     pub(super) fn save_case(&mut self, cx: &mut Context<Self>) {
-        // A case file names a variant and a gene; the example is a demo, so it
-        // is never written. Checking a gene on the example already asks first.
-        if self.example {
-            self.file_status = Some(Status::attention(
-                "The fictional example is not saved. Clear it (checking a gene asks first) and build a real case, then Save.",
-            ));
-            cx.notify();
-            return;
-        }
         let case = self.case_file(cx);
         // Never write a file the app would refuse to open again.
         if let Err(error) = case.check(self.rules) {
@@ -172,7 +163,6 @@ impl Workbench {
         self.gene_link = case.gene_decision;
         self.case_gene = case.gene.clone();
         self.gene_error = None;
-        self.example = false;
         // A question or an open guide belongs to the case that was on screen.
         self.confirm = None;
         self.guide_open = None;
@@ -216,7 +206,7 @@ impl Workbench {
                         .rounded(px(crate::look::CARD_RADIUS))
                         .bg(fill)
                         .text_color(ink)
-                        .child(div().flex_1().text_sm().child(status.text.clone()))
+                        .child(div().flex_1().min_w_0().py_1().text_sm().child(status.text.clone()))
                         .child(
                             Button::new("file-status-dismiss")
                                 .label("Dismiss")
@@ -246,7 +236,6 @@ impl Workbench {
         self.editing = Editing::Today;
         self.gene_link = GeneDecision::NotDecided;
         self.gene_error = None;
-        self.example = false;
         self.file_status = None;
         self.forget_saved();
         self.guide_open = None;

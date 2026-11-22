@@ -1,6 +1,8 @@
 # Variant curation workbench: design
 
-A shared application title bar surrounds the opening screen and case workspace. The opening screen shows a fictional example scored with the loaded rules.
+A shared application title bar surrounds the opening screen and case workspace. The opening screen shows the empty dial: no class until the curator chooses criteria.
+
+**Changed 2026-11-22 [User]:** ClassiVAR is an explanation tool, not a teaching tool. The learning layer (the switch), the lessons, the practice shelf and the fictional example are dropped; the rule text of a criterion opens on demand ("More"). The sections below that describe them are kept as history.
 
 The current workbench puts the explanation on the left and the evidence editor on the right. Expand explanation gives the chart the full workspace. Compare reports starts with the selected report and the current evidence. See [the evidence workbench design](evidence-workbench.md).
 
@@ -60,7 +62,7 @@ The rules engine is kept separate from the screen code **[My call]** so it can b
 - If evidence is missing, conflicting, or outside the app's rules, the app says "needs expert judgment". It never fills the gap.
 - Fetched data shows its source and fetch date. A failed fetch is shown as a failure, never as "nothing found".
 - The app warns about double-counting (for example two predictors counted as two criteria).
-- It is labeled decision support and a learning aid, not a validated reporting system.
+- It is labeled decision support for research use, not a validated reporting system.
 
 ## 5. The rules engine
 
@@ -94,7 +96,7 @@ Rules **[My call]**: color is never the only clue (every mark also carries a sig
 - No patient names or identifiers are stored by default. Files stay on the user's computer. **[My call]**
 - Fetches send only gene names and variant coordinates. **[My call]**
 - Platforms: Windows (the user's machine) and macOS (some colleagues use Mac). **[User]** GPUI supports both, but each needs its own build, installer and (later) signing. Linux later. **[My call]**
-- Status label: research and learning use only until the content has been reviewed by a qualified curator. The user plans to share the content with a reviewer later. **[User]**
+- Status label: research use only until the content has been reviewed by a qualified curator. The user plans to share the content with a reviewer later. **[User]**
 
 ## 9. Order of work [My call]
 

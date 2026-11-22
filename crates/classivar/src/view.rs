@@ -42,7 +42,6 @@ mod clinvar_records;
 mod confirm;
 mod describe;
 mod evidence;
-mod example;
 mod file_io;
 mod gene;
 #[cfg(test)]
@@ -52,6 +51,8 @@ mod headless_case;
 #[cfg(test)]
 mod headless_keys;
 mod helper_state;
+#[cfg(test)]
+mod real_case;
 
 use helper_state::{AssayRoute, Helpers, PhenotypeGenes, new_box};
 mod panels;
@@ -72,7 +73,7 @@ use describe::{
     CARD_LINES, describe_clingen, describe_g2p, describe_panelapp, discouraged_row_note, plural, rules_about_text,
     rules_tag, scale_for, tiers_are_ranged,
 };
-use evidence::{carry_forward, evidence_of, open_notes, to_applied};
+use evidence::{carry_forward, open_notes, to_applied};
 use file_io::{default_save_folder, suggested_file_name, write_case};
 use watchers::{repaint_on_change, watch_close, watch_gene_box, watch_keys, watch_record_name};
 use widgets::{class_badge, notice};
@@ -89,7 +90,6 @@ pub struct Workbench {
     category: Option<Category>,
     show_helpers: bool,
     welcome: bool,
-    learning: bool,
     /// The text boxes of the case form and the reason prompt.
     boxes: Boxes,
     /// Scroll and focus handles the keyboard paths use.
@@ -117,9 +117,6 @@ pub struct Workbench {
     gene_error: Option<String>,
     /// The gene this case is about: the last one checked.
     case_gene: String,
-    /// True while the fictional example is on screen. A gene checked on it
-    /// would start a real case, so the curator is asked first (see `check_gene`).
-    example: bool,
     /// Whether the four source cards are shown. They are tall, so the curator can hide them.
     gene_cards_open: bool,
     /// Cards that show all their lines instead of the first few.
@@ -163,7 +160,6 @@ impl Workbench {
             category: None,
             show_helpers: false,
             welcome: true,
-            learning: false,
             boxes,
             handles: Handles::new(cx),
             stage: StageMemory::new(),
@@ -180,7 +176,6 @@ impl Workbench {
             variant,
             gene_error: None,
             case_gene: String::new(),
-            example: false,
             gene_cards_open: false,
             expanded_cards: HashSet::new(),
             open_details: HashSet::new(),

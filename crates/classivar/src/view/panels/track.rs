@@ -22,7 +22,7 @@ use classivar_core::{Assessment, Direction};
 
 use super::block_tip::floating_at;
 use super::evidence_stack::{Step, bars, steps, summary};
-use super::point_axis::{fraction, signed, tick_row, widened, zone_labels};
+use super::point_axis::{fraction, name_fits, signed, tick_row, widened, zone_labels};
 use super::*;
 use crate::view::describe::Scale;
 
@@ -57,6 +57,19 @@ struct Block {
     /// Left edge and width as fractions of the track (0.0 to 1.0).
     left: f32,
     width: f32,
+}
+
+/// The words on a block in a track `track_width` pixels wide: the whole label where it
+/// fits, else the code alone, else nothing (the hover card still names it), so no
+/// label is ever cut in half.
+fn block_text(block: &Block, track_width: f32) -> &str {
+    if name_fits(&block.label, block.width, track_width) {
+        &block.label
+    } else if name_fits(&block.code, block.width, track_width) {
+        &block.code
+    } else {
+        ""
+    }
 }
 
 fn blocks(steps: &[Step], scale: &Scale) -> Vec<Block> {
@@ -160,7 +173,7 @@ impl Workbench {
             .when(!set_aside, |face| face.bg(colour).text_color(direction_ink()))
             .when(set_aside, |face| face.border_2().border_dashed().border_color(colour).text_color(ink))
             .when(selected && !set_aside, |face| face.border_2().border_color(ink))
-            .child(block.label.clone());
+            .child(block_text(block, self.stage.width.get()).to_string());
         let (code, hover) = (block.code.clone(), block.code.clone());
         let width = block.width;
         let selector = format!("block-{}", block.code);
@@ -282,7 +295,18 @@ mod tests {
     use classivar_core::{Applied, Direction, RuleSet, Strength};
 
     use super::super::point_axis::fraction;
-    use super::{band_height, blocks, lane_count, pill_offset, scale_for, steps, tip_anchor};
+    use super::{band_height, block_text, blocks, lane_count, pill_offset, scale_for, steps, tip_anchor};
+
+    #[test]
+    fn a_narrow_block_shows_its_code_then_nothing_rather_than_a_cut_label() {
+        let rules = RuleSet::builtin().unwrap();
+        let result = rules.assess(&[Applied::new("PM2", Strength::Supporting)]).unwrap();
+        let block = blocks(&steps(&result.items), &scale_for(rules)).remove(0);
+        assert_eq!(block_text(&block, 4000.), "PM2 +1", "wide enough for the whole label");
+        let code_only = (0..4000).map(|w| w as f32).find(|w| block_text(&block, *w) == "PM2 +1").unwrap() - 1.;
+        assert_eq!(block_text(&block, code_only), "PM2", "just too narrow for the points: the code alone");
+        assert_eq!(block_text(&block, 10.), "", "too narrow for the code: the hover card names it");
+    }
 
     #[test]
     fn a_point_value_maps_across_the_track_and_stays_inside_it() {

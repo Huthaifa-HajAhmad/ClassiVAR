@@ -2,7 +2,9 @@
 
 A desktop app for variant curation that shows how a classification is built: evidence, points, class, and what would change it. Built with Rust and GPUI Kit.
 
-**Status:** early. The rules are a draft and marked UNVERIFIED. For research and learning only. Not a validated clinical reporting system.
+**Status:** version 1.0.0 (`CHANGELOG.md`). The rules are a draft and marked UNVERIFIED. For research use only. Not a validated clinical reporting system.
+
+**Install:** download the Windows installer or the macOS disk image from the [releases page](https://github.com/Huthaifa-HajAhmad/ClassiVAR/releases). How releases are built and signed: `docs/RELEASE.md`.
 
 Prerequisites, first run, the merge gate, recipes and debugging: **`docs/DEVELOPING.md`**.
 
@@ -19,6 +21,6 @@ CI (`.github/workflows/`) runs the same checks plus `cargo audit` on Windows and
 
 ## Licence
 
-Licensed under either of Apache License 2.0 (`LICENSE-APACHE`) or the MIT licence (`LICENSE-MIT`), at your option. The packages ClassiVAR is built with are listed in `THIRD-PARTY-NOTICES.md` (regenerate with `scripts/third-party-notices.ps1`).
+Licensed under either of Apache License 2.0 (`LICENSE-APACHE`) or the MIT licence (`LICENSE-MIT`), at your option. The packages ClassiVAR is built with are listed in `THIRD-PARTY-NOTICES.md`, with their licence texts in `THIRD-PARTY-LICENSES.html` (regenerate both with `scripts/third-party-notices.ps1`).
 
 The benchmark snapshot in `crates/classivar-core/tests/data/` is curated content from the Clinical Genome Resource (ClinGen, www.clinicalgenome.org), accessed 2026-11-21, released by ClinGen under CC0 1.0. See the README in that folder.

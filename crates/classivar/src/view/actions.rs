@@ -240,10 +240,13 @@ impl Workbench {
 
     /// Switch between the light and dark theme, and remember the choice for the
     /// next time the program starts.
-    pub(super) fn toggle_theme(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let next = if cx.theme().is_dark() { ThemeMode::Light } else { ThemeMode::Dark };
-        Theme::change(next, Some(window), cx);
-        crate::settings::save_theme(next);
+    /// Use the light or dark theme, and remember the choice on this machine.
+    pub(super) fn set_theme(&mut self, mode: ThemeMode, window: &mut Window, cx: &mut Context<Self>) {
+        if (mode == ThemeMode::Dark) == cx.theme().is_dark() {
+            return;
+        }
+        Theme::change(mode, Some(window), cx);
+        crate::settings::save_theme(mode);
         cx.notify();
     }
 }

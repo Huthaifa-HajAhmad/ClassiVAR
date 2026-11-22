@@ -59,7 +59,12 @@ fn record_of(submission: &ClinVarSubmission, today: &str, this_year: u16) -> Rec
         .unwrap_or(this_year)
         .clamp(MIN_YEAR, MAX_YEAR);
     Record {
-        label: submission.submitter.chars().take(MAX_LAB_CHARS).collect(),
+        // A name longer than a saved case accepts is cut and ends in "…", so it reads as cut.
+        label: if submission.submitter.chars().count() > MAX_LAB_CHARS {
+            submission.submitter.chars().take(MAX_LAB_CHARS - 1).collect::<String>().trim_end().to_string() + "…"
+        } else {
+            submission.submitter.clone()
+        },
         year,
         class: submission.class,
         tier: None,
@@ -194,6 +199,7 @@ mod tests {
         let plan = import_plan(&variation(vec![long]), &HashSet::new(), 30, "2026-11-21", 2026);
         assert_eq!(plan.records[0].year, 2026);
         assert_eq!(plan.records[0].label.chars().count(), MAX_LAB_CHARS);
+        assert!(plan.records[0].label.ends_with('…'), "a cut name says it was cut");
     }
 
     #[test]

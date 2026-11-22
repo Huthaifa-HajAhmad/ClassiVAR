@@ -9,6 +9,20 @@ use classivar_sources::clinvar;
 use super::clinvar_records::{decision_for_validity, import_plan, import_summary};
 use super::*;
 
+/// Did this ClinGen curation supply the case's current condition? The same disease (its
+/// MONDO id, or its name when ClinGen gave no id) with the same inheritance. The
+/// inheritance counts because one disease can have a recessive and a dominant curation.
+pub(super) fn curation_is_chosen(condition: Option<&Condition>, curation: &Curation) -> bool {
+    let Some(condition) = condition else { return false };
+    let same_disease = if curation.disease_id.is_empty() {
+        let name: String = curation.disease.chars().take(MAX_CONDITION_CHARS).collect();
+        condition.mondo.is_none() && condition.name == name
+    } else {
+        condition.mondo.as_deref() == Some(curation.disease_id.as_str())
+    };
+    same_disease && condition.inheritance == Inheritance::from_clingen(&curation.inheritance)
+}
+
 /// Typing a condition by hand keeps its MONDO id only while the name is the one it came with.
 pub(super) fn watch_condition_box(
     input: &Entity<InputState>,
@@ -54,12 +68,6 @@ impl Workbench {
     /// Check the variant box with the ClinGen Allele Registry. A description that
     /// cannot be read, or a position without a build, is answered here, in words.
     pub(super) fn check_variant(&mut self, cx: &mut Context<Self>) {
-        if self.example {
-            self.variant.problem =
-                Some("The fictional example is never attributed to a real variant. Clear it to check one.".into());
-            cx.notify();
-            return;
-        }
         let typed = self.variant_name(cx).unwrap_or_default();
         let query = variant::parse(&typed)
             .map_err(|problem| problem.message())
@@ -227,5 +235,53 @@ impl Workbench {
         self.variant.lookup_id += 1;
         self.variant._tasks.clear();
         self.variant.condition_input.update(cx, |input, cx| input.set_value("", window, cx));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use classivar_core::{Condition, Inheritance};
+    use classivar_sources::clingen::Curation;
+
+    use super::curation_is_chosen;
+
+    fn curation(disease: &str, id: &str, inheritance: &str) -> Curation {
+        Curation {
+            disease: disease.into(),
+            disease_id: id.into(),
+            inheritance: inheritance.into(),
+            classification: "Definitive".into(),
+            report_url: String::new(),
+            classified_on: "2024-01-01".into(),
+            expert_panel: String::new(),
+        }
+    }
+
+    fn set_by(curation: &Curation) -> Condition {
+        Condition {
+            name: curation.disease.clone(),
+            mondo: (!curation.disease_id.is_empty()).then(|| curation.disease_id.clone()),
+            inheritance: Inheritance::from_clingen(&curation.inheritance),
+        }
+    }
+
+    #[test]
+    fn only_the_curation_that_set_the_condition_shows_as_chosen() {
+        let recessive = curation("RYR1-related myopathy", "MONDO:0100150", "AR");
+        let dominant = curation("RYR1-related myopathy", "MONDO:0100150", "AD");
+        let condition = set_by(&recessive);
+        assert!(curation_is_chosen(Some(&condition), &recessive));
+        assert!(!curation_is_chosen(Some(&condition), &dominant), "same disease id, other inheritance");
+        assert!(!curation_is_chosen(None, &recessive), "no condition set yet");
+    }
+
+    #[test]
+    fn a_curation_without_a_disease_id_is_matched_by_its_name() {
+        let unnamed_id = curation("Some rare disorder", "", "AD");
+        let condition = set_by(&unnamed_id);
+        assert!(curation_is_chosen(Some(&condition), &unnamed_id), "the empty id must not hide the choice");
+        assert!(!curation_is_chosen(Some(&condition), &curation("Another disorder", "", "AD")));
+        let with_id = Condition { mondo: Some("MONDO:1".into()), ..condition };
+        assert!(!curation_is_chosen(Some(&with_id), &unnamed_id), "a condition with an id is a different one");
     }
 }

@@ -91,7 +91,6 @@ pub(super) struct Record {
 pub(super) enum Confirm {
     Clear(Editing),
     StartFromLatest,
-    LoadExample,
     /// Check another gene, which starts a new case.
     NewGene(String),
     /// Remove an earlier record and its evidence.
@@ -139,9 +138,9 @@ pub(super) struct Boxes {
 
 impl Boxes {
     pub(super) fn new(subscriptions: &mut Vec<Subscription>, window: &mut Window, cx: &mut Context<Workbench>) -> Self {
-        let variant = new_box("Variant, e.g. NM_007294.4:c.5266dup or 17-43057062-T-TG", subscriptions, window, cx);
+        let variant = new_box("HGVS, VCF or rsID", subscriptions, window, cx);
         let reason = new_box("Why is this stronger than the default?", subscriptions, window, cx);
-        let gene = cx.new(|cx| InputState::new(window, cx).placeholder("Gene symbol, e.g. BRCA1"));
+        let gene = cx.new(|cx| InputState::new(window, cx).placeholder("e.g. BRCA1"));
         subscriptions.push(watch_gene_box(&gene, window, cx));
         let record_name = cx.new(|cx| InputState::new(window, cx).placeholder("Lab or source, e.g. Lab A (ClinVar)"));
         subscriptions.push(watch_record_name(&record_name, window, cx));
@@ -184,6 +183,8 @@ pub(super) struct StageMemory {
     pub(super) height: Cell<f32>,
     /// Whether the window is wide enough for the reports rail at the left.
     pub(super) rail_shown: Cell<bool>,
+    /// The rail's width at the last layout.
+    pub(super) rail_width: Cell<f32>,
 }
 
 impl StageMemory {
@@ -194,6 +195,7 @@ impl StageMemory {
             width: Cell::new(640.),
             height: Cell::new(330.),
             rail_shown: Cell::new(false),
+            rail_width: Cell::new(236.),
         }
     }
 }

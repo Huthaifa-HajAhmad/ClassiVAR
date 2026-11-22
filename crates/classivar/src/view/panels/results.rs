@@ -97,42 +97,54 @@ impl Workbench {
         variant: Option<&str>,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        body.child(self.hero(result, variant, cx)).child(self.explanation_grid(result, variant, cx)).into_any_element()
+    }
+
+    /// The sections under the class. They flow into two columns when the stage has
+    /// room (a wide or maximized window) and stack in one column when it does not.
+    fn explanation_grid(&self, result: &Assessment, variant: Option<&str>, cx: &mut Context<Self>) -> Div {
         let muted = cx.theme().muted_foreground;
-        body.child(self.hero(result, variant, cx))
-            .when(!result.items.is_empty(), |pane| {
-                pane.child(explanation_section("Composition", "What it is made of", cx).child(self.makeup(result, cx)))
+        let cell = |section: Div| section.flex_grow(1.).flex_basis(px(440.)).min_w_0();
+        div()
+            .flex()
+            .flex_wrap()
+            .gap_x_10()
+            .gap_y_6()
+            .when(!result.items.is_empty(), |grid| {
+                grid.child(cell(
+                    explanation_section("Composition", "What it is made of", cx).child(self.makeup(result, cx)),
+                ))
             })
-            .when(combining_table::is_shown(result), |pane| {
-                pane.child(
+            .when(combining_table::is_shown(result), |grid| {
+                grid.child(cell(
                     explanation_section("2015 table", "What the 2015 table says", cx)
                         .child(self.combining_table(result, cx)),
-                )
+                ))
             })
-            .when(result.class().is_some(), |pane| {
-                pane.child(
+            .when(result.class().is_some(), |grid| {
+                grid.child(cell(
                     explanation_section("Moves", "What would change it", cx).child(self.what_changes(result, cx)),
-                )
+                ))
             })
-            .when(result.class().is_none() && result.has_evidence, |pane| {
-                pane.child(
+            .when(result.class().is_none() && result.has_evidence, |grid| {
+                grid.child(cell(
                     div()
                         .text_xs()
                         .text_color(muted)
                         .child("Resolve the withheld result above to see what would change the class."),
-                )
+                ))
             })
-            .when(self.has_case_data(cx), |pane| {
-                pane.child(
+            .when(self.has_case_data(cx), |grid| {
+                grid.child(cell(
                     explanation_section("Notes", "Notes on this result", cx).child(self.notes(result, variant, cx)),
-                )
+                ))
             })
-            .when(result.class().is_some(), |pane| {
-                pane.child(
+            .when(result.class().is_some(), |grid| {
+                grid.child(cell(
                     explanation_section("Rules", "About these rules", cx)
                         .child(caption(muted).child(rules_about_text(self.rules))),
-                )
+                ))
             })
-            .into_any_element()
     }
 
     /// What a reported variant adds under the result: the verdict, what changed, the
@@ -179,7 +191,7 @@ impl Workbench {
                 );
             }
         }
-        if self.learning && self.records.iter().any(|r| r.class == Some(Class::Vus)) {
+        if self.records.iter().any(|r| r.class == Some(Class::Vus)) {
             sections.push(
                 explanation_section("Reference", "What the VUS sub-tiers mean", cx).child(self.tier_reference(cx)),
             );

@@ -1,5 +1,6 @@
 [package]
 name = "classivar"
+description = "Explains how the ACMG/AMP criteria a curator chooses lead to a variant classification. Research use only; not a clinical reporting system."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
@@ -7,11 +8,51 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-classivar-core = { version = "0.1.0", path = "../classivar-core" }
-classivar-sources = { version = "0.1.0", path = "../classivar-sources" }
+classivar-core = { version = "1.0.0", path = "../classivar-core" }
+classivar-sources = { version = "1.0.0", path = "../classivar-sources" }
 gpui-kit = "0.9"
 serde_json = "1.0.154"
+
+[build-dependencies]
+# Puts the app icon into the Windows program file (already in the tree through GPUI).
+embed-resource = "3.0.12"
 
 [dev-dependencies]
 # GPUI's own headless test platform: windows without a screen, for tests that draw the real views.
 gpui-pre = { version = "0.3.12", features = ["test-support"] }
+
+# Installers, built with cargo-packager (see docs/RELEASE.md):
+#   cargo packager -p classivar --release -f nsis      (Windows)
+#   cargo packager -p classivar --release -f app,dmg   (macOS)
+[package.metadata.packager]
+product-name = "ClassiVAR"
+identifier = "io.github.huthaifa-hajahmad.classivar"
+publisher = "ClassiVAR"
+homepage = "https://github.com/Huthaifa-HajAhmad/ClassiVAR"
+category = "Productivity"
+before-packaging-command = "cargo build -p classivar --release --locked"
+out-dir = "../../target/packages"
+binaries = [{ path = "classivar", main = true }]
+icons = [
+    "assets/icons/32x32.png",
+    "assets/icons/128x128.png",
+    "assets/icons/256x256.png",
+    "assets/icons/512x512.png",
+    "assets/icons/icon.ico",
+]
+license-file = "../../LICENSE-MIT"
+resources = [
+    "../../LICENSE-MIT",
+    "../../LICENSE-APACHE",
+    "../../THIRD-PARTY-LICENSES.html",
+    "../../THIRD-PARTY-NOTICES.md",
+]
+
+[package.metadata.packager.nsis]
+# Installs for the current user, so no administrator rights are needed.
+installer-mode = "currentUser"
+
+# Keep this the last table in the file: the release workflow appends `signing-identity`
+# here when the Apple signing secrets exist (.github/workflows/release.yml).
+[package.metadata.packager.macos]
+minimum-system-version = "11.0"
