@@ -162,7 +162,7 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | foreign-types | 0.5.0 | MIT/Apache-2.0 |
 | foreign-types-macros | 0.2.4 | MIT/Apache-2.0 |
 | foreign-types-shared | 0.3.1 | MIT/Apache-2.0 |
-| form_urlencoded | 1.2.2 | MIT OR Apache-2.0 |
+| form_urlencoded | 1.2.3 | MIT OR Apache-2.0 |
 | freetype-sys | 0.20.1 | MIT |
 | futf | 0.1.5 | MIT / Apache-2.0 |
 | futures | 0.3.34 | MIT OR Apache-2.0 |
@@ -574,7 +574,7 @@ Packages under MPL-2.0 keep their own licence on their own files:
 | untrusted | 0.9.0 | ISC |
 | ureq | 3.5.1 | MIT OR Apache-2.0 |
 | ureq-proto | 0.7.1 | MIT OR Apache-2.0 |
-| url | 2.5.8 | MIT OR Apache-2.0 |
+| url | 2.5.9 | MIT OR Apache-2.0 |
 | usvg | 0.45.1 | Apache-2.0 OR MIT |
 | usvg | 0.46.0 | Apache-2.0 OR MIT |
 | utf_types | 1.0.0 | Apache-2.0 OR MIT |
