@@ -140,11 +140,11 @@ pub(super) fn marker(points: i32, scale: &Scale, left: f32, ink: Hsla, paper: Op
 }
 
 /// The band names beside the capsule, and the point value at each class limit.
-pub(super) fn zone_names(scale: &Scale, class: Class, left: f32, (ink, muted): (Hsla, Hsla)) -> Div {
+pub(super) fn zone_names(scale: &Scale, class: Option<Class>, left: f32, (ink, muted): (Hsla, Hsla)) -> Div {
     let mut names = div();
     for (zone, from, to) in &scale.zones {
         let middle = (level(*from, scale) + level(*to, scale)) / 2. * HEIGHT;
-        let active = *zone == class;
+        let active = Some(*zone) == class;
         names = names.child(
             figure(11.)
                 .absolute()

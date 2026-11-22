@@ -692,7 +692,7 @@ try {
     # The path that once overflowed the stack: Reported variant with an earlier record.
     # The record is entered by hand: it reported VUS with PM2.
     Click-Button "Reported variant"
-    Click-Button "+ Add record"
+    Click-Button "Add record"
     Find-Button-Like "Record 1*" | Out-Null
     # The record's form sits below the case sections; a control off screen ignores a click.
     Scroll-To-Button "This record reported Uncertain*"

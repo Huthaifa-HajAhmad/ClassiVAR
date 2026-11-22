@@ -13,7 +13,7 @@
 use std::borrow::Cow;
 
 use gpui_kit::component::{
-    ActiveTheme, Selectable, Sizable, Theme,
+    ActiveTheme, Selectable, Sizable,
     button::{Button, ButtonCustomVariant, ButtonVariants},
 };
 use gpui_kit::prelude::FluentBuilder;
@@ -168,54 +168,15 @@ pub fn segment(id: impl Into<SharedString>, label: impl Into<SharedString>, chos
         .when(chosen, |button| button.shadow(lift(theme.is_dark())))
 }
 
-/// The four colours of a `choice_pill`. The kit paints a selected button with its
-/// `active` colour as the fill and its `foreground` as the text, so for a chosen pill
-/// all of fill, hover and active are the ink colour: nothing may fall back to a quiet fill.
-#[derive(Debug, Clone, Copy)]
-struct PillColours {
-    fill: Hsla,
-    hover: Hsla,
-    active: Hsla,
-    text: Hsla,
-}
-
-fn pill_colours(chosen: bool, theme: &Theme) -> PillColours {
-    if chosen {
-        PillColours {
-            fill: theme.foreground,
-            hover: theme.foreground,
-            active: theme.foreground,
-            text: theme.background,
-        }
-    } else {
-        PillColours { fill: theme.muted, hover: theme.accent, active: theme.accent, text: theme.foreground }
-    }
-}
-
-/// A rounded choice that adds something, for example a suggested condition: "+" and a
-/// quiet fill when open, filled in ink with a tick when chosen. Shaped as a pill so it
-/// never reads as a text box. A long label wraps inside its container (the kit's own
-/// `label` would cut it short, so the text is a child).
-pub fn choice_pill(id: impl Into<SharedString>, label: &str, chosen: bool, cx: &App) -> Button {
-    let colours = pill_colours(chosen, cx.theme());
-    let style = ButtonCustomVariant::new(cx)
-        .color(colours.fill)
-        .foreground(colours.text)
-        .hover(colours.hover)
-        .active(colours.active);
-    let id: SharedString = id.into();
-    let text = format!("{} {label}", if chosen { "✓" } else { "+" });
-    Button::new(id)
-        .small()
-        .custom(style)
-        .rounded(px(999.))
-        .px_3()
-        .max_w_full()
-        .h_auto()
-        .py_1()
-        .child(div().min_w_0().whitespace_normal().text_left().child(text))
-        .selected(chosen)
-        .toggled(chosen)
+/// A segment with a small icon before its label.
+pub fn segment_icon(
+    id: impl Into<SharedString>,
+    icon: gpui_kit::component::IconName,
+    label: impl Into<SharedString>,
+    chosen: bool,
+    cx: &App,
+) -> Button {
+    segment(id, label, chosen, cx).icon(gpui_kit::component::Icon::new(icon))
 }
 
 /// A row of `segment`s on a recessed track.
@@ -239,39 +200,4 @@ pub fn pill(cx: &App) -> Div {
         .font_family(MONO)
         .text_size(px(11.))
         .text_color(theme.muted_foreground)
-}
-
-#[cfg(test)]
-mod tests {
-    // Explicit imports: `use gpui_kit::*` would bring in GPUI's own `#[test]` macro.
-    use gpui::{Rgba, TestAppContext};
-    use gpui_kit::component::{ActiveTheme, ThemeMode};
-    use gpui_kit::init;
-
-    use super::pill_colours;
-    use crate::design::contrast;
-    use crate::theme;
-
-    #[gpui::test]
-    fn a_condition_pill_is_readable_open_and_chosen_in_both_themes(cx: &mut TestAppContext) {
-        for mode in [ThemeMode::Light, ThemeMode::Dark] {
-            cx.update(|cx| {
-                init(cx);
-                theme::install(mode, cx);
-                let theme = cx.theme();
-                for chosen in [false, true] {
-                    let c = pill_colours(chosen, theme);
-                    if chosen {
-                        // The kit paints a selected button with its active colour, so it must be the ink fill.
-                        assert_eq!((c.hover, c.active), (c.fill, c.fill), "chosen, {mode:?}");
-                    }
-                    // Fill, hover and pressed backgrounds each carry the pill's text.
-                    for (state, background) in [("fill", c.fill), ("hover", c.hover), ("active", c.active)] {
-                        let ratio = contrast(Rgba::from(background), Rgba::from(c.text));
-                        assert!(ratio >= 4.5, "chosen={chosen} {state} ({mode:?}): {ratio:.2}:1");
-                    }
-                }
-            });
-        }
-    }
 }

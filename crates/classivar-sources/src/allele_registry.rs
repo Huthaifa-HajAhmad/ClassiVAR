@@ -5,7 +5,7 @@
 //!
 //! Only the variant description is sent: never the case, its evidence or its labs.
 
-use classivar_core::variant::{RegistryQuery, VariantIdentity};
+use classivar_core::variant::{MAX_CODING_NAMES, RegistryQuery, VariantIdentity};
 use serde::Deserialize;
 
 use crate::{Fetched, SourceError};
@@ -146,6 +146,20 @@ struct RawDbSnp {
 }
 
 impl RawAllele {
+    /// The RefSeq coding names (`NM_`, not Ensembl, `NR_` or predicted `XM_`), one per
+    /// transcript accession (its newest version), in accession order, a few at most.
+    fn coding_names(&self) -> Vec<String> {
+        let mut names: Vec<&String> =
+            self.transcripts.iter().flat_map(|t| &t.hgvs).filter(|h| h.starts_with("NM_")).collect();
+        let accession = |hgvs: &String| hgvs.split(['.', ':']).next().unwrap_or_default().to_string();
+        let version = |hgvs: &String| {
+            hgvs.split(':').next().and_then(|id| id.split('.').nth(1)).and_then(|v| v.parse::<u32>().ok())
+        };
+        names.sort_by(|a, b| accession(a).cmp(&accession(b)).then(version(b).cmp(&version(a))));
+        names.dedup_by(|later, kept| accession(later) == accession(kept));
+        names.into_iter().take(MAX_CODING_NAMES).cloned().collect()
+    }
+
     fn identity(self, today: &str) -> VariantIdentity {
         // A registered allele is `…/allele/CA003404`; an unregistered one is `_:CA`.
         let allele_id =
@@ -163,13 +177,18 @@ impl RawAllele {
             .filter(|t| t.mane.as_ref().and_then(|m| m.status.as_deref()) == Some("MANE Select"))
             .collect();
         let refseq = mane.iter().find(|t| t.hgvs.iter().any(|h| h.starts_with("NM_"))).or(mane.first());
+        let coding = if mane.is_empty() { self.coding_names() } else { Vec::new() };
+        let gene = refseq.and_then(|t| t.gene.clone()).or_else(|| {
+            self.transcripts.iter().find(|t| t.hgvs.iter().any(|h| h.starts_with("NM_"))).and_then(|t| t.gene.clone())
+        });
         VariantIdentity {
             allele_id,
             grch38: genomic("GRCh38"),
             grch37: genomic("GRCh37"),
             mane_select: refseq.and_then(|t| t.hgvs.iter().find(|h| h.starts_with("NM_")).or(t.hgvs.first()).cloned()),
             protein: refseq.and_then(|t| t.protein.as_ref()).and_then(|p| p.hgvs.clone()),
-            gene: refseq.and_then(|t| t.gene.clone()),
+            gene,
+            coding,
             clinvar_variation: self.external.clinvar.first().map(|c| c.id),
             dbsnp: self.external.dbsnp.first().map(|d| d.rs),
             checked_with: SOURCE.to_string(),

@@ -25,6 +25,21 @@ fn a_registered_allele_gives_both_builds_the_mane_transcript_and_its_links() {
 }
 
 #[test]
+fn without_a_mane_select_the_refseq_coding_names_are_listed_and_ensembl_and_predicted_ones_are_not() {
+    let body = r#"{"@id":"http://reg.genome.network/allele/CA645165536","genomicAlleles":[],
+      "transcriptAlleles":[
+        {"hgvs":["ENST00000320857.7:c.-15+2T>C"],"geneSymbol":"SSR4"},
+        {"hgvs":["NM_001204526.1:c.19+2T>C"],"geneSymbol":"SSR4"},
+        {"hgvs":["NR_037927.1:n.137+2T>C"],"geneSymbol":"SSR4"},
+        {"hgvs":["XM_011531186.1:c.-14-87T>C"],"geneSymbol":"SSR4"},
+        {"hgvs":["NM_006280.2:c.-101T>C"],"geneSymbol":"SSR4"}]}"#;
+    let [identity] = found(200, body).try_into().expect("one allele");
+    assert_eq!(identity.mane_select, None);
+    assert_eq!(identity.coding, ["NM_001204526.1:c.19+2T>C", "NM_006280.2:c.-101T>C"]);
+    assert_eq!(identity.gene.as_deref(), Some("SSR4"), "the gene comes from the coding transcripts too");
+}
+
+#[test]
 fn an_allele_the_registry_checked_but_never_registered_has_no_id() {
     let [identity] = found(200, UNREGISTERED).try_into().expect("one allele");
     assert_eq!(identity.allele_id, None, "`_:CA` is not an id");

@@ -247,6 +247,7 @@ mod tests {
             grch38: None,
             grch37: None,
             mane_select: None,
+            coding: Vec::new(),
             protein: None,
             gene: Some("HFE".into()),
             clinvar_variation: Some(9),

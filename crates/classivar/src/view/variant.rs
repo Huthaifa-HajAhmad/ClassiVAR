@@ -23,6 +23,15 @@ pub(super) fn curation_is_chosen(condition: Option<&Condition>, curation: &Curat
     same_disease && condition.inheritance == Inheritance::from_clingen(&curation.inheritance)
 }
 
+/// A ClinGen gene-disease rating as a condition: its disease, MONDO id and inheritance.
+pub(super) fn condition_from_curation(curation: &Curation) -> Condition {
+    Condition {
+        name: curation.disease.chars().take(MAX_CONDITION_CHARS).collect(),
+        mondo: (!curation.disease_id.is_empty()).then(|| curation.disease_id.clone()),
+        inheritance: Inheritance::from_clingen(&curation.inheritance),
+    }
+}
+
 /// Typing a condition by hand keeps its MONDO id only while the name is the one it came with.
 pub(super) fn watch_condition_box(
     input: &Entity<InputState>,
@@ -104,6 +113,7 @@ impl Workbench {
             this.update(cx, |this, cx| {
                 if this.variant.lookup_id == id {
                     this.finish_registry_lookup(result);
+                    this.adopt_variant_gene(cx);
                     cx.notify();
                 }
             })
@@ -129,17 +139,14 @@ impl Workbench {
     /// Take one of several alleles an id named as the case's variant.
     pub(super) fn choose_identity(&mut self, identity: VariantIdentity, cx: &mut Context<Self>) {
         self.variant.identity = Some(identity);
+        self.adopt_variant_gene(cx);
         cx.notify();
     }
 
     /// Use a ClinGen gene-disease curation as the case's condition, and suggest
     /// the gene decision its rating implies. The banner says what was set.
     pub(super) fn use_curation(&mut self, curation: &Curation, window: &mut Window, cx: &mut Context<Self>) {
-        let condition = Condition {
-            name: curation.disease.chars().take(MAX_CONDITION_CHARS).collect(),
-            mondo: (!curation.disease_id.is_empty()).then(|| curation.disease_id.clone()),
-            inheritance: Inheritance::from_clingen(&curation.inheritance),
-        };
+        let condition = condition_from_curation(curation);
         let name = condition.name.clone();
         self.variant.condition = Some(condition);
         self.variant.condition_input.update(cx, |input, cx| input.set_value(name.clone(), window, cx));
@@ -158,6 +165,44 @@ impl Workbench {
             }
         )));
         cx.notify();
+    }
+
+    /// Open the gene sources to choose the condition of `scope`: the button that opened
+    /// them says whose it is, whatever else is on screen.
+    pub(super) fn open_sources(&mut self, scope: Editing, cx: &mut Context<Self>) {
+        self.sources_for = scope;
+        self.gene_cards_open = true;
+        cx.notify();
+    }
+
+    /// Set the condition of what the sources were opened for: today's case, or an earlier report.
+    /// The name box follows; its change handler keeps this condition while the name matches.
+    pub(super) fn set_scope_condition(&mut self, condition: Condition, window: &mut Window, cx: &mut Context<Self>) {
+        let name = condition.name.clone();
+        match self.sources_for {
+            Editing::Today => {
+                self.variant.condition = Some(condition);
+                self.variant.condition_input.update(cx, |input, cx| input.set_value(name, window, cx));
+            }
+            Editing::Record(i) => {
+                let Some(record) = self.records.get_mut(i) else { return };
+                record.condition = Some(condition);
+                self.variant.record_condition_input.update(cx, |input, cx| input.set_value(name, window, cx));
+            }
+        }
+        cx.notify();
+    }
+
+    /// When a check finds one allele with a gene and no gene is checked yet, check that gene
+    /// too, so the curator does not type it again. The box text follows on the next draw.
+    pub(super) fn adopt_variant_gene(&mut self, cx: &mut Context<Self>) {
+        let Some(gene) = self.variant.identity.as_ref().and_then(|identity| identity.gene.clone()) else { return };
+        let typed = self.boxes.gene.read(cx).value().trim().to_string();
+        let free = self.case_gene.is_empty() && (typed.is_empty() || typed.eq_ignore_ascii_case(&gene));
+        if free && classivar_sources::is_gene_symbol(&gene) {
+            self.pending_gene_box = Some(gene.clone());
+            self.run_gene_check(gene, cx);
+        }
     }
 
     pub(super) fn set_inheritance(&mut self, inheritance: Inheritance, cx: &mut Context<Self>) {

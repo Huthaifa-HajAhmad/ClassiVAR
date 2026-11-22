@@ -22,6 +22,7 @@ fn brca1() -> VariantIdentity {
         grch38: Some("NC_000017.11:g.43057065dup".into()),
         grch37: Some("NC_000017.10:g.41209082dup".into()),
         mane_select: Some("NM_007294.4:c.5266dup".into()),
+        coding: Vec::new(),
         protein: Some("NP_009225.1:p.Gln1756ProfsTer?".into()),
         gene: Some("BRCA1".into()),
         clinvar_variation: Some(17677),

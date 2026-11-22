@@ -15,15 +15,20 @@ use super::*;
 mod block_tip;
 mod column;
 mod combining_table;
+mod condition_pick;
 mod criteria;
+mod criteria_sections;
 mod criterion_row;
 mod dial;
 mod dial_geometry;
+mod empty_track;
 mod evidence_stack;
 mod frame;
 mod gene_cards;
+mod gene_drawer;
 mod helper_bar;
 mod helpers;
+mod source_inheritance;
 
 pub(super) use helpers::POPULATION_BOXES;
 mod hero;
@@ -40,6 +45,7 @@ mod rail;
 mod record_fields;
 mod records;
 mod report_focus;
+mod reported_hero;
 mod results;
 mod strength_ladder;
 mod suggest;
@@ -186,6 +192,9 @@ impl Workbench {
 impl Render for Workbench {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.settle_focus(window, cx);
+        if let Some(gene) = self.pending_gene_box.take() {
+            self.boxes.gene.update(cx, |input, cx| input.set_value(gene, window, cx));
+        }
         let frame = self.frame(cx);
         div()
             .size_full()

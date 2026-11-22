@@ -29,17 +29,34 @@ impl Workbench {
             None if !result.conflicts.is_empty() => hero_conflicts(hero, result, muted),
             None if result.both_sides_met => hero_both_sides(hero, result),
             None if !result.combination_overuse.is_empty() => hero_overuse(hero, result),
+            None if result.items.is_empty() && self.reported_only().is_some() => {
+                let picture = self.empty_picture(result, cx);
+                self.hero_reported(hero.child(picture), cx)
+            }
             None if result.items.is_empty() => {
-                let room = (self.stage.width.get(), self.stage.height.get());
-                let dial = div().flex().justify_center().child(self.dial(result, None, room, false, cx));
-                hero_empty(hero.child(dial), result, muted).child(self.category_picker(cx))
+                let picture = self.empty_picture(result, cx);
+                hero_empty(hero.child(picture), result, muted).child(self.category_picker(cx))
             }
             None => hero_empty(hero, result, muted),
         }
         .into_any_element()
     }
 
-    fn category_picker(&self, cx: &mut Context<Self>) -> Div {
+    /// The chosen picture with nothing on it (grey, no class colour), so the switch works before any evidence.
+    fn empty_picture(&self, result: &Assessment, cx: &mut Context<Self>) -> AnyElement {
+        match self.picture {
+            crate::settings::Picture::Dial => {
+                let room = (self.stage.width.get(), self.stage.height.get());
+                div().flex().justify_center().child(self.dial(result, None, room, false, cx)).into_any_element()
+            }
+            crate::settings::Picture::Column => {
+                div().flex().justify_center().child(self.empty_column(cx)).into_any_element()
+            }
+            crate::settings::Picture::Track => self.empty_track(cx),
+        }
+    }
+
+    pub(super) fn category_picker(&self, cx: &mut Context<Self>) -> Div {
         let mut choices = div().flex().flex_wrap().justify_center().gap_2();
         for category in Category::ALL {
             if self.rules.criteria.iter().any(|criterion| criterion.category == category) {
@@ -52,8 +69,11 @@ impl Workbench {
                         .toggled(self.category == Some(category))
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.category = Some(category);
+                            // Show that kind of evidence and fold the others, without hiding them.
+                            this.folded = Category::ALL.into_iter().filter(|c| *c != category).collect();
                             this.reading = false;
-                            this.handles.criteria_scroll.set_offset(point(px(0.), px(0.)));
+                            // Child 1 of the sheet is the "Show all" bar that sits above the filtered list.
+                            this.handles.criteria_scroll.scroll_to_top_of_item(1);
                             cx.notify();
                         })),
                 );

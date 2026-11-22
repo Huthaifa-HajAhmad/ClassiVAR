@@ -65,11 +65,14 @@ impl Workbench {
         cx.notify();
     }
 
-    /// What Escape does: answer "Cancel" to a question, otherwise close the open
-    /// strength guide.
+    /// What Escape does: answer "Cancel" to a question, otherwise close the gene-sources
+    /// drawer or the open strength guide.
     pub(super) fn escape(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.confirm.is_some() {
             self.cancel_confirm(window, cx);
+        } else if self.gene_cards_open {
+            self.gene_cards_open = false;
+            cx.notify();
         } else if self.guide_open.take().is_some() || self.raising.take().is_some() {
             cx.notify();
         }
@@ -99,10 +102,6 @@ impl Workbench {
             Editing::Today => "Today (you)".to_string(),
             Editing::Record(i) => format!("{} · {}", self.records[i].label, self.records[i].year),
         }
-    }
-
-    pub(super) fn editing_label(&self) -> String {
-        self.scope_label(self.editing)
     }
 
     /// Apply, open the guide for, or remove a criterion. A guided criterion on

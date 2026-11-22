@@ -80,6 +80,40 @@ impl Workbench {
         }
     }
 
+    /// The column with no evidence: the class zones in grey and their names, nothing marked.
+    pub(super) fn empty_column(&self, cx: &mut Context<Self>) -> AnyElement {
+        let theme = cx.theme();
+        let (ink, muted, fill, border) = (theme.foreground, theme.muted_foreground, theme.muted, theme.border);
+        let scale = scale_for(self.rules);
+        let mut zones =
+            div().absolute().left_0().top_0().w(px(TODAY_WIDTH)).h(px(HEIGHT)).rounded_lg().overflow_hidden();
+        for (_, from, to) in &scale.zones {
+            let (top, height) = span(*from, *to, &scale);
+            zones = zones.child(
+                div()
+                    .absolute()
+                    .left_0()
+                    .w_full()
+                    .top(px(top * HEIGHT))
+                    .h(px(height * HEIGHT))
+                    .bg(fill)
+                    .border_b_1()
+                    .border_color(border),
+            );
+        }
+        div()
+            .relative()
+            .flex_none()
+            .w(px(TODAY_WIDTH + LABEL_ROOM))
+            .h(px(HEIGHT + FOOT))
+            // The zone names hang to the right; the same room on the left centres the column.
+            .ml(px(LABEL_ROOM))
+            .child(zones)
+            .child(zone_names(&scale, None, TODAY_WIDTH + 12., (ink, muted)))
+            .child(foot("Today", "your evidence", 0., TODAY_WIDTH, ink, muted))
+            .into_any_element()
+    }
+
     fn column(
         &self,
         result: &Assessment,
@@ -114,7 +148,7 @@ impl Workbench {
         picture
             .child(self.capsule(&steps, result.total_points, &scale, class, left, cx))
             .children(tip)
-            .child(zone_names(&scale, class, left + TODAY_WIDTH + 12., (ink, muted)))
+            .child(zone_names(&scale, Some(class), left + TODAY_WIDTH + 12., (ink, muted)))
             .child(foot("Today", "your evidence", left, TODAY_WIDTH, ink, muted))
             .into_any_element()
     }

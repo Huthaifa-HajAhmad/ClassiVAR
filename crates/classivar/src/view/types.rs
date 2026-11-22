@@ -90,6 +90,8 @@ pub(super) struct Record {
 #[derive(Clone, PartialEq, Eq)]
 pub(super) enum Confirm {
     Clear(Editing),
+    /// Forget the whole case: variant, gene, condition, records and evidence.
+    ClearCase,
     StartFromLatest,
     /// Check another gene, which starts a new case.
     NewGene(String),

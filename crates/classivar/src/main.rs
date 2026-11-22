@@ -1,8 +1,10 @@
 // A release build is a window app: no console window opens behind it on Windows.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod crash_log;
 mod design;
 mod genes;
+mod icons;
 mod labs;
 mod look;
 mod rule_file;
@@ -49,6 +51,7 @@ pub(crate) fn window_options(cx: &mut App) -> WindowOptions {
 }
 
 fn main() {
+    crash_log::install();
     let rules = match load_rules() {
         Ok(rules) => rules,
         Err(message) => {

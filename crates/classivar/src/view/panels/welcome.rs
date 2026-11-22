@@ -11,9 +11,9 @@ impl Workbench {
             div().w_full().flex().items_center().gap_8().child(self.welcome_intro(cx)).child(self.empty_figure(cx));
         let page = div()
             .w_full()
-            .max_w(px(1180.))
+            .max_w(px(1480.))
             .mx_auto()
-            .px_8()
+            .px_12()
             .pt_6()
             .pb_8()
             .flex()
@@ -40,18 +40,33 @@ impl Workbench {
             .flex()
             .flex_wrap()
             .gap_3()
-            .child(Button::new("welcome-new").primary().label("Start new variant").on_click(cx.listener(
-                |this, _, _, cx| {
-                    this.set_mode(Mode::NewVariant);
-                    cx.notify();
-                },
-            )))
-            .child(Button::new("welcome-reported").ghost().label("Review reported variant").on_click(cx.listener(
-                |this, _, _, cx| {
-                    this.set_mode(Mode::ReportedVariant);
-                    cx.notify();
-                },
-            )))
+            .child(
+                Button::new("welcome-new")
+                    .primary()
+                    .icon(Icon::new(IconName::Plus))
+                    .label("Start new variant")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.set_mode(Mode::NewVariant);
+                        cx.notify();
+                    })),
+            )
+            .child(
+                Button::new("welcome-reported")
+                    .outline()
+                    .icon(Icon::new(IconName::FileText))
+                    .label("Review reported variant")
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.set_mode(Mode::ReportedVariant);
+                        cx.notify();
+                    })),
+            )
+            .child(
+                Button::new("welcome-open")
+                    .outline()
+                    .icon(Icon::new(IconName::FolderOpen))
+                    .label("Open saved case")
+                    .on_click(cx.listener(|this, _, window, cx| this.open_case(window, cx))),
+            )
     }
 
     fn welcome_intro(&self, cx: &mut Context<Self>) -> Div {
@@ -74,14 +89,6 @@ impl Workbench {
                 "See how each criterion you choose moves the class, and how today’s evidence compares with earlier lab reports.",
             ))
             .child(self.welcome_actions(cx))
-            .child(
-                div().flex().child(
-                    Button::new("welcome-open")
-                        .ghost()
-                        .label("Open saved case")
-                        .on_click(cx.listener(|this, _, window, cx| this.open_case(window, cx))),
-                ),
-            )
     }
 
     /// The dial with no evidence on it: grey bands, no needle and no class, so the
@@ -103,7 +110,7 @@ impl Workbench {
         card.child(div().debug_selector(|| "welcome-dial".into()).child(self.dial(
             &result,
             None,
-            (460., 330.),
+            (560., 380.),
             false,
             cx,
         )))

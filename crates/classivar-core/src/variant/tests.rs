@@ -114,6 +114,7 @@ fn the_display_name_prefers_the_mane_transcript() {
         grch38: Some("NC_000017.11:g.43057065dup".into()),
         grch37: None,
         mane_select: Some("NM_007294.4:c.5266dup".into()),
+        coding: Vec::new(),
         protein: None,
         gene: Some("BRCA1".into()),
         clinvar_variation: Some(17677),

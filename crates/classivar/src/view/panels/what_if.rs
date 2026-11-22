@@ -120,7 +120,7 @@ impl Workbench {
         div()
             .flex()
             .flex_col()
-            .child(div().pl(px(LABEL_WIDTH)).child(zone_labels(&scale, class, (ink, muted), None)))
+            .child(div().pl(px(LABEL_WIDTH)).child(zone_labels(&scale, Some(class), (ink, muted), None)))
             .children(ups.into_iter().map(lane))
             .child(strip)
             .children(downs.into_iter().map(lane))

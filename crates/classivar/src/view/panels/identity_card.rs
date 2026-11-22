@@ -9,9 +9,11 @@ use super::*;
 /// What the card shows, in order. Only what the registry gave.
 #[derive(Debug, PartialEq)]
 pub(super) struct IdentityView {
-    /// What kind of name leads the card: "MANE Select", or the genomic build.
+    /// What kind of name leads the card: "MANE Select", the RefSeq transcripts, or the genomic build.
     pub(super) heading: &'static str,
     pub(super) name: Option<String>,
+    /// The other RefSeq coding names, when no MANE Select name was given.
+    pub(super) more_names: Vec<String>,
     pub(super) gene: Option<String>,
     pub(super) protein: Option<String>,
     /// The genomic names not already used as the lead name.
@@ -22,11 +24,13 @@ pub(super) struct IdentityView {
 }
 
 pub(super) fn identity_view(identity: &VariantIdentity) -> IdentityView {
-    let (heading, name) = match (&identity.mane_select, &identity.grch38, &identity.grch37) {
-        (Some(mane), _, _) => ("MANE Select", Some(mane.clone())),
-        (None, Some(g38), _) => ("Genomic, GRCh38", Some(g38.clone())),
-        (None, None, Some(g37)) => ("Genomic, GRCh37", Some(g37.clone())),
-        (None, None, None) => ("Variant", None),
+    let (heading, name) = match (&identity.mane_select, identity.coding.first(), &identity.grch38, &identity.grch37) {
+        (Some(mane), _, _, _) => ("MANE Select", Some(mane.clone())),
+        (None, Some(coding), _, _) if identity.coding.len() == 1 => ("RefSeq transcript", Some(coding.clone())),
+        (None, Some(coding), _, _) => ("RefSeq transcripts", Some(coding.clone())),
+        (None, None, Some(g38), _) => ("Genomic, GRCh38", Some(g38.clone())),
+        (None, None, None, Some(g37)) => ("Genomic, GRCh37", Some(g37.clone())),
+        (None, None, None, None) => ("Variant", None),
     };
     let mut builds = Vec::new();
     for (label, value) in [("GRCh38", &identity.grch38), ("GRCh37", &identity.grch37)] {
@@ -44,6 +48,7 @@ pub(super) fn identity_view(identity: &VariantIdentity) -> IdentityView {
     IdentityView {
         heading,
         name,
+        more_names: identity.coding.iter().skip(1).cloned().collect(),
         gene: identity.gene.clone(),
         protein: identity.protein.clone(),
         builds,
@@ -53,24 +58,36 @@ pub(super) fn identity_view(identity: &VariantIdentity) -> IdentityView {
 }
 
 impl Workbench {
-    /// One identity as a card. `changed`: the variant box no longer matches this check.
+    /// One identity as a card, in three bands: the name (with its gene), the genome
+    /// positions, and the ids. `changed`: the variant box no longer matches this check.
     pub(super) fn identity_card(&self, identity: &VariantIdentity, changed: bool, cx: &mut Context<Self>) -> Div {
         let (muted, border) = (cx.theme().muted_foreground, cx.theme().border);
         let view = identity_view(identity);
         let head = div()
             .flex()
             .items_center()
-            .justify_between()
             .gap_2()
-            .child(crate::look::eyebrow(format!("✓ Checked · {}", view.heading), cx))
+            .child(crate::icons::glyph(IconName::CircleCheck, cx))
+            .child(div().flex_1().min_w_0().child(crate::look::eyebrow(format!("Checked · {}", view.heading), cx)))
             .children(view.gene.clone().map(|gene| gene_badge(gene, cx)));
-        let builds = view.builds.iter().map(|(label, value)| {
+        let names = div()
+            .flex()
+            .flex_col()
+            .gap_0p5()
+            .children(view.name.map(|name| crate::look::figure(14.).line_height(px(20.)).child(name)))
+            .children(
+                view.more_names
+                    .into_iter()
+                    .map(|name| div().font_family(crate::look::MONO).text_color(muted).child(name)),
+            )
+            .children(view.protein.map(|p| div().font_family(crate::look::MONO).text_color(muted).child(p)));
+        let builds = div().flex().flex_col().gap_1().children(view.builds.iter().map(|(label, value)| {
             div()
                 .flex()
                 .gap_2()
                 .child(div().w(px(52.)).flex_none().text_color(muted).child(*label))
                 .child(div().min_w_0().font_family(crate::look::MONO).child(value.clone()))
-        });
+        }));
         let ids = div().flex().flex_wrap().gap_1().children(view.ids.iter().map(|id| {
             div()
                 .px(px(6.))
@@ -81,16 +98,16 @@ impl Workbench {
                 .font_family(crate::look::MONO)
                 .child(id.clone())
         }));
+        let band = |content: Div| div().pt_2().border_t_1().border_color(border).child(content);
         crate::look::card(cx)
             .flex()
             .flex_col()
             .gap_2()
             .text_xs()
             .child(head)
-            .children(view.name.map(|name| crate::look::figure(14.).line_height(px(20.)).child(name)))
-            .children(view.protein.map(|p| div().font_family(crate::look::MONO).text_color(muted).child(p)))
-            .child(div().flex().flex_col().gap_0p5().children(builds))
-            .child(ids)
+            .child(names)
+            .when(!view.builds.is_empty(), |card| card.child(band(builds)))
+            .child(band(ids))
             .child(caption(muted).child(view.checked))
             .when(changed, |d| {
                 d.child(notice(

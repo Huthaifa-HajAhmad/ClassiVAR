@@ -9,7 +9,6 @@ use classivar_core::{Condition, Inheritance};
 use classivar_sources::allele_registry::Lookup as Found;
 
 use super::*;
-use crate::view::variant::curation_is_chosen;
 
 /// A warning when the checked variant lies in another gene than the case's.
 pub(super) fn gene_mismatch(identity: Option<&VariantIdentity>, case_gene: &str) -> Option<String> {
@@ -28,6 +27,7 @@ impl Workbench {
             .gap_2()
             .child(div().flex_1().min_w_0().child(Input::new(&self.boxes.variant).aria_label("Variant name")));
         let check = Button::new("variant-check")
+            .icon(Icon::new(IconName::Search))
             .label("Check")
             .accessibility_label("Check the variant with the ClinGen Allele Registry")
             .small()
@@ -138,51 +138,26 @@ impl Workbench {
                 .on_click(cx.listener(move |this, _, _, cx| this.set_inheritance(inheritance, cx)))
             })
             .collect();
+        let picking = self.source_records() > 0 && !self.typing_condition;
         div()
             .flex()
             .flex_col()
             .gap_2()
-            .child(super::records::form_row(
-                "Name",
-                div().w_full().child(Input::new(&self.variant.condition_input).aria_label("Condition")),
-                cx,
-            ))
+            .when(picking, |d| d.child(self.picked_condition(cx)))
+            .when(!picking, |d| {
+                d.child(super::records::form_row(
+                    "Name",
+                    div().w_full().child(Input::new(&self.variant.condition_input).aria_label("Condition")),
+                    cx,
+                ))
+                .children(self.pick_button(Editing::Today, cx))
+            })
             .child(super::records::form_row("Inheritance", crate::look::segmented(segments, cx), cx))
-            .children(self.condition_from_clingen(cx))
-    }
-
-    /// Buttons that take a ClinGen curation of the checked gene as the condition.
-    fn condition_from_clingen(&self, cx: &mut Context<Self>) -> Option<Div> {
-        let Lookup::Done(found) = &self.gene.clingen else { return None };
-        let curations = &found.value.curations;
-        if curations.is_empty() {
-            return None;
-        }
-        let chosen_now = self.variant.condition.as_ref();
-        let mut pills = div().flex().flex_wrap().gap_2();
-        for (i, curation) in curations.iter().take(4).enumerate() {
-            let label = format!("{} ({}, {})", curation.disease, curation.inheritance, curation.classification);
-            // The pill of the condition now set is filled and ticked; the others offer "+".
-            let chosen = curation_is_chosen(chosen_now, curation);
-            let picked = curation.clone();
-            pills = pills.child(
-                crate::look::choice_pill(format!("condition-clingen-{i}"), &label, chosen, cx)
-                    .accessibility_label(format!("Use {label} as the case's condition"))
-                    .tooltip(label.clone())
-                    .on_click(cx.listener(move |this, _, window, cx| this.use_curation(&picked, window, cx))),
-            );
-        }
-        let row = div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(caption(cx.theme().muted_foreground).child("Or choose a condition ClinGen rated for this gene:"))
-            .child(pills);
-        Some(row)
     }
 
     /// The ClinVar import button and its state, for the reported-variant path.
-    pub(super) fn clinvar_import_row(&self, cx: &mut Context<Self>) -> Option<Div> {
+    /// `short`: the rail's narrow form, with the ClinVar id in the tooltip.
+    pub(super) fn clinvar_import_row(&self, short: bool, cx: &mut Context<Self>) -> Option<Div> {
         let id = self.clinvar_variation_id()?;
         let muted = cx.theme().muted_foreground;
         let state = match &self.variant.clinvar {
@@ -192,7 +167,8 @@ impl Workbench {
             }
             _ => None,
         };
-        let label = format!("Import labs from ClinVar VCV{id:09}");
+        let full = format!("Import labs from ClinVar VCV{id:09}");
+        let label = if short { "Import from ClinVar".to_string() } else { full.clone() };
         Some(
             div()
                 .flex()
@@ -201,10 +177,13 @@ impl Workbench {
                 .gap_2()
                 .child(
                     Button::new("clinvar-import")
+                        .icon(Icon::new(IconName::Inbox))
                         .label(label.clone())
-                        .accessibility_label(format!("{label} as earlier records"))
+                        .accessibility_label(format!("{full} as earlier records"))
+                        .tooltip(full.clone())
                         .small()
-                        .outline()
+                        .when(short, |b| b.ghost())
+                        .when(!short, |b| b.outline())
                         .on_click(cx.listener(|this, _, _, cx| this.import_clinvar(cx))),
                 )
                 .children(state),
@@ -242,6 +221,7 @@ impl Workbench {
                 cx,
             ))
             .children(note)
+            .children(self.pick_button(Editing::Record(index), cx))
             .children(record.source.as_ref().map(|source| caption(muted).child(source_text(source))))
     }
 }
@@ -274,6 +254,7 @@ mod tests {
             grch38: Some("NC_000017.11:g.43057065dup".into()),
             grch37: None,
             mane_select: Some("NM_007294.4:c.5266dup".into()),
+            coding: Vec::new(),
             protein: None,
             gene: Some("BRCA1".into()),
             clinvar_variation: Some(17677),
@@ -303,6 +284,22 @@ mod tests {
         assert_eq!(view.heading, "Genomic, GRCh38");
         assert_eq!(view.name.as_deref(), Some("NC_000017.11:g.43057065dup"));
         assert!(view.builds.is_empty(), "the name is not repeated as a build row");
+    }
+
+    #[test]
+    fn without_a_mane_select_the_coding_names_lead_and_both_genome_builds_follow() {
+        let identity = VariantIdentity {
+            mane_select: None,
+            coding: vec!["NM_001204526.1:c.19+2T>C".into(), "NM_006280.2:c.-101T>C".into()],
+            grch37: Some("NC_000017.10:g.41209082dup".into()),
+            ..brca1()
+        };
+        let view = identity_view(&identity);
+        assert_eq!(view.heading, "RefSeq transcripts");
+        assert_eq!(view.name.as_deref(), Some("NM_001204526.1:c.19+2T>C"));
+        assert_eq!(view.more_names, ["NM_006280.2:c.-101T>C"]);
+        assert_eq!(view.builds.len(), 2, "the genome positions are kept below the coding names");
+        assert_eq!(identity.display_name(), Some("NM_001204526.1:c.19+2T>C"));
     }
 
     #[test]
