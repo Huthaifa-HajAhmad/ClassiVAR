@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/classivar-core", "crates/classivar-sources", "crates/classivar"]
 
 [workspace.package]
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 # The oldest Rust that builds this project is not measured; the pinned toolchain
 # (rust-toolchain.toml) is the one that is tested.
@@ -18,6 +18,13 @@ license = "MIT OR Apache-2.0"
 # 2.1 GB figure also holds the test binaries, so the real saving is larger.
 # A package override beats CARGO_PROFILE_DEV_DEBUG, so comment this block out (or
 # name a single crate here) when a dependency needs a line table.
+# The build that ships: optimised across crates and stripped of symbols, so the
+# installer is smaller. Panics still print their message.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+
 [profile.dev.package."*"]
 debug = false
 

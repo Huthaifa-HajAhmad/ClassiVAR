@@ -33,7 +33,7 @@ impl Workbench {
                     .when_some(strength, |row, strength| row.child(self.criterion_strength_button(c, strength, cx)))
                     .child(self.criterion_detail_button(c, open, cx)),
             )
-            .when(self.learning || open, |col| col.child(self.criterion_explanation(c, choice, open, cx)))
+            .when(open, |col| col.child(self.criterion_explanation(c, choice, cx)))
             .when_some(reason, |col, reason| {
                 col.child(
                     div()
@@ -171,48 +171,34 @@ impl Workbench {
             }))
     }
 
-    /// The rule in plain words under the row. Learning on: one or two lines of it. "More": all of it,
+    /// The rule in plain words under the row, opened with "More": all of it,
     /// with the note, the source and (for a guided criterion) the way to remove it.
-    fn criterion_explanation(
-        &self,
-        c: &'static Criterion,
-        choice: Option<&Choice>,
-        open: bool,
-        cx: &mut Context<Self>,
-    ) -> Div {
+    fn criterion_explanation(&self, c: &'static Criterion, choice: Option<&Choice>, cx: &mut Context<Self>) -> Div {
         let muted = cx.theme().muted_foreground;
         let strength = choice.map(|choice| choice.strength);
         let guide_option = choice.and_then(|choice| choice.situation.as_deref()).and_then(|id| c.guide_option(id));
-        let clamp = |text: Div| if open { text } else { text.line_clamp(2) };
         let mut text = div().pl(px(66.)).flex().flex_col().gap_1().text_xs().text_color(muted);
-        text = text.child(clamp(div().child(c.summary.clone())));
-        if open && let Some(note) = c.note.clone() {
+        text = text.child(div().child(c.summary.clone()));
+        if let Some(note) = c.note.clone() {
             text = text.child(format!("Note: {note}"));
         }
-        if open {
-            text = text.child(self.strength_ladder(c, strength, cx));
-            text = text.children(self.interactions_panel(c, cx));
-        }
+        text = text.child(self.strength_ladder(c, strength, cx));
+        text = text.children(self.interactions_panel(c, cx));
         if let Some(option) = guide_option {
-            let answer = if open {
-                format!("Guide answer: {} — {}", option.short, option.situation)
-            } else {
-                format!("Guide answer: {}", option.short)
-            };
-            text = text.child(clamp(div().child(answer)));
+            text = text.child(format!("Guide answer: {} — {}", option.short, option.situation));
         }
         if !c.guide.is_empty() && strength.is_none() {
             text = text.child(
                 div().child("Click the code to answer a short decision tree; nothing is applied until you choose."),
             );
         }
-        if open && strength.is_some() && self.editing == Editing::Today {
+        if strength.is_some() && self.editing == Editing::Today {
             text = text.child(self.criterion_note_button(c, cx));
         }
-        if open && strength.is_some() && !c.guide.is_empty() && self.editing == Editing::Today {
+        if strength.is_some() && !c.guide.is_empty() && self.editing == Editing::Today {
             text = text.child(self.criterion_remove_button(c, cx));
         }
-        if open && let Some(citation) = self.rules.source(&c.source).map(|s| s.citation.clone()) {
+        if let Some(citation) = self.rules.source(&c.source).map(|s| s.citation.clone()) {
             text = text.child(format!("Source: {citation}"));
         }
         text

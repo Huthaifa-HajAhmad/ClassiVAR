@@ -70,8 +70,55 @@ fn live_every_id_kind_reaches_the_same_allele() {
         RegistryQuery::DbSnp(80357906),
     ] {
         let Lookup::Found(list) = lookup(&query).unwrap().value else { panic!("{query:?} not found") };
-        assert_eq!(list[0].allele_id.as_deref(), Some("CA003404"), "{query:?}");
+        assert_eq!(list.first().and_then(|a| a.allele_id.as_deref()), Some("CA003404"), "{query:?}");
     }
     let wrong = lookup(&RegistryQuery::Hgvs("NM_007294.4:c.5266A>T".into())).unwrap_err().to_string();
     assert!(wrong.contains("reference base"), "{wrong}");
+}
+
+/// Real expert-panel variants: the first allele of each panel in the dated ERepo
+/// snapshot (up to 30 panels), so many genes and variant kinds are covered. Each
+/// one must be found by its CA id, and the HGVS the registry gives back must be
+/// read by the app's own parser and lead back to the same allele.
+#[test]
+#[ignore = "calls the live ClinGen Allele Registry about 60 times"]
+fn live_expert_panel_variants_resolve_and_their_hgvs_reads_back_to_the_same_allele() {
+    let snapshot = include_str!("../../../classivar-core/tests/data/erepo-2026-11-21.tsv");
+    let mut panels: Vec<&str> = Vec::new();
+    let mut alleles: Vec<&str> = Vec::new();
+    for row in snapshot.lines().skip(1) {
+        let mut cells = row.split('\t');
+        let (Some(allele), Some(panel)) = (cells.next(), cells.next()) else { continue };
+        if allele.starts_with("CA") && !panels.contains(&panel) && panels.len() < 30 {
+            panels.push(panel);
+            alleles.push(allele);
+        }
+    }
+    let mut failures = Vec::new();
+    for allele in &alleles {
+        let found = lookup(&RegistryQuery::ClinGenAllele((*allele).into()));
+        let Ok(Fetched { value: Lookup::Found(list), .. }) = found else {
+            failures.push(format!("{allele}: not found by id ({found:?})"));
+            continue;
+        };
+        let Some(first) = list.first() else {
+            failures.push(format!("{allele}: found, but with no allele"));
+            continue;
+        };
+        let Some(hgvs) = first.mane_select.clone().or(first.grch38.clone()) else {
+            failures.push(format!("{allele}: no MANE or GRCh38 HGVS"));
+            continue;
+        };
+        let query = classivar_core::variant::parse(&hgvs).map_err(|e| format!("{e:?}")).and_then(|notation| {
+            notation.query(Some(classivar_core::variant::Build::GRCh38)).map_err(|e| format!("{e:?}"))
+        });
+        let back = query.map(|query| lookup(&query));
+        match back {
+            Ok(Ok(Fetched { value: Lookup::Found(again), .. }))
+                if again.first().is_some_and(|a| a.allele_id.as_deref() == Some(*allele)) => {}
+            other => failures.push(format!("{allele} via {hgvs}: {other:?}")),
+        }
+    }
+    assert!(alleles.len() >= 20, "the snapshot covers at least 20 panels");
+    assert!(failures.is_empty(), "{} of {} failed:\n{}", failures.len(), alleles.len(), failures.join("\n"));
 }

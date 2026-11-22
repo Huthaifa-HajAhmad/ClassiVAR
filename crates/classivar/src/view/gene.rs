@@ -21,13 +21,6 @@ impl Workbench {
             cx.notify();
             return;
         }
-        // The fictional example is deliberately not attributed to any gene.
-        // Checking a gene puts it on a real case, so that asks first.
-        if self.example && self.has_case_data(cx) {
-            self.ask(Confirm::NewGene(symbol));
-            cx.notify();
-            return;
-        }
         self.run_gene_check(typed, cx);
     }
 

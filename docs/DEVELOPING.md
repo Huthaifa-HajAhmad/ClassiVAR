@@ -64,7 +64,7 @@ powershell -ExecutionPolicy Bypass -File scripts/gui-smoke.ps1
 - starts from the light theme, tests light → dark → light with the saved choice, gene fill-in suggestions, the PVS1 guide, and clearing the gene box;
 - restores the theme preference it found and writes screenshots to `%TEMP%\classivar-smoke`.
 
-It finds controls by their accessible names (for example `PVS1:*not applied*`, `PVS1 Very strong:*`, `Theme:*Switch to dark*`). Text boxes carry an `aria_label`, which is their accessible name, so a box is found by that label (for example `Predictor score`, `De novo patients, highly-specific (parents confirmed)`); renaming one means updating the script.
+It finds controls by their accessible names (for example `PVS1:*not applied*`, `PVS1 Very strong:*`, `Dark theme`). Text boxes carry an `aria_label`, which is their accessible name, so a box is found by that label (for example `Predictor score`, `De novo patients, highly-specific (parents confirmed)`); renaming one means updating the script.
 
 A click on a button that is outside the visible part of the criteria list does nothing, and an open helper panel (it opens below the "Evidence helpers" bar) pushes criteria rows down. So the script scrolls first: `Scroll-To-Button` (for rows of the list, which can also hide under the pane header) and `Bring-Into-View` (a safety net for buttons below the window). When you add a panel above the list, expect to add `Scroll-To-Button` calls before the clicks that follow it. Plain text on screen is not visible to the script; check it in the screenshots.
 
@@ -101,8 +101,7 @@ It is Windows-only because it drives UI Automation. The paths it does **not** co
 - `editing`: Today, or one earlier record by index.
 - `today` / `records[i].evidence`: a map from criterion code to `Choice { strength, situation, reason }`. `situation` is a PVS1 guide id, not a sentence.
 - `guide_open`: the one criterion whose guide is showing (Today only).
-- `confirm`: the one pending question (clear, remove record, switch gene, open case, load example), with `confirm_focus` holding the keyboard while it is open and the page root blocking Tab behind it.
-- `example`: on while the fictional example is on screen; it warns in a banner, refuses Save and makes a gene check ask first.
+- `confirm`: the one pending question (clear, remove record, switch gene, open case, close the window), with `confirm_focus` holding the keyboard while it is open and the page root blocking Tab behind it.
 - `gene_link`, `case_gene`, `gene` lookups: the gene decision, the gene actually checked, and the four answers.
 - `next_record`: the next record number, so a removal cannot create two "Record 2"s.
 

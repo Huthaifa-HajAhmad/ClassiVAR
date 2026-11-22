@@ -1,43 +1,46 @@
-//! The four gene source cards and their summary.
+//! The gene sources: a summary card with one row per source, and the four detail cards.
 
 use super::*;
 
 impl Workbench {
-    /// One short line per gene source, so the answer is visible without opening anything.
-    pub(super) fn source_chip<T>(
+    /// One row per gene source: a mark for where it stands, its name, and its answer
+    /// in one sentence, so the answer is visible without opening anything.
+    pub(super) fn source_row<T>(
         label: &'static str,
         lookup: &Lookup<T>,
         describe: fn(&Fetched<T>) -> (String, Vec<String>),
-        border: Hsla,
-    ) -> AnyElement {
-        let chip = div().px_2().py_1().rounded_md().border_1().max_w(px(430.)).text_xs();
-        match lookup {
-            Lookup::Idle => div().into_any_element(),
-            Lookup::Loading => chip.border_color(border).child(format!("{label}: checking…")).into_any_element(),
-            Lookup::Failed(message) => chip
-                .bg(warning_fill())
-                .border_color(warning_fill())
-                .text_color(warning_ink())
-                .child(format!("{label}: could not check. {message}"))
-                .into_any_element(),
-            Lookup::Done(found) => {
-                chip.border_color(border).child(format!("{label}: {}", describe(found).0)).into_any_element()
+        cx: &App,
+    ) -> Option<Div> {
+        let muted = cx.theme().muted_foreground;
+        let (mark, text, failed) = match lookup {
+            Lookup::Idle => return None,
+            Lookup::Loading => ("…", "Checking…".to_string(), false),
+            Lookup::Failed(message) => {
+                ("!", format!("Could not check. {message} This is not \"nothing found\"."), true)
             }
-        }
+            Lookup::Done(found) => ("✓", describe(found).0, false),
+        };
+        let row = div()
+            .flex()
+            .gap_2()
+            .px_2()
+            .py(px(6.))
+            .rounded(px(6.))
+            .when(failed, |row| row.bg(warning_fill()).text_color(warning_ink()))
+            .child(div().w(px(12.)).flex_none().font_family(crate::look::MONO).child(mark))
+            .child(div().w(px(112.)).flex_none().font_weight(FontWeight::SEMIBOLD).child(label))
+            .child(div().flex_1().min_w_0().when(!failed, |d| d.text_color(muted)).child(text));
+        Some(row)
     }
 
     pub(super) fn gene_summary(&self, cx: &mut Context<Self>) -> AnyElement {
-        let (border, muted) = (cx.theme().border, cx.theme().muted_foreground);
+        let muted = cx.theme().muted_foreground;
         let g = &self.gene;
-        div()
+        let head = div()
             .flex()
-            .flex_wrap()
             .items_center()
-            .gap_2()
-            .child(Self::source_chip("ClinGen", &g.clingen, describe_clingen, border))
-            .child(Self::source_chip("G2P", &g.g2p, describe_g2p, border))
-            .child(Self::source_chip("PanelApp England", &g.england, describe_panelapp, border))
-            .child(Self::source_chip("PanelApp Australia", &g.australia, describe_panelapp, border))
+            .justify_between()
+            .child(crate::look::eyebrow(format!("Gene sources · {}", self.case_gene), cx))
             .child(
                 Button::new("gene-cards-toggle")
                     .label(if self.gene_cards_open { "Hide details" } else { "Details" })
@@ -47,9 +50,20 @@ impl Workbench {
                         this.gene_cards_open = !this.gene_cards_open;
                         cx.notify();
                     })),
-            )
+            );
+        crate::look::card(cx)
+            .flex()
+            .flex_col()
+            .gap_1()
+            .text_xs()
+            .child(head)
+            .children(Self::source_row("ClinGen validity", &g.clingen, describe_clingen, cx))
+            .children(Self::source_row("Gene2Phenotype", &g.g2p, describe_g2p, cx))
+            .children(Self::source_row("PanelApp England", &g.england, describe_panelapp, cx))
+            .children(Self::source_row("PanelApp Australia", &g.australia, describe_panelapp, cx))
             .child(
                 caption(muted)
+                    .pt_1()
                     .child("Sources are expert opinion about the gene, not your variant, and they can disagree."),
             )
             .into_any_element()

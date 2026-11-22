@@ -10,7 +10,9 @@ use gpui_kit::Focusable;
 use gpui_kit::component::ThemeMode;
 
 use super::headless::{draw, open};
-use super::{Confirm, Workbench};
+use classivar_core::Strength;
+
+use super::{Choice, Confirm, Editing, Workbench};
 
 /// A window past the opening screen, where the editor and its text boxes are.
 fn open_editor(cx: &mut TestAppContext) -> (Entity<Workbench>, &mut VisualTestContext) {
@@ -46,9 +48,12 @@ fn question_holds_focus(question: &FocusHandle, cx: &mut VisualTestContext) -> b
     cx.update(|window, cx| question.contains_focused(window, cx))
 }
 
-/// Open the "load the fictional example" question and draw it.
-fn ask_to_load_the_example(workbench: &Entity<Workbench>, cx: &mut VisualTestContext) -> FocusHandle {
-    workbench.update_in(cx, |this, _, _| this.ask(Confirm::LoadExample));
+/// Apply one criterion, open the "clear today's evidence" question and draw it.
+fn ask_to_clear_today(workbench: &Entity<Workbench>, cx: &mut VisualTestContext) -> FocusHandle {
+    workbench.update_in(cx, |this, _, _| {
+        this.today.insert("PM2".into(), Choice::new(Strength::Supporting));
+        this.ask(Confirm::Clear(Editing::Today));
+    });
     draw(cx);
     question_window(workbench, cx)
 }
@@ -56,7 +61,7 @@ fn ask_to_load_the_example(workbench: &Entity<Workbench>, cx: &mut VisualTestCon
 #[gpui::test]
 fn tab_and_shift_tab_stay_inside_a_question_and_reach_both_answers(cx: &mut TestAppContext) {
     let (workbench, cx) = open_editor(cx);
-    let question = ask_to_load_the_example(&workbench, cx);
+    let question = ask_to_clear_today(&workbench, cx);
     assert!(question_holds_focus(&question, cx), "a question takes the keyboard when it opens");
 
     let mut reached: Vec<FocusHandle> = Vec::new();
@@ -75,16 +80,22 @@ fn tab_and_shift_tab_stay_inside_a_question_and_reach_both_answers(cx: &mut Test
 fn the_keyboard_alone_can_cancel_or_confirm_a_question(cx: &mut TestAppContext) {
     let (workbench, cx) = open_editor(cx);
 
-    ask_to_load_the_example(&workbench, cx);
+    ask_to_clear_today(&workbench, cx);
     press(cx, "tab"); // Cancel is the first answer
     press_enter(cx);
-    assert!(workbench.read_with(cx, |this, _| this.confirm.is_none() && !this.example), "Enter on Cancel closes it");
+    assert!(
+        workbench.read_with(cx, |this, _| this.confirm.is_none() && !this.today.is_empty()),
+        "Enter on Cancel closes it"
+    );
 
-    ask_to_load_the_example(&workbench, cx);
+    ask_to_clear_today(&workbench, cx);
     press(cx, "tab");
     press(cx, "tab"); // "Yes, continue" is the second
     press_enter(cx);
-    assert!(workbench.read_with(cx, |this, _| this.confirm.is_none() && this.example), "Enter on Yes answers it");
+    assert!(
+        workbench.read_with(cx, |this, _| this.confirm.is_none() && this.today.is_empty()),
+        "Enter on Yes answers it"
+    );
 }
 
 #[gpui::test]
@@ -94,7 +105,7 @@ fn tab_starts_from_a_fresh_window_and_from_after_a_question_closes(cx: &mut Test
     press(cx, "tab");
     assert!(focused(cx).is_some(), "the first Tab in a fresh window must land on a control");
 
-    ask_to_load_the_example(&workbench, cx);
+    ask_to_clear_today(&workbench, cx);
     press(cx, "escape");
     assert!(workbench.read_with(cx, |this, _| this.confirm.is_none()));
     press(cx, "tab");
@@ -134,7 +145,7 @@ fn a_question_opened_while_a_page_control_has_the_focus_takes_it(cx: &mut TestAp
     press(cx, "tab");
     let page_control = focused(cx).expect("the page's second control has the focus");
 
-    let question = ask_to_load_the_example(&workbench, cx);
+    let question = ask_to_clear_today(&workbench, cx);
     assert_ne!(focused(cx), Some(page_control), "the control behind the question must lose the focus");
     assert!(question_holds_focus(&question, cx));
 }
@@ -142,9 +153,9 @@ fn a_question_opened_while_a_page_control_has_the_focus_takes_it(cx: &mut TestAp
 #[gpui::test]
 fn escape_cancels_a_question_even_while_an_answer_has_the_focus(cx: &mut TestAppContext) {
     let (workbench, cx) = open_editor(cx);
-    ask_to_load_the_example(&workbench, cx);
+    ask_to_clear_today(&workbench, cx);
     press(cx, "tab");
     press(cx, "tab"); // on "Yes, continue"
     press(cx, "escape");
-    assert!(workbench.read_with(cx, |this, _| this.confirm.is_none() && !this.example), "Escape means Cancel");
+    assert!(workbench.read_with(cx, |this, _| this.confirm.is_none() && !this.today.is_empty()), "Escape means Cancel");
 }

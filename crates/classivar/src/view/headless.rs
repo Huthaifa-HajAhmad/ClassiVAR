@@ -53,10 +53,10 @@ fn the_empty_window_draws_without_panicking_in_both_themes(cx: &mut TestAppConte
 }
 
 #[gpui::test]
-fn the_example_draws_without_panicking_for_today_and_every_record(cx: &mut TestAppContext) {
+fn the_published_case_draws_without_panicking_for_today_and_every_record(cx: &mut TestAppContext) {
     let (workbench, cx) = open(cx, ThemeMode::Light);
     workbench.update_in(cx, |this, window, cx| {
-        this.load_example(window, cx);
+        this.load_real_case(window, cx);
         this.set_mode(Mode::ReportedVariant);
         // Every criterion's "More" panel is open, so the strength ladder is drawn for all of them.
         this.open_details = this.rules.criteria.iter().map(|c| c.code.clone()).collect();
@@ -65,7 +65,7 @@ fn the_example_draws_without_panicking_for_today_and_every_record(cx: &mut TestA
     workbench.update_in(cx, |this, _, _| this.comparison = true);
     draw(cx);
     let records = workbench.read_with(cx, |this, _| this.records.len());
-    assert!(records >= 2, "the example has earlier records to draw");
+    assert!(records >= 2, "the published case has two panel records to draw");
     for index in 0..records {
         workbench.update_in(cx, |this, _, _| this.editing = Editing::Record(index));
         draw(cx);
@@ -75,9 +75,9 @@ fn the_example_draws_without_panicking_for_today_and_every_record(cx: &mut TestA
 }
 
 #[gpui::test]
-fn the_example_draws_without_panicking_in_the_dark_theme_and_in_new_variant_mode(cx: &mut TestAppContext) {
+fn the_published_case_draws_without_panicking_in_the_dark_theme_and_in_new_variant_mode(cx: &mut TestAppContext) {
     let (workbench, cx) = open(cx, ThemeMode::Dark);
-    workbench.update_in(cx, |this, window, cx| this.load_example(window, cx));
+    workbench.update_in(cx, |this, window, cx| this.load_real_case(window, cx));
     draw(cx);
     workbench.update_in(cx, |this, _, _| this.set_mode(Mode::NewVariant));
     draw(cx);
@@ -193,7 +193,7 @@ fn previewing_the_only_criterion_preserves_the_case(cx: &mut TestAppContext) {
 fn a_draft_record_leaves_completed_reports_available(cx: &mut TestAppContext) {
     let (workbench, cx) = open(cx, ThemeMode::Dark);
     workbench.update_in(cx, |this, window, cx| {
-        this.load_example(window, cx);
+        this.load_real_case(window, cx);
         this.set_mode(Mode::ReportedVariant);
         let complete = this.records.len();
         this.add_record(window, cx);
@@ -208,7 +208,7 @@ fn reading_and_comparison_controls_preserve_the_editing_scope(cx: &mut TestAppCo
     for theme in [ThemeMode::Light, ThemeMode::Dark] {
         let (workbench, cx) = open(cx, theme);
         workbench.update_in(cx, |this, window, cx| {
-            this.load_example(window, cx);
+            this.load_real_case(window, cx);
             this.set_mode(Mode::ReportedVariant);
             this.show_record(0, window, cx);
         });
@@ -235,27 +235,23 @@ fn reading_and_comparison_controls_preserve_the_editing_scope(cx: &mut TestAppCo
 }
 
 #[gpui::test]
-fn opening_example_starts_a_fictional_reported_case(cx: &mut TestAppContext) {
-    let (workbench, cx) = open(cx, ThemeMode::Light);
+fn the_opening_screen_offers_no_fictional_case(cx: &mut TestAppContext) {
+    let (_workbench, cx) = open(cx, ThemeMode::Light);
     cx.simulate_resize(gpui::size(gpui::px(960.), gpui::px(600.)));
     draw(cx);
-    let button = cx.debug_bounds("welcome-example").expect("the example is visible on first launch");
-    cx.simulate_click(button.center(), Default::default());
-    workbench.read_with(cx, |this, _| {
-        assert!(this.example && this.mode == Mode::ReportedVariant);
-        assert_eq!(this.today.len(), 4);
-    });
+    assert!(cx.debug_bounds("welcome-example").is_none(), "no demo case is offered on the opening screen");
+    assert!(cx.debug_bounds("welcome-dial").is_some(), "the opening screen draws an empty dial instead");
 }
 
-/// The example with the reported mode on, in a window of the given size.
-fn example_at(
+/// The published RYR1 case with the reported mode on, in a window of the given size.
+fn real_case_at(
     cx: &mut TestAppContext,
     mode: ThemeMode,
     (w, h): (f32, f32),
 ) -> (Entity<Workbench>, &mut VisualTestContext) {
     let (workbench, cx) = open(cx, mode);
     workbench.update_in(cx, |this, window, cx| {
-        this.load_example(window, cx);
+        this.load_real_case(window, cx);
         this.set_mode(Mode::ReportedVariant);
     });
     cx.simulate_resize(gpui::size(gpui::px(w), gpui::px(h)));
@@ -266,16 +262,16 @@ fn example_at(
 fn every_picture_draws_with_a_previewed_block_in_both_themes_and_at_both_window_sizes(cx: &mut TestAppContext) {
     for theme in [ThemeMode::Light, ThemeMode::Dark] {
         for size in [(1240., 900.), (960., 600.)] {
-            let (workbench, cx) = example_at(cx, theme, size);
+            let (workbench, cx) = real_case_at(cx, theme, size);
             for picture in Picture::ALL {
                 workbench.update_in(cx, |this, _, _| {
                     this.picture = picture;
-                    this.inspected = Some("PM5".into());
+                    this.inspected = Some("PS4".into());
                     this.preview = true;
                 });
                 draw(cx);
                 workbench.read_with(cx, |this, _| {
-                    assert_eq!(this.today.len(), 4, "a preview never removes evidence");
+                    assert_eq!(this.today.len(), 5, "a preview never removes evidence");
                     assert_eq!(this.stage.rail_shown.get(), size.0 >= 1180., "the rail folds away in a narrow window");
                 });
             }
@@ -285,39 +281,39 @@ fn every_picture_draws_with_a_previewed_block_in_both_themes_and_at_both_window_
 
 #[gpui::test]
 fn clicking_a_dial_slice_selects_it_and_a_second_click_previews_without_it(cx: &mut TestAppContext) {
-    let (workbench, cx) = example_at(cx, ThemeMode::Light, (1240., 900.));
+    let (workbench, cx) = real_case_at(cx, ThemeMode::Light, (1240., 900.));
     workbench.update_in(cx, |this, _, _| this.picture = Picture::Dial);
     draw(cx);
     let target = workbench.update_in(cx, |this, _, cx| {
-        let result = this.rules.assess(&super::to_applied(&this.today)).expect("the example can be scored");
-        this.slice_centre(&result, "PM5", cx)
+        let result = this.rules.assess(&super::to_applied(&this.today)).expect("the published case can be scored");
+        this.slice_centre(&result, "PS4", cx)
     });
-    let target = target.expect("the dial was painted with a PM5 slice");
+    let target = target.expect("the dial was painted with a PS4 slice");
     cx.simulate_click(target, Default::default());
     workbench.read_with(cx, |this, _| {
-        assert_eq!(this.inspected.as_deref(), Some("PM5"));
+        assert_eq!(this.inspected.as_deref(), Some("PS4"));
         assert!(!this.preview);
     });
     draw(cx);
     cx.simulate_click(target, Default::default());
     workbench.read_with(cx, |this, _| {
         assert!(this.preview, "a second click previews the class without the slice");
-        assert!(this.today.contains_key("PM5"), "the evidence is kept");
+        assert!(this.today.contains_key("PS4"), "the evidence is kept");
     });
 }
 
 #[gpui::test]
 fn hovering_a_dial_slice_or_a_column_or_track_block_shows_its_card_and_leaving_hides_it(cx: &mut TestAppContext) {
-    let (workbench, cx) = example_at(cx, ThemeMode::Dark, (960., 600.));
+    let (workbench, cx) = real_case_at(cx, ThemeMode::Dark, (960., 600.));
     workbench.update_in(cx, |this, _, _| this.picture = Picture::Dial);
     draw(cx);
     let target = workbench.update_in(cx, |this, _, cx| {
-        let result = this.rules.assess(&super::to_applied(&this.today)).expect("the example can be scored");
-        this.slice_centre(&result, "PM5", cx)
+        let result = this.rules.assess(&super::to_applied(&this.today)).expect("the published case can be scored");
+        this.slice_centre(&result, "PS4", cx)
     });
     let away = gpui::point(gpui::px(4.), gpui::px(4.));
-    cx.simulate_mouse_move(target.expect("the dial was painted with a PM5 slice"), None, Default::default());
-    workbench.read_with(cx, |this, _| assert_eq!(this.hovered.as_deref(), Some("PM5")));
+    cx.simulate_mouse_move(target.expect("the dial was painted with a PS4 slice"), None, Default::default());
+    workbench.read_with(cx, |this, _| assert_eq!(this.hovered.as_deref(), Some("PS4")));
     draw(cx);
     cx.simulate_mouse_move(away, None, Default::default());
     workbench.read_with(cx, |this, _| assert_eq!(this.hovered, None, "leaving the dial hides the card"));
@@ -328,18 +324,22 @@ fn hovering_a_dial_slice_or_a_column_or_track_block_shows_its_card_and_leaving_h
     workbench
         .update_in(cx, |this, _, _| this.handles.result_scroll.set_offset(gpui::point(gpui::px(0.), gpui::px(-300.))));
     draw(cx);
-    let block = cx.debug_bounds("column-PM5").expect("the column has a PM5 block");
+    let block = cx.debug_bounds("column-PS4").expect("the column has a PS4 block");
     cx.simulate_mouse_move(block.center(), None, Default::default());
-    workbench.read_with(cx, |this, _| assert_eq!(this.hovered.as_deref(), Some("PM5")));
+    workbench.read_with(cx, |this, _| assert_eq!(this.hovered.as_deref(), Some("PS4")));
     draw(cx);
     cx.simulate_mouse_move(away, None, Default::default());
     workbench.read_with(cx, |this, _| assert_eq!(this.hovered, None));
 
-    workbench.update_in(cx, |this, _, _| this.picture = Picture::Track);
+    workbench.update_in(cx, |this, _, _| {
+        this.picture = Picture::Track;
+        // Back to the top: the column step scrolled the stage down.
+        this.handles.result_scroll.set_offset(gpui::point(gpui::px(0.), gpui::px(0.)));
+    });
     draw(cx);
-    let block = cx.debug_bounds("block-PM5").expect("the track has a PM5 block");
+    let block = cx.debug_bounds("block-PS4").expect("the track has a PS4 block");
     cx.simulate_mouse_move(block.center(), None, Default::default());
-    workbench.read_with(cx, |this, _| assert_eq!(this.hovered.as_deref(), Some("PM5")));
+    workbench.read_with(cx, |this, _| assert_eq!(this.hovered.as_deref(), Some("PS4")));
     draw(cx);
     cx.simulate_mouse_move(away, None, Default::default());
     workbench.read_with(cx, |this, _| assert_eq!(this.hovered, None));
@@ -348,7 +348,7 @@ fn hovering_a_dial_slice_or_a_column_or_track_block_shows_its_card_and_leaving_h
 
 #[gpui::test]
 fn the_rail_opens_an_earlier_report_and_returns_to_today(cx: &mut TestAppContext) {
-    let (workbench, cx) = example_at(cx, ThemeMode::Dark, (1240., 900.));
+    let (workbench, cx) = real_case_at(cx, ThemeMode::Dark, (1240., 900.));
     for (selector, expected) in [("rail-record-0", Editing::Record(0)), ("rail-record-today", Editing::Today)] {
         draw(cx);
         let bounds = cx.debug_bounds(selector).expect("the stop is on the rail");
@@ -361,7 +361,7 @@ fn the_rail_opens_an_earlier_report_and_returns_to_today(cx: &mut TestAppContext
 fn choosing_a_stronger_strength_from_the_menu_asks_for_a_reason_and_a_weaker_one_applies_at_once(
     cx: &mut TestAppContext,
 ) {
-    let (workbench, cx) = example_at(cx, ThemeMode::Light, (1240., 900.));
+    let (workbench, cx) = real_case_at(cx, ThemeMode::Light, (1240., 900.));
     workbench.update_in(cx, |this, window, cx| {
         let pm2 = this.rules.criterion("PM2").expect("PM2 exists").clone();
         assert!(pm2.allowed_strengths().contains(&Strength::Moderate), "the raise must be one the menu offers");
@@ -464,20 +464,6 @@ fn the_gene_decision_and_the_records_are_part_of_the_saved_state(cx: &mut TestAp
 }
 
 #[gpui::test]
-fn loading_the_example_removes_the_marker(cx: &mut TestAppContext) {
-    let (workbench, cx) = open(cx, ThemeMode::Light);
-    workbench.update_in(cx, |this, window, cx| {
-        apply_default(this, "PM2");
-        let saved = this.case_file(cx);
-        this.remember_saved(saved);
-        apply_default(this, "PS1");
-        assert!(this.has_unsaved_changes(cx));
-        this.load_example(window, cx);
-        assert!(!this.has_unsaved_changes(cx), "the example is never saved, so it has no file to differ from");
-    });
-}
-
-#[gpui::test]
 fn closing_an_unchanged_case_just_closes(cx: &mut TestAppContext) {
     let (workbench, cx) = open(cx, ThemeMode::Light);
     assert!(cx.simulate_close(), "nothing to lose, so the window closes");
@@ -489,9 +475,6 @@ fn closing_an_unchanged_case_just_closes(cx: &mut TestAppContext) {
         this.remember_saved(saved);
     });
     assert!(cx.simulate_close(), "a saved case closes without a question");
-
-    workbench.update_in(cx, |this, window, cx| this.load_example(window, cx));
-    assert!(cx.simulate_close(), "the example is a demo and is never saved, so closing it loses nothing");
 }
 
 #[gpui::test]
@@ -526,14 +509,17 @@ fn a_close_request_replaces_the_question_that_was_open_and_yes_closes_the_window
     let (workbench, cx) = open(cx, ThemeMode::Light);
     workbench.update_in(cx, |this, _, _| {
         apply_default(this, "PM2");
-        this.ask(super::Confirm::LoadExample);
+        this.ask(super::Confirm::Clear(Editing::Today));
     });
     assert!(!cx.simulate_close());
     assert!(
         workbench.read_with(cx, |this, _| matches!(this.confirm, Some(super::Confirm::CloseWindow))),
         "the question about closing must show, not stay hidden behind the older one"
     );
-    assert!(workbench.read_with(cx, |this, _| !this.example), "the older question was cancelled, not answered");
+    assert!(
+        workbench.read_with(cx, |this, _| this.today.contains_key("PM2")),
+        "the older question was cancelled, not answered"
+    );
 
     workbench.update_in(cx, |this, window, cx| this.apply_confirm(window, cx));
     assert!(cx.windows().is_empty(), "Yes closes the window");

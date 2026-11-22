@@ -119,7 +119,7 @@ fn describe(error: ureq::Error) -> SourceError {
 const PROJECT_URL: &str = "https://github.com/Huthaifa-HajAhmad/ClassiVAR";
 
 fn user_agent() -> String {
-    format!("ClassiVAR/{} (variant curation learning tool; {PROJECT_URL})", env!("CARGO_PKG_VERSION"))
+    format!("ClassiVAR/{} (variant curation explanation tool; {PROJECT_URL})", env!("CARGO_PKG_VERSION"))
 }
 
 /// One web client setup for every lookup. It gives up after 30 seconds, names

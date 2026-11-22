@@ -69,6 +69,8 @@ impl Workbench {
             .border_color(border)
             .child(
                 div()
+                    .flex_1()
+                    .min_w_0()
                     .flex()
                     .flex_col()
                     .gap_0p5()

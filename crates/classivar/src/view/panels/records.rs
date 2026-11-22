@@ -4,7 +4,6 @@ use super::*;
 
 impl Workbench {
     pub(super) fn records_bar(&self, cx: &mut Context<Self>) -> AnyElement {
-        let border = cx.theme().border;
         let detail = match self.editing {
             Editing::Record(i) => self.record_detail(i, cx),
             Editing::Today => self.today_detail(cx),
@@ -13,15 +12,12 @@ impl Workbench {
             .flex()
             .flex_col()
             .gap_2()
-            .pt_3()
-            .border_t_1()
-            .border_color(border)
             .when(!self.stage.rail_shown.get(), |d| d.child(self.record_chips(cx)))
             .child(detail)
             .into_any_element()
     }
 
-    /// One chip for each earlier record, the Add and Today buttons, and the example while there are no records.
+    /// One chip for each earlier record, and the Add and Today buttons.
     fn record_chips(&self, cx: &mut Context<Self>) -> Div {
         let mut chips = Vec::new();
         for (i, r) in self.records.iter().enumerate() {
@@ -50,18 +46,14 @@ impl Workbench {
             .gap_2()
             .child(crate::look::eyebrow("Reports", cx))
             .child(crate::look::segmented(chips, cx).flex_wrap())
-            .child(
-                div()
-                    .flex()
-                    .gap_2()
-                    .child(Button::new("record-add").label("+ Add record").small().ghost().on_click(cx.listener(
-                        |this, _, window, cx| {
-                            this.add_record(window, cx);
-                            cx.notify();
-                        },
-                    )))
-                    .when(self.records.is_empty(), |d| d.child(example_button(cx))),
-            )
+            .child(div().flex().gap_2().child(
+                Button::new("record-add").label("+ Add record").small().ghost().on_click(cx.listener(
+                    |this, _, window, cx| {
+                        this.add_record(window, cx);
+                        cx.notify();
+                    },
+                )),
+            ))
     }
 
     /// Under the chips while today's own evidence is edited: copy the latest record, and a hint.
@@ -176,19 +168,6 @@ impl Workbench {
         let later = step(format!("year-up-{i}"), "+", "One year later", 1, cx);
         crate::look::segmented([earlier.into_any_element(), self.year_menu(i, cx), later.into_any_element()], cx)
     }
-}
-
-/// Loads the fictional example. It replaces the whole case, including a typed variant
-/// or gene, so it asks first whenever anything can be lost.
-pub(super) fn example_button(cx: &mut Context<Workbench>) -> Button {
-    Button::new("record-example").label("Load example").small().ghost().on_click(cx.listener(|this, _, window, cx| {
-        if this.has_case_data(cx) {
-            this.ask(Confirm::LoadExample);
-        } else {
-            this.load_example(window, cx);
-        }
-        cx.notify();
-    }))
 }
 
 /// One row of a small form: a label in a fixed column, and the control.

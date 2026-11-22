@@ -1,4 +1,4 @@
-//! The opening screen keeps the fictional example separate from a new case.
+//! The opening screen: what the app does, how to start, and how the class is drawn.
 use super::*;
 
 impl Workbench {
@@ -8,7 +8,7 @@ impl Workbench {
         let header =
             div().flex().items_center().gap_4().px_6().py_3().child(div().flex_1()).child(self.theme_button(cx));
         let spread =
-            div().w_full().flex().items_center().gap_8().child(self.welcome_intro(cx)).child(self.example_figure(cx));
+            div().w_full().flex().items_center().gap_8().child(self.welcome_intro(cx)).child(self.empty_figure(cx));
         let page = div()
             .w_full()
             .max_w(px(1180.))
@@ -84,8 +84,9 @@ impl Workbench {
             )
     }
 
-    /// The fictional example drawn as the dial, on a floating panel.
-    fn example_figure(&self, cx: &mut Context<Self>) -> Div {
+    /// The dial with no evidence on it: grey bands, no needle and no class, so the
+    /// opening screen shows the instrument without suggesting any class.
+    fn empty_figure(&self, cx: &mut Context<Self>) -> Div {
         let muted = cx.theme().muted_foreground;
         let card = crate::look::panel(cx)
             .flex_1()
@@ -95,34 +96,20 @@ impl Workbench {
             .flex_col()
             .items_center()
             .gap_3()
-            .child(crate::look::eyebrow("Fictional case · how the evidence adds up", cx));
-        let applied = to_applied(&evidence_of(super::super::example::EXAMPLE_TODAY));
-        let Ok(result) = self.rules.assess(&applied) else {
-            return card.child("The fictional example is unavailable with the loaded rules.");
+            .child(crate::look::eyebrow("How the evidence adds up", cx));
+        let Ok(result) = self.rules.assess(&[]) else {
+            return card;
         };
-        let Some(class) = result.class() else {
-            return card.child(caption(muted).child("The fictional example has no class under the loaded rules."));
-        };
-        let sign = if result.total_points > 0 { "+" } else { "" };
-        card.child(self.dial(&result, Some(class), (460., 330.), false, cx))
-            .child(crate::look::display().child(class.label()))
-            .child(caption(muted).child(format!(
-                "{sign}{} points from {} criteria",
-                result.total_points,
-                result.items.iter().filter(|i| i.counted).count()
-            )))
-            .child(super::picture::status_pill(self.rules, cx))
-            .child(div().pt_2().debug_selector(|| "welcome-example".into()).child(
-                Button::new("explore-example").primary().label("Explore fictional case").on_click(cx.listener(
-                    |this, _, window, cx| {
-                        this.load_example(window, cx);
-                        if this.example {
-                            this.set_mode(Mode::ReportedVariant);
-                            this.reading = true;
-                        }
-                        cx.notify();
-                    },
-                )),
-            ))
+        card.child(div().debug_selector(|| "welcome-dial".into()).child(self.dial(
+            &result,
+            None,
+            (460., 330.),
+            false,
+            cx,
+        )))
+        .child(
+            caption(muted).child("Each criterion you choose moves the needle. No class is shown until you choose one."),
+        )
+        .child(super::picture::status_pill(self.rules, cx))
     }
 }

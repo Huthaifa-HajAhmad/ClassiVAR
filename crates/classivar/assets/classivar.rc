@@ -1,0 +1,3 @@
+// Windows resources for ClassiVAR. Icon 1 is the one Windows shows for the
+// program file, and the one GPUI loads for the window and the taskbar.
+1 ICON "icons/icon.ico"

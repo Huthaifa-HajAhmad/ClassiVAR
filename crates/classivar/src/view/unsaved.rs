@@ -50,12 +50,8 @@ impl Workbench {
 
     /// Would closing the window now throw work away? A case that was saved or
     /// opened is compared with its file. A case never saved holds work as soon
-    /// as it holds any data. The example is a demo and is never saved, so it
-    /// holds none.
+    /// as it holds any data.
     fn would_lose_work(&self, cx: &App) -> bool {
-        if self.example {
-            return false;
-        }
         match self.saved_case {
             Some(_) => self.has_unsaved_changes(cx),
             None => self.has_case_data(cx),
@@ -80,7 +76,7 @@ impl Workbench {
         cx.notify();
     }
 
-    /// Forget the saved state (the case was cleared or replaced by the example).
+    /// Forget the saved state (the case was cleared).
     pub(super) fn forget_saved(&mut self) {
         self.saved_case = None;
     }

@@ -44,7 +44,6 @@ impl Workbench {
         }
         let case = match self.variant_name(cx) {
             Some(name) => name,
-            None if self.example => "Fictional case".to_string(),
             None => "New assessment".to_string(),
         };
         let scope = (self.mode == Mode::ReportedVariant).then(|| self.editing_label());

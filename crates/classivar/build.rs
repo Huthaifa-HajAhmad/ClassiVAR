@@ -7,5 +7,13 @@ fn main() {
     if is_windows_msvc {
         println!("cargo:rustc-link-arg-bins=/STACK:16777216");
     }
+    // The app icon, for the program file, the window and the taskbar.
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        println!("cargo:rerun-if-changed=assets/classivar.rc");
+        println!("cargo:rerun-if-changed=assets/icons/icon.ico");
+        embed_resource::compile("assets/classivar.rc", embed_resource::NONE)
+            .manifest_optional()
+            .expect("the Windows icon resource compiles");
+    }
     println!("cargo:rerun-if-changed=build.rs");
 }

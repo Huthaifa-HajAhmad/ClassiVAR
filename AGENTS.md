@@ -4,7 +4,7 @@ Working notes for AI agents and new contributors. Humans: `docs/DEVELOPING.md` h
 
 ## What this is
 
-ClassiVAR is a Windows/macOS desktop app for learning and practising ACMG/AMP variant curation. It adds up the criteria a curator chooses and explains the class. It does **not** decide criteria, and it is **not** a clinical reporting system.
+ClassiVAR is a Windows/macOS desktop app that explains ACMG/AMP variant classifications. It adds up the criteria a curator chooses and explains the class. Version 1.0.0; release steps in `docs/RELEASE.md`. It does **not** decide criteria, and it is **not** a clinical reporting system.
 
 Non-negotiables:
 
@@ -25,6 +25,8 @@ powershell -ExecutionPolicy Bypass -File scripts/check.ps1   # the merge gate
 powershell -ExecutionPolicy Bypass -File scripts/gui-smoke.ps1   # Windows UI smoke test
 cargo run -p classivar-core --example review_packet > docs/review/REVIEW-PACKET.md   # after editing rules or sign-offs
 cargo run -p classivar-core --example erepo_benchmark > docs/review/BENCHMARK-erepo.md # after a clinical rule change
+powershell -ExecutionPolicy Bypass -File scripts/third-party-notices.ps1   # after changing Cargo.lock (needs cargo-about)
+cargo packager -p classivar --release -f nsis   # Windows installer in target/packages (needs cargo-packager)
 ```
 
 `scripts/check.sh` is the POSIX equivalent of `check.ps1`. The UI smoke test is Windows-only and needs a built `target\debug\classivar.exe`.
@@ -39,6 +41,7 @@ crates/classivar-sources/    ClinGen, G2P, PanelApp, ClinGen Allele Registry (al
 crates/classivar/            GPUI app: main.rs, view.rs (Workbench state), view/*.rs (actions, records, gene lookups, save/open, unsaved.rs, helper_state.rs), view/panels/ (drawing, one file per panel) and view/panels/helpers/ (one file per evidence helper), design.rs (the app's own colours), genes.rs, settings.rs
                              The pictures that explain a class are panels too: track.rs (the interactive evidence track; evidence_stack.rs holds its step layout), combining_table.rs, what_if.rs, timeline.rs and strength_ladder.rs. point_axis.rs holds the axis the track, the "what if" bars and the timeline share. Their layout rules are plain tested functions; the drawing on top is thin.
                              The window: a rail (reports over time, `rail.rs`), the stage, and the editor sheet. The class is drawn as a dial, column or track (`picture.rs`, `dial.rs` + `dial_geometry.rs`, `column.rs`, `track.rs`); the choice is saved in settings. `look.rs` is the design system (type roles, panels, segmented control).
+                             view/panels/identity_card.rs: the checked variant as a card (`identity_view` is the tested words). view/real_case.rs (tests only): the published RYR1 case the window tests load.
                              view/types.rs: the plain screen types (Choice, Record, Lookup, Boxes, Handles, StageMemory). view/variant.rs + variant_state.rs: the variant check, condition and ClinVar import; view/clinvar_records.rs: submissions to records (tested); view/rules_window.rs: Rules… opens another rule file in a new window; rule_file.rs: reading a rule file (start-up and Rules…)
                              view/headless.rs: tests that draw the real window in GPUI's test platform (see "Verify a UI change"); view/headless_case.rs: the variant, condition, ClinVar, PVS1 gene-level and note paths; view/headless_keys.rs: the same window with real key events (Tab, Enter, Escape)
 docs/                        ROADMAP.md is the current status; ARCHITECTURE.md is the map; AUDIT is historical
@@ -61,7 +64,7 @@ Key types: `RuleSet` → `Applied` → `Assessment` (`class()`, `points_class`, 
 - An AI sign-off never makes the rules "reviewed". `status = "reviewed"` also needs a human sign-off on every entry of `rules/review-signoff.toml`.
 - The ERepo benchmark floors (98% agreement on rows with evidence, no class on the other side of VUS) hold in the merge gate. A rule change that lowers them must be explained in `docs/ROADMAP.md`.
 - Every new button needs a stable id, a visible label, and `accessibility_label` when the label is a glyph or abbreviation. Every text box gets an `aria_label`.
-- The fictional example never names a variant or gene on its own: saving is refused and checking a gene asks first, so a demo case cannot be attributed to a real variant (`Workbench.example`).
+- There is no demo or fictional case in the app, and no learning mode: rule text opens on demand ("More"). The window tests use a real published case instead (`view/real_case.rs`: RYR1 CA024770 with two ClinGen expert-panel classifications); keep test fixtures real.
 - Colours: use theme tokens for chrome, and the checked WCAG pairs in `design.rs` (`class_fill`/`class_ink`, `direction_colour`/`direction_ink`, warning pair) for meaning. Do not write a raw `rgb(...)` in a view file. Extend the contrast test for both themes if you add a pair.
 - The debug build once overflowed the 1 MB Windows stack. Keep render functions small; `build.rs` requests 16 MB as a second safety net.
 - Saved case files contain variant, gene and lab history. `*.classivar.json` is git-ignored; keep it that way. `CaseFile::from_json` caps field lengths and the record count. The variant, lab-name and year limits are public constants in `case.rs` that the app types against, so there is one number to change. The gene symbol shape is `classivar_sources::is_gene_symbol`.

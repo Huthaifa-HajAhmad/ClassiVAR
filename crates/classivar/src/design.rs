@@ -114,25 +114,27 @@ pub fn confirm_ink() -> Rgba {
     rgb(0x0b2a14)
 }
 
+/// The WCAG contrast ratio between two colours (1:1 to 21:1). Tests only; shared by
+/// every contrast test in the app.
+#[cfg(test)]
+pub(crate) fn contrast(a: Rgba, b: Rgba) -> f32 {
+    // WCAG relative luminance of a colour.
+    let luminance = |c: Rgba| {
+        let linear = |v: f32| if v <= 0.03928 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) };
+        0.2126 * linear(c.r) + 0.7152 * linear(c.g) + 0.0722 * linear(c.b)
+    };
+    let (x, y) = (luminance(a), luminance(b));
+    (x.max(y) + 0.05) / (x.min(y) + 0.05)
+}
+
 #[cfg(test)]
 mod tests {
     // Explicit imports on purpose: `use super::*` would also bring in GPUI's own
     // `#[test]` macro (through `gpui_kit::*`), which replaces Rust's.
     use super::{
-        CLASSES, Direction, Rgba, class_fill, class_ink, confirm_fill, confirm_ink, direction_colour, direction_ink,
-        warning_fill, warning_ink,
+        CLASSES, Direction, class_fill, class_ink, confirm_fill, confirm_ink, contrast, direction_colour,
+        direction_ink, warning_fill, warning_ink,
     };
-
-    /// WCAG relative luminance of a colour.
-    fn luminance(c: Rgba) -> f32 {
-        let linear = |v: f32| if v <= 0.03928 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) };
-        0.2126 * linear(c.r) + 0.7152 * linear(c.g) + 0.0722 * linear(c.b)
-    }
-
-    fn contrast(a: Rgba, b: Rgba) -> f32 {
-        let (x, y) = (luminance(a), luminance(b));
-        (x.max(y) + 0.05) / (x.min(y) + 0.05)
-    }
 
     #[test]
     fn class_colours_reach_wcag_aa_contrast_for_their_text() {

@@ -1,3 +1,6 @@
+// A release build is a window app: no console window opens behind it on Windows.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 mod design;
 mod genes;
 mod labs;
@@ -30,13 +33,19 @@ fn load_rules() -> Result<&'static RuleSet, String> {
 /// The size and limits of a ClassiVAR window, for the first window and for one
 /// opened with other rules.
 pub(crate) fn window_options(cx: &mut App) -> WindowOptions {
+    // Opens maximized; un-maximizing returns to 1240 x 900 in the middle of the screen.
     let bounds = Bounds::centered(None, size(px(1240.), px(900.)), cx);
-    WindowOptions {
-        window_bounds: Some(WindowBounds::Windowed(bounds)),
+    let mut options = WindowOptions {
+        window_bounds: Some(WindowBounds::Maximized(bounds)),
         // Below this width the criteria list and the results no longer fit side by side.
         window_min_size: Some(size(px(960.), px(600.))),
         ..gpui_kit::component::TitleBar::window_options()
+    };
+    // The app draws its own title bar; this name is what the taskbar and Alt+Tab show.
+    if let Some(titlebar) = options.titlebar.as_mut() {
+        titlebar.title = Some("ClassiVAR".into());
     }
+    options
 }
 
 fn main() {

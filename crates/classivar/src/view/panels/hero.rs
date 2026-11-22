@@ -10,7 +10,6 @@ impl Workbench {
         let gene = self.case_gene.clone();
         let title = match variant {
             Some(name) => name.to_string(),
-            None if self.example => "Fictional case".to_string(),
             None => "New assessment".to_string(),
         };
         // With the rail folded away, the case name moves here as one small line. A

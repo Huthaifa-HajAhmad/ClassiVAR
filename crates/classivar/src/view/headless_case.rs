@@ -6,7 +6,7 @@
 //! GPUI's `test` macro, which then expands into itself.
 
 use classivar_core::variant::VariantIdentity;
-use classivar_core::{Class, Condition, GeneDecision, Inheritance, Strength};
+use classivar_core::{Class, Condition, ConditionMatch, GeneDecision, Inheritance, Strength, Verdict};
 use classivar_sources::Fetched;
 use classivar_sources::allele_registry::Lookup as Found;
 use classivar_sources::clinvar::{ClinVarSubmission, ClinVarVariation};
@@ -227,4 +227,65 @@ fn a_note_on_any_applied_criterion_keeps_its_strength_and_guide_answers(cx: &mut
         assert!(this.score_on_screen().is_ok());
     });
     draw(cx);
+}
+
+/// The two real ClinGen panels named different conditions. The earlier one is shown
+/// but never compared with today's class; the verdict reads the later panel only.
+#[gpui::test]
+fn the_real_case_never_compares_a_record_for_another_condition(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    workbench.update_in(cx, |this, window, cx| {
+        this.load_real_case(window, cx);
+        this.set_mode(Mode::ReportedVariant);
+        let (_, comparison) = this.compare_with_records();
+        let comparison = comparison.expect("reported mode compares");
+        assert_eq!(comparison.records[0].condition, ConditionMatch::Different, "the 2023 panel's condition");
+        assert_eq!(comparison.records[1].condition, ConditionMatch::Same, "the 2026 panel's condition");
+        assert_eq!(comparison.latest_index, Some(1), "the verdict reads the same-condition record");
+
+        // With only the other-condition record left there is nothing to compare with.
+        this.records.remove(1);
+        let (_, comparison) = this.compare_with_records();
+        let comparison = comparison.expect("reported mode compares");
+        assert_eq!(comparison.latest_index, None);
+        assert_eq!(comparison.verdict, Some(Verdict::DifferentCondition));
+    });
+}
+
+/// ClinGen's two RYR1 curations of one disease (recessive and dominant) are drawn as
+/// pills; choosing one marks only that one, in both themes.
+#[gpui::test]
+fn the_clingen_condition_pills_draw_and_only_the_chosen_one_is_marked(cx: &mut TestAppContext) {
+    use classivar_sources::clingen::{ClinGenGene, Curation};
+
+    use super::real_case::{RYR1_MYOPATHY, condition};
+    use super::variant::curation_is_chosen;
+
+    let curation = |inheritance: &str| Curation {
+        disease: RYR1_MYOPATHY.0.into(),
+        disease_id: RYR1_MYOPATHY.1.into(),
+        inheritance: inheritance.into(),
+        classification: "Definitive".into(),
+        report_url: String::new(),
+        classified_on: "2024-01-01".into(),
+        expert_panel: "Congenital Myopathies GCEP".into(),
+    };
+    let (recessive, dominant) = (curation("AR"), curation("AD"));
+    for mode in [ThemeMode::Light, ThemeMode::Dark] {
+        let (workbench, cx) = open(cx, mode);
+        workbench.update_in(cx, |this, window, cx| {
+            this.welcome = false;
+            this.gene.clingen = Lookup::Done(fetched(ClinGenGene {
+                symbol: "RYR1".into(),
+                curations: vec![recessive.clone(), dominant.clone()],
+            }));
+            this.use_curation(&recessive, window, cx);
+            let now = this.variant.condition.as_ref();
+            assert!(curation_is_chosen(now, &recessive));
+            assert!(!curation_is_chosen(now, &dominant));
+            assert_eq!(now.map(|c| c.mondo.clone()), Some(condition(RYR1_MYOPATHY).mondo));
+        });
+        // Drawing is the check: the pills (open and chosen) render without a panic.
+        draw(cx);
+    }
 }

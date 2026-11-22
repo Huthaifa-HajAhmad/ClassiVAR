@@ -140,7 +140,7 @@ pub(super) fn fraction(points: i32, scale: &Scale) -> f32 {
 
 /// Whether a zone name fits in a zone that takes `share` of a picture `width` pixels wide
 /// (about 6.5 px per letter of 12 px text, plus a little room at each side).
-fn name_fits(name: &str, share: f32, width: f32) -> bool {
+pub(super) fn name_fits(name: &str, share: f32, width: f32) -> bool {
     share * width >= name.chars().count() as f32 * 6.5 + 12.
 }
 

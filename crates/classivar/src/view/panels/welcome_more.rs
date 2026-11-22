@@ -151,7 +151,7 @@ impl Workbench {
             ))
             .child(statement(
                 "Not for clinical reports",
-                "Research and learning only",
+                "Research use only",
                 "The rules stay UNVERIFIED until a qualified curator reviews them, and every class says so.",
             ))
             .child(statement(
