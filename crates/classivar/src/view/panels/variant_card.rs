@@ -30,9 +30,7 @@ impl Workbench {
             .icon(Icon::new(IconName::Search))
             .label("Check")
             .accessibility_label("Check the variant with the ClinGen Allele Registry")
-            .small()
             .outline()
-            .rounded(px(999.))
             .on_click(cx.listener(|this, _, _, cx| this.check_variant(cx)));
         div()
             .flex()
@@ -143,7 +141,7 @@ impl Workbench {
             .flex()
             .flex_col()
             .gap_2()
-            .when(picking, |d| d.child(self.picked_condition(cx)))
+            .when(picking, |d| d.child(super::records::form_row("Name", self.picked_condition(cx), cx)))
             .when(!picking, |d| {
                 d.child(super::records::form_row(
                     "Name",

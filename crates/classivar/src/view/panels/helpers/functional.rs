@@ -86,12 +86,7 @@ impl Workbench {
     /// gives. Like the predictor helper, it only fills in the criterion.
     pub(in crate::view::panels) fn functional_helper(&self, cx: &mut Context<Self>) -> AnyElement {
         let muted = cx.theme().muted_foreground;
-        let panel = self.helper_start(
-            ("functional", "Functional assay → PS3 or BS3"),
-            "functional evidence helper",
-            |this| this.helpers.functional.open = !this.helpers.functional.open,
-            cx,
-        );
+        let panel = self.helper_start();
         let Some(table) = self.rules.functional.as_ref() else {
             return panel.into_any_element();
         };
@@ -114,94 +109,81 @@ impl Workbench {
         };
         let citation = self.rules.source(&table.source).map(|s| s.citation.clone());
         panel
-            .child(caption(muted).child(
+            .gap_6()
+            .child(reading_note(
                 "First do the paper's four steps yourself: define the disease mechanism, judge the class of assay, judge this assay, then apply it to the variant.",
+                muted,
             ))
-            .child(self.functional_route_buttons(cx))
-            .child(inputs)
-            .child(div().text_sm().child(message))
-            .when_some(reading, |d, reading| d.child(self.functional_apply(reading, cx)))
-            .when_some(citation, |d, citation| d.child(caption(muted).child(format!("Source: {citation}"))))
+            .child(part("The assay", cx).gap_3().child(self.functional_route_buttons(cx)).child(inputs))
+            .child(result_card(
+                div().flex().flex_col().gap_2().child(super::super::focus::reading(message)).when_some(reading, |d, reading| {
+                    d.child(self.functional_apply(reading, cx))
+                }),
+                cx,
+            ))
+            .children(source_part(citation, cx))
             .into_any_element()
     }
 
     /// A choice between the two ways to read an assay.
     fn functional_route_buttons(&self, cx: &mut Context<Self>) -> Div {
-        let route_button = |id: &'static str, label: &'static str, route: AssayRoute, cx: &mut Context<Self>| {
-            let chosen = self.helpers.functional.route == route;
-            Button::new(id).label(label).small().selected(chosen).toggled(chosen).on_click(cx.listener(
+        let answers = [
+            ("functional-route-controls", "Number of controls", AssayRoute::Controls),
+            ("functional-route-oddspath", "OddsPath value", AssayRoute::OddsPath),
+        ]
+        .into_iter()
+        .map(|(id, label, route)| {
+            answer(id, label, self.helpers.functional.route == route, cx).on_click(cx.listener(
                 move |this, _, _, cx| {
                     this.helpers.functional.route = route;
                     cx.notify();
                 },
             ))
-        };
-        div()
-            .flex()
-            .flex_wrap()
-            .items_center()
-            .gap_2()
-            .child(caption(cx.theme().muted_foreground).child("What is known"))
-            .child(route_button("functional-route-controls", "Number of controls", AssayRoute::Controls, cx))
-            .child(route_button("functional-route-oddspath", "OddsPath value", AssayRoute::OddsPath, cx))
+        })
+        .collect();
+        question("What is known about the assay?", answers, cx)
     }
 
-    /// The damage / no damage choice and the box for the number of controls.
+    /// The damage / no damage choice, the controls confirmation and the boxes for the number of controls.
     fn functional_controls_inputs(&self, cx: &mut Context<Self>) -> Div {
         let muted = cx.theme().muted_foreground;
-        let direction_button = |id: &'static str, label: &'static str, damaging: bool, cx: &mut Context<Self>| {
-            let chosen = self.helpers.functional.damaging == damaging;
-            Button::new(id).label(label).small().selected(chosen).toggled(chosen).on_click(cx.listener(
-                move |this, _, _, cx| {
-                    this.helpers.functional.damaging = damaging;
-                    cx.notify();
-                },
-            ))
-        };
+        let answers = [("functional-damage", "Damage (PS3)", true), ("functional-no-damage", "No damage (BS3)", false)]
+            .into_iter()
+            .map(|(id, label, damaging)| {
+                answer(id, label, self.helpers.functional.damaging == damaging, cx).on_click(cx.listener(
+                    move |this, _, _, cx| {
+                        this.helpers.functional.damaging = damaging;
+                        cx.notify();
+                    },
+                ))
+            })
+            .collect();
         div()
             .flex()
             .flex_col()
-            .gap_2()
-            .child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .items_center()
-                    .gap_2()
-                    .child(caption(muted).child("The assay showed"))
-                    .child(direction_button("functional-damage", "Damage (PS3)", true, cx))
-                    .child(direction_button("functional-no-damage", "No damage (BS3)", false, cx)),
-            )
-            .child(self.functional_experimental_button(cx))
-            .child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .items_center()
-                    .gap_2()
-                    .child(caption(muted).child("Validation controls: pathogenic"))
-                    .child(
-                        div().w(px(80.)).child(
-                            Input::new(&self.helpers.functional.pathogenic_input)
-                                .aria_label("Pathogenic validation control count"),
-                        ),
-                    )
-                    .child(caption(muted).child("benign"))
-                    .child(div().w(px(80.)).child(
-                        Input::new(&self.helpers.functional.benign_input).aria_label("Benign validation control count"),
-                    )),
-            )
+            .gap_3()
+            .child(question("What did the assay show?", answers, cx))
+            .child(div().flex().child(self.functional_experimental_button(cx)))
+            .child(fields([
+                field(
+                    "Pathogenic validation controls",
+                    Input::new(&self.helpers.functional.pathogenic_input)
+                        .aria_label("Pathogenic validation control count"),
+                    muted,
+                ),
+                field(
+                    "Benign validation controls",
+                    Input::new(&self.helpers.functional.benign_input).aria_label("Benign validation control count"),
+                    muted,
+                ),
+            ]))
     }
 
     /// The curator's confirmation that the assay has experimental controls and replicates.
     fn functional_experimental_button(&self, cx: &mut Context<Self>) -> Button {
         let confirmed = self.helpers.functional.experimental;
-        Button::new("functional-experimental")
-            .label("It has normal and abnormal controls, and replicates")
+        tick("functional-experimental", "It has normal and abnormal controls, and replicates", confirmed, cx)
             .accessibility_label("Confirm the assay has normal and abnormal experimental controls and replicates")
-            .small()
-            .selected(confirmed)
-            .toggled(confirmed)
             .on_click(cx.listener(|this, _, _, cx| {
                 this.helpers.functional.experimental = !this.helpers.functional.experimental;
                 cx.notify();
@@ -209,11 +191,11 @@ impl Workbench {
     }
 
     fn functional_oddspath_input(&self, cx: &mut Context<Self>) -> Div {
-        div().flex().items_center().gap_2().child(caption(cx.theme().muted_foreground).child("OddsPath")).child(
-            div()
-                .w(px(120.))
-                .child(Input::new(&self.helpers.functional.oddspath_input).aria_label("OddsPath value from the assay")),
-        )
+        fields([field(
+            "OddsPath from the assay",
+            Input::new(&self.helpers.functional.oddspath_input).aria_label("OddsPath value from the assay"),
+            cx.theme().muted_foreground,
+        )])
     }
 
     /// The Apply button, with a caution when the reading is Very strong PS3.

@@ -172,12 +172,20 @@ impl Workbench {
     }
 }
 
+/// The width of a form's label column: room for the longest label ("Causes the disease?") on one line.
+const FORM_LABEL_WIDTH: f32 = 112.;
+
 /// One row of a small form: a label in a fixed column, and the control.
 pub(super) fn form_row(label: &'static str, control: impl IntoElement, cx: &App) -> Div {
     div()
         .flex()
         .items_center()
         .gap_3()
-        .child(div().w(px(92.)).flex_none().child(caption(cx.theme().muted_foreground).child(label)))
+        .child(
+            div()
+                .w(px(FORM_LABEL_WIDTH))
+                .flex_none()
+                .child(caption(cx.theme().muted_foreground).whitespace_nowrap().child(label)),
+        )
         .child(div().flex_1().min_w_0().flex().child(control))
 }

@@ -6,7 +6,7 @@
 //! The curator decides every criterion; the screen only adds up and explains.
 
 use std::cell::Cell;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use classivar_core::{
@@ -49,7 +49,11 @@ mod headless;
 #[cfg(test)]
 mod headless_case;
 #[cfg(test)]
+mod headless_focus;
+#[cfg(test)]
 mod headless_keys;
+#[cfg(test)]
+mod headless_layout;
 #[cfg(test)]
 mod headless_polish;
 mod helper_state;
@@ -88,9 +92,8 @@ pub struct Workbench {
     records: Vec<Record>,
     /// Which evidence set the criteria list is editing.
     editing: Editing,
-    /// When on, every criterion shows its plain-language rule and source.
+    /// The kind of evidence whose tab is open in the criteria list; `None` opens the first.
     category: Option<Category>,
-    show_helpers: bool,
     welcome: bool,
     /// The text boxes of the case form and the reason prompt.
     boxes: Boxes,
@@ -123,18 +126,20 @@ pub struct Workbench {
     gene_cards_open: bool,
     /// Whose condition the open gene sources are choosing: the case's (today) or an earlier report's.
     sources_for: Editing,
-    /// The kinds of evidence folded away in the criteria list.
-    folded: HashSet<Category>,
+    /// The class pointed at on the opening screen's preview, marked in the picture with its points.
+    pointed_zone: Option<Class>,
     /// The curator chose to type the condition instead of picking it from the gene sources.
     typing_condition: bool,
     /// A gene taken from the checked variant, written into the gene box on the next draw (that needs the window).
     pending_gene_box: Option<String>,
-    /// Criteria whose full note and source are open.
-    open_details: HashSet<String>,
-    /// The criterion whose strength guide is waiting for an answer.
+    /// The criterion whose page ("More": what it means, its strengths, what to check) fills the right panel.
+    about: Option<String>,
+    /// The criterion whose strength guide fills the right panel, waiting for an answer.
     guide_open: Option<String>,
-    /// The gene-level answer chosen in the open guide, before its situation is chosen.
+    /// The gene-level answer chosen in the open guide (its first step).
     guide_gene_level: Option<String>,
+    /// The situation chosen in the open guide. Nothing is applied until the curator presses Apply.
+    guide_pick: Option<String>,
     gene_link: GeneDecision,
     /// Confirm modal state: `None` when no question is waiting.
     confirm: Option<Confirm>,
@@ -166,7 +171,6 @@ impl Workbench {
             records: Vec::new(),
             editing: Editing::Today,
             category: None,
-            show_helpers: false,
             welcome: true,
             boxes,
             handles: Handles::new(cx),
@@ -186,12 +190,13 @@ impl Workbench {
             case_gene: String::new(),
             gene_cards_open: false,
             sources_for: Editing::Today,
-            folded: HashSet::new(),
+            pointed_zone: None,
             typing_condition: false,
             pending_gene_box: None,
-            open_details: HashSet::new(),
+            about: None,
             guide_open: None,
             guide_gene_level: None,
+            guide_pick: None,
             gene_link: GeneDecision::NotDecided,
             confirm: None,
             file_status: None,

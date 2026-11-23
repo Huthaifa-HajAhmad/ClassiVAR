@@ -26,12 +26,7 @@ impl Workbench {
     /// arithmetic of ClinGen 2024. It lists the choices the paper allows for the
     /// total; the curator picks one. Like the other helpers, it only fills in criteria.
     pub(in crate::view::panels) fn locus_helper(&self, cx: &mut Context<Self>) -> AnyElement {
-        let panel = self.helper_start(
-            ("locus", "Family and phenotype → PP1 and PP4"),
-            "co-segregation and phenotype helper",
-            |this| this.helpers.locus.open = !this.helpers.locus.open,
-            cx,
-        );
+        let panel = self.helper_start();
         let Some(rules) = self.rules.locus_evidence.as_ref() else {
             return panel.into_any_element();
         };
@@ -44,45 +39,41 @@ impl Workbench {
             kind: state.kind,
         };
         let inputs = read_locus_inputs(self.rules, rules, &typed);
+        let muted = cx.theme().muted_foreground;
+        let citation = self.rules.source(&rules.source).map(|s| s.citation.clone());
         panel
-            .child(self.locus_phenotype_part(rules, &inputs, cx))
+            .gap_6()
+            .child(reading_note(
+                "Fill in one or both parts. An empty box counts as 0 points. The paper divides the yield, never the points, when several variants share an allele.",
+                muted,
+            ))
+            .child(self.locus_phenotype_part(&inputs, cx))
             .child(self.locus_family_part(rules, &inputs, cx))
-            .child(self.locus_result(rules, &inputs, cx))
+            .child(result_card(self.locus_result(&inputs, cx), cx))
+            .children(notes_part(rules.notes.iter().cloned(), cx))
+            .children(source_part(citation, cx))
             .into_any_element()
     }
 
     /// The PP4 half: the diagnostic yield, how many variants share the allele, and the paper's cautions.
-    fn locus_phenotype_part(&self, rules: &LocusRules, inputs: &LocusInputs, cx: &mut Context<Self>) -> Div {
+    fn locus_phenotype_part(&self, inputs: &LocusInputs, cx: &mut Context<Self>) -> Div {
         let muted = cx.theme().muted_foreground;
-        let row = |label: &'static str, input: &Entity<InputState>, aria: &'static str| {
-            div()
-                .flex()
-                .items_center()
-                .gap_2()
-                .child(caption(muted).child(label))
-                .child(div().w(px(120.)).child(Input::new(input).aria_label(aria)))
-        };
-        div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .child(
-                caption(muted).child(
-                    "Fill in one or both parts. An empty box counts as 0 points. The paper divides the yield, never the points, when several variants share an allele.",
+        let locus = &self.helpers.locus;
+        part("The phenotype · PP4", cx)
+            .gap_3()
+            .child(fields([
+                field(
+                    "Diagnostic yield of testing for the phenotype (%)",
+                    Input::new(&locus.yield_input).aria_label("Diagnostic yield, percent"),
+                    muted,
                 ),
-            )
-            .child(row(
-                "Diagnostic yield of testing for the phenotype (%)",
-                &self.helpers.locus.yield_input,
-                "Diagnostic yield, percent",
-            ))
-            .child(row(
-                "Variants on the same allele (1 if alone)",
-                &self.helpers.locus.variants_input,
-                "Variants sharing the allele",
-            ))
-            .child(div().text_sm().child(inputs.pp4_note.clone()))
-            .children(rules.notes.iter().map(|note| caption(muted).child(note.clone())))
+                field(
+                    "Variants on the same allele (1 if alone)",
+                    Input::new(&locus.variants_input).aria_label("Variants sharing the allele"),
+                    muted,
+                ),
+            ]))
+            .child(super::super::focus::reading(inputs.pp4_note.clone()))
     }
 
     /// The PP1 half: how many genes can cause the phenotype (it decides whether PP1 counts),
@@ -90,78 +81,58 @@ impl Workbench {
     fn locus_family_part(&self, rules: &LocusRules, inputs: &LocusInputs, cx: &mut Context<Self>) -> Div {
         let muted = cx.theme().muted_foreground;
         let state = &self.helpers.locus;
-        div()
-            .flex()
-            .flex_col()
-            .gap_2()
+        part("The family · PP1", cx)
+            .gap_3()
             .child(self.locus_genes_question(cx))
-            .when(state.genes == PhenotypeGenes::One, |d| d.child(caption(muted).child(rules.homogeneity_text.clone())))
+            .when(state.genes == PhenotypeGenes::One, |d| d.child(reading_note(rules.homogeneity_text.clone(), muted)))
             .child(self.locus_kinds(rules, cx))
-            .when_some(rules.segregation[state.kind].note.clone(), |d, note| d.child(caption(muted).child(note)))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(caption(muted).child("Informative family members (see the note)"))
-                    .child(
-                        div()
-                            .w(px(120.))
-                            .child(Input::new(&state.segregations_input).aria_label("Informative family member count")),
-                    ),
-            )
-            .child(div().text_sm().child(inputs.pp1_note.clone()))
+            .when_some(rules.segregation[state.kind].note.clone(), |d, note| d.child(reading_note(note, muted)))
+            .child(fields([field(
+                "Informative family members (see the note)",
+                Input::new(&state.segregations_input).aria_label("Informative family member count"),
+                muted,
+            )]))
+            .child(super::super::focus::reading(inputs.pp1_note.clone()))
     }
 
     /// "Can other genes cause this phenotype?" It decides whether PP1 counts at all.
     fn locus_genes_question(&self, cx: &mut Context<Self>) -> Div {
-        let genes_button = |id: &'static str, label: &'static str, genes: PhenotypeGenes, cx: &mut Context<Self>| {
-            let chosen = self.helpers.locus.genes == genes;
-            Button::new(id).label(label).small().selected(chosen).toggled(chosen).on_click(cx.listener(
-                move |this, _, _, cx| {
-                    this.helpers.locus.genes = genes;
-                    cx.notify();
-                },
-            ))
-        };
-        div()
-            .flex()
-            .flex_wrap()
-            .items_center()
-            .gap_2()
-            .child(caption(cx.theme().muted_foreground).child("Can other genes cause this phenotype?"))
-            .child(genes_button("locus-genes-several", "Several genes can cause it", PhenotypeGenes::Several, cx))
-            .child(genes_button("locus-genes-one", "Only this gene causes it", PhenotypeGenes::One, cx))
+        let answers = [
+            ("locus-genes-several", "Several genes can cause it", PhenotypeGenes::Several),
+            ("locus-genes-one", "Only this gene causes it", PhenotypeGenes::One),
+        ]
+        .into_iter()
+        .map(|(id, label, genes)| {
+            answer(id, label, self.helpers.locus.genes == genes, cx).on_click(cx.listener(move |this, _, _, cx| {
+                this.helpers.locus.genes = genes;
+                cx.notify();
+            }))
+        })
+        .collect();
+        question("Can other genes cause this phenotype?", answers, cx)
     }
 
     /// One button for each kind of family evidence the rules give points for.
     fn locus_kinds(&self, rules: &LocusRules, cx: &mut Context<Self>) -> Div {
-        let mut kinds =
-            div().flex().flex_wrap().items_center().gap_2().child(caption(cx.theme().muted_foreground).child("Family"));
+        let mut kinds = Vec::new();
         for (i, kind) in rules.segregation.iter().enumerate() {
             let chosen = self.helpers.locus.kind == i;
-            kinds = kinds.child(
-                Button::new(SharedString::from(format!("locus-kind-{}", kind.id)))
-                    .label(kind.label.clone())
-                    .small()
-                    .selected(chosen)
-                    .toggled(chosen)
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.helpers.locus.kind = i;
-                        cx.notify();
-                    })),
-            );
+            kinds.push(answer(format!("locus-kind-{}", kind.id), kind.label.clone(), chosen, cx).on_click(
+                cx.listener(move |this, _, _, cx| {
+                    this.helpers.locus.kind = i;
+                    cx.notify();
+                }),
+            ));
         }
-        kinds
+        question("What kind of family?", kinds, cx)
     }
 
-    /// The total, the choices the paper allows for it, and the source.
-    fn locus_result(&self, rules: &LocusRules, inputs: &LocusInputs, cx: &mut Context<Self>) -> Div {
-        let muted = cx.theme().muted_foreground;
+    /// The total and the choices the paper allows for it.
+    fn locus_result(&self, inputs: &LocusInputs, cx: &mut Context<Self>) -> Div {
+        let Some(rules) = self.rules.locus_evidence.as_ref() else { return div() };
         let reading = (!inputs.unusable && inputs.typed_any)
             .then(|| self.rules.read_locus(inputs.pp1, inputs.pp4, inputs.pp1_allowed))
             .flatten();
-        let citation = self.rules.source(&rules.source).map(|s| s.citation.clone());
         let mut result = div().flex().flex_col().gap_2();
         if let Some(reading) = reading {
             let (summary, reason) = locus_summary(rules, &reading, inputs);
@@ -179,10 +150,10 @@ impl Workbench {
                         })),
                 );
             }
-            result = result.child(div().text_sm().child(summary)).child(choices);
+            result = result.child(super::super::focus::reading(summary)).child(choices);
         } else if !inputs.unusable {
-            result = result.child(div().text_sm().child("Fill in at least one box to see the points."));
+            result = result.child(super::super::focus::reading("Fill in at least one box to see the points."));
         }
-        result.when_some(citation, |d, citation| d.child(caption(muted).child(format!("Source: {citation}"))))
+        result
     }
 }

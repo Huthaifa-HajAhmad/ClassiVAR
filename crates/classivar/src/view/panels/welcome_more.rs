@@ -64,7 +64,7 @@ fn picture_note(picture: Picture) -> &'static str {
     }
 }
 
-/// The name of a picture and a line about it. The chosen card is marked by its edge, fill and tick.
+/// The name of a picture and a line about it. The chosen card is marked by its edge, raised fill and tick.
 fn picture_words(picture: Picture, (ink, muted): (Hsla, Hsla)) -> Div {
     let name = picture.name().to_string();
     div()
@@ -93,16 +93,23 @@ impl Workbench {
         let theme = cx.theme();
         let (ink, muted, line, dark) = (theme.foreground, theme.muted_foreground, theme.border, theme.is_dark());
         let chosen = self.picture == picture;
+        // The chosen card is raised: the panel colour, a firm edge and a small shadow. The
+        // others sit back on the quiet fill, and lighten while the pointer is over them.
+        let style = ButtonCustomVariant::new(cx)
+            .color(if chosen { theme.popover } else { theme.muted })
+            .foreground(ink)
+            .hover(if chosen { theme.popover } else { theme.accent })
+            .active(theme.popover);
         Button::new(SharedString::from(format!("welcome-picture-{}", picture.name().to_lowercase())))
-            .ghost()
+            .custom(style)
             .flex_1()
             .min_w(px(200.))
             .h_auto()
             .p_4()
             .rounded(px(crate::look::CARD_RADIUS))
-            .bg(if chosen { theme.muted } else { theme.popover })
             .border_1()
             .border_color(if chosen { crate::look::edge(cx) } else { line })
+            .when(chosen, |card| card.shadow(crate::look::lift(dark)))
             .accessibility_label(format!("Draw the class as a {}", picture.name().to_lowercase()))
             .selected(chosen)
             .toggled(chosen)

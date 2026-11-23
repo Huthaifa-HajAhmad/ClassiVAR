@@ -1,25 +1,14 @@
-//! The criteria, one section per kind of evidence (as in the 2015 table): the
-//! codes for disease and against it sit together under one heading, and each
-//! section folds away. A folded section still names the codes applied in it.
+//! The criteria, one tab per kind of evidence (as in the 2015 table): the open tab
+//! shows its evidence helpers, then the codes for disease and against it. Each tab
+//! counts the codes applied in it.
 
 use super::*;
 
 impl Workbench {
-    /// Above the sections: how many criteria are applied, a fold-all button, and Clear criteria
+    /// Above the tabs: how many criteria are applied, and Clear criteria
     /// once there is something to clear. The points are in the readout, so they are not repeated here.
     pub(super) fn criteria_bar(&self, cx: &mut Context<Self>) -> Div {
         let applied = self.current().len();
-        let all_folded = self.folded.len() == Category::ALL.len();
-        let fold = Button::new("criteria-fold")
-            .icon(Icon::new(if all_folded { IconName::ChevronDown } else { IconName::ChevronUp }))
-            .accessibility_label(if all_folded { "Open every kind of evidence" } else { "Fold every kind of evidence" })
-            .tooltip(if all_folded { "Open all" } else { "Fold all" })
-            .small()
-            .ghost()
-            .on_click(cx.listener(move |this, _, _, cx| {
-                this.folded = if all_folded { HashSet::new() } else { Category::ALL.into_iter().collect() };
-                cx.notify();
-            }));
         div()
             .flex()
             .items_center()
@@ -31,7 +20,6 @@ impl Workbench {
                 cx,
             ))
             .child(div().flex_1())
-            .child(fold)
             .when(applied > 0, |bar| {
                 bar.child(
                     Button::new("clear")
@@ -48,89 +36,87 @@ impl Workbench {
             })
     }
 
-    /// Every kind of evidence that has criteria in the loaded rules, as a section.
-    pub(super) fn criteria_sections(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        Category::ALL
-            .into_iter()
-            .filter(|category| self.rules.criteria.iter().any(|c| c.category == *category))
-            .map(|category| self.criteria_section(category, cx))
-            .collect()
+    /// The kinds of evidence that have criteria in the loaded rules.
+    fn kinds(&self) -> Vec<Category> {
+        Category::ALL.into_iter().filter(|kind| self.rules.criteria.iter().any(|c| c.category == *kind)).collect()
     }
 
-    fn criteria_section(&self, category: Category, cx: &mut Context<Self>) -> AnyElement {
-        let folded = self.folded.contains(&category);
-        let mut section = div()
+    /// The criteria behind tabs, one tab per kind of evidence (as in the 2015 table), in a
+    /// row that wraps above them, so the criteria and helper cards keep the panel's full width.
+    pub(super) fn criteria_tabs(&self, cx: &mut Context<Self>) -> AnyElement {
+        let kinds = self.kinds();
+        let Some(open) = self.category.filter(|kind| kinds.contains(kind)).or(kinds.first().copied()) else {
+            return div().into_any_element();
+        };
+        let tabs: Vec<Div> = kinds.iter().map(|kind| self.criteria_tab(*kind, *kind == open, cx)).collect();
+        let border = cx.theme().border;
+        div()
             .flex()
             .flex_col()
-            .gap_0p5()
-            .pb_2()
-            .border_b_1()
-            .border_color(cx.theme().border)
-            .child(self.section_head(category, folded, cx));
-        if !folded {
-            for direction in [Direction::Pathogenic, Direction::Benign] {
-                let codes: Vec<&'static Criterion> =
-                    self.rules.criteria.iter().filter(|c| c.direction == direction && c.category == category).collect();
-                if codes.is_empty() {
-                    continue;
-                }
-                section = section.child(direction_label(direction, cx));
-                for c in codes {
-                    section = section.child(self.criterion_row(c, cx));
-                }
-            }
-        }
-        section.into_any_element()
+            .gap_3()
+            .child(div().flex().flex_wrap().gap_1().pb_2().border_b_1().border_color(border).children(tabs))
+            .children(self.helper_cards(open, cx))
+            .child(self.criteria_of(open, cx))
+            .into_any_element()
     }
 
-    /// The section's heading: a chevron, the kind of evidence, the applied codes as small
-    /// chips in their direction's colour, and how many criteria it holds. A click folds it.
-    fn section_head(&self, category: Category, folded: bool, cx: &mut Context<Self>) -> Button {
-        let muted = cx.theme().muted_foreground;
-        let in_section: Vec<&'static Criterion> =
-            self.rules.criteria.iter().filter(|c| c.category == category).collect();
-        let applied: Vec<&'static Criterion> =
-            in_section.iter().copied().filter(|c| self.current().contains_key(&c.code)).collect();
-        let chips = applied.iter().map(|c| {
+    /// The criteria of one kind: the codes for disease, then those against it.
+    fn criteria_of(&self, kind: Category, cx: &mut Context<Self>) -> Div {
+        let mut list = div().flex().flex_col().gap_0p5();
+        for direction in [Direction::Pathogenic, Direction::Benign] {
+            let codes: Vec<&'static Criterion> =
+                self.rules.criteria.iter().filter(|c| c.direction == direction && c.category == kind).collect();
+            if codes.is_empty() {
+                continue;
+            }
+            list = list.child(direction_label(direction, cx));
+            for c in codes {
+                list = list.child(self.criterion_row(c, cx));
+            }
+        }
+        list
+    }
+
+    /// One tab: the kind of evidence and, once some of its criteria apply, how many, in a small filled count.
+    fn criteria_tab(&self, kind: Category, open: bool, cx: &mut Context<Self>) -> Div {
+        let applied =
+            self.rules.criteria.iter().filter(|c| c.category == kind && self.current().contains_key(&c.code)).count();
+        let total = self.rules.criteria.iter().filter(|c| c.category == kind).count();
+        let theme = cx.theme();
+        let (ink, muted) = (theme.foreground, theme.muted_foreground);
+        let count = (applied > 0).then(|| {
             crate::look::figure(10.5)
                 .px(px(6.))
-                .py(px(1.))
-                .rounded(px(5.))
-                .bg(direction_colour(c.direction))
-                .text_color(direction_ink())
-                .child(c.code.clone())
+                .rounded_full()
+                .bg(theme.foreground)
+                .text_color(theme.background)
+                .child(applied.to_string())
         });
-        let action = if folded { "Show" } else { "Fold" };
-        Button::new(SharedString::from(format!("section-{}", category.label())))
-            .ghost()
-            .w_full()
-            .h_auto()
-            .rounded(px(crate::look::CARD_RADIUS))
-            .accessibility_label(format!("{action} {} criteria", category.label()))
+        let id = format!("criteria-tab-{}", kind.label().to_lowercase().replace(' ', "-"));
+        let selector = id.clone();
+        let tab = crate::look::tab(id, open, cx)
+            .accessibility_label(format!("{} criteria, {applied} of {total} applied", kind.label()))
             .child(
                 div()
-                    .w_full()
                     .flex()
                     .items_center()
                     .gap_2()
-                    .py_1()
                     .child(
-                        Icon::new(if folded { IconName::ChevronRight } else { IconName::ChevronDown })
-                            .w(px(14.))
-                            .h(px(14.))
-                            .text_color(muted),
+                        div()
+                            .flex_1()
+                            .text_left()
+                            .text_color(if open { ink } else { muted })
+                            .whitespace_nowrap()
+                            .when(open, |name| name.font_weight(FontWeight::SEMIBOLD))
+                            .child(kind.label()),
                     )
-                    .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child(category.label()))
-                    .child(div().flex().flex_wrap().gap_1().children(chips))
-                    .child(div().flex_1())
-                    .child(crate::look::figure(11.).text_color(muted).child(format!("{}", in_section.len()))),
+                    .children(count),
             )
             .on_click(cx.listener(move |this, _, _, cx| {
-                if !this.folded.remove(&category) {
-                    this.folded.insert(category);
-                }
+                this.category = Some(kind);
                 cx.notify();
-            }))
+            }));
+        div().debug_selector(move || selector).child(tab)
     }
 }
 

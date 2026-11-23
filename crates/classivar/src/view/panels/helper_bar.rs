@@ -1,31 +1,40 @@
-//! The "Evidence helpers" bar at the top of the criteria list: one row of small
-//! buttons instead of seven tall cards, so the criteria themselves start high on
-//! the screen. A helper's panel shows below the bar only while it is open.
+//! The evidence helpers: what each one is called, which criteria it sets, and how
+//! it opens and draws. Each helper shows as a card in the tab of the criteria it
+//! sets, and opens on its own page over the list (`helper_cards.rs`).
 
 use super::*;
 
 /// One helper: how it is named on screen and how it opens, closes and draws.
-struct Entry {
-    /// Stem of the button ids: `{key}-toggle` in the bar, `{key}-close` in the panel.
-    key: &'static str,
-    label: &'static str,
+pub(super) struct Entry {
+    /// Stem of the ids: `{key}-toggle` opens it, `{key}-close` closes it.
+    pub key: &'static str,
+    /// The name on its card, for example "Population frequency".
+    pub label: &'static str,
+    /// The title of its page, with the criteria it sets.
+    pub title: &'static str,
     /// Used in the accessible names: "Open the {what}".
-    what: &'static str,
+    pub what: &'static str,
+    /// One sentence on what it reads and what it suggests.
+    pub about: &'static str,
+    /// The criteria it fills in. They decide the tabs its card shows in.
+    pub codes: &'static [&'static str],
+    pub open: bool,
+    pub toggle: fn(&mut Workbench),
+    pub panel: fn(&Workbench, &mut Context<Workbench>) -> AnyElement,
+}
+
+/// The words of one helper: key, card label, page title, accessible name and its sentence.
+type Words = (&'static str, &'static str, &'static str, &'static str, &'static str);
+
+fn entry(
+    words: Words,
+    codes: &'static [&'static str],
     open: bool,
     toggle: fn(&mut Workbench),
     panel: fn(&Workbench, &mut Context<Workbench>) -> AnyElement,
-}
-
-impl Entry {
-    fn new(
-        names: (&'static str, &'static str, &'static str),
-        open: bool,
-        toggle: fn(&mut Workbench),
-        panel: fn(&Workbench, &mut Context<Workbench>) -> AnyElement,
-    ) -> Self {
-        let (key, label, what) = names;
-        Self { key, label, what, open, toggle, panel }
-    }
+) -> Entry {
+    let (key, label, title, what, about) = words;
+    Entry { key, label, title, what, about, codes, open, toggle, panel }
 }
 
 impl Workbench {
@@ -36,17 +45,37 @@ impl Workbench {
         }
     }
 
-    /// The helpers that apply to what is on screen. The evidence helpers fill in
-    /// today's evidence only; the BA1 list is a dated reference and also shows
-    /// for earlier records. It cannot insert evidence.
-    fn evidence_entries(&self) -> Vec<Entry> {
-        let (rules, helpers) = (self.rules, &self.helpers);
-        let today = self.editing == Editing::Today;
-        let table = [
+    /// The helpers that read a measurement: population frequency, predictor score and functional assay.
+    fn measurement_entries(&self) -> [(bool, Entry); 3] {
+        let (rules, helpers, today) = (self.rules, &self.helpers, self.editing == Editing::Today);
+        [
+            (
+                today && rules.population.is_some(),
+                entry(
+                    (
+                        "population",
+                        "Population frequency",
+                        "Population frequency → BA1, BS1 or PM2",
+                        "population frequency helper",
+                        "Compares how common the variant is in population data with the limits in the rules, and suggests BA1, BS1 or PM2.",
+                    ),
+                    &["BA1", "BS1", "PM2"],
+                    helpers.population.open,
+                    |this| this.helpers.population.open = !this.helpers.population.open,
+                    Self::population_helper,
+                ),
+            ),
             (
                 today && !rules.predictors.is_empty(),
-                Entry::new(
-                    ("predictor", "Predictor score", "predictor score helper"),
+                entry(
+                    (
+                        "predictor",
+                        "Predictor score",
+                        "Predictor score → PP3 or BP4",
+                        "predictor score helper",
+                        "Reads a computational predictor's score against its calibrated limits, and suggests PP3 or BP4 at a strength.",
+                    ),
+                    &["PP3", "BP4"],
                     helpers.predictor.open,
                     Self::toggle_predictor,
                     Self::predictor_helper,
@@ -54,17 +83,54 @@ impl Workbench {
             ),
             (
                 today && rules.functional.is_some(),
-                Entry::new(
-                    ("functional", "Functional assay", "functional evidence helper"),
+                entry(
+                    (
+                        "functional",
+                        "Functional assay",
+                        "Functional assay → PS3 or BS3",
+                        "functional evidence helper",
+                        "Reads a lab assay's controls or its OddsPath value, and suggests PS3 (damaging) or BS3 (no damage) at a strength.",
+                    ),
+                    &["PS3", "BS3"],
                     helpers.functional.open,
                     |this| this.helpers.functional.open = !this.helpers.functional.open,
                     Self::functional_helper,
                 ),
             ),
+        ]
+    }
+
+    /// The helpers about families and patients, and the dated BA1 list (which also shows for earlier records).
+    fn patient_entries(&self) -> [(bool, Entry); 5] {
+        let (rules, helpers, today) = (self.rules, &self.helpers, self.editing == Editing::Today);
+        [
+            (
+                !rules.ba1_exceptions.is_empty(),
+                entry(
+                    (
+                        "ba1-reference",
+                        "BA1 exceptions",
+                        "BA1 exceptions (July 2018)",
+                        "BA1 exceptions reference",
+                        "The dated list of variants that are common in population data but are not benign, so BA1 must not be used for them.",
+                    ),
+                    &["BA1"],
+                    helpers.ba1_open,
+                    |this| this.helpers.ba1_open = !this.helpers.ba1_open,
+                    Self::ba1_reference,
+                ),
+            ),
             (
                 today && rules.locus_evidence.is_some(),
-                Entry::new(
-                    ("locus", "Family and phenotype", "co-segregation and phenotype helper"),
+                entry(
+                    (
+                        "locus",
+                        "Family and phenotype",
+                        "Family and phenotype → PP1 and PP4",
+                        "co-segregation and phenotype helper",
+                        "Adds up the points for how the variant follows the disease in families and how specific the patients' phenotype is, and lists the PP1 and PP4 strengths they allow.",
+                    ),
+                    &["PP1", "PP4"],
                     helpers.locus.open,
                     |this| this.helpers.locus.open = !this.helpers.locus.open,
                     Self::locus_helper,
@@ -72,147 +138,86 @@ impl Workbench {
             ),
             (
                 today && rules.non_segregation.is_some(),
-                Entry::new(
-                    ("segregation", "Non-segregation", "non-segregation helper"),
+                entry(
+                    (
+                        "segregation",
+                        "Non-segregation",
+                        "Non-segregation → BS4",
+                        "non-segregation helper",
+                        "Asks how the variant fails to follow the disease in a family, and offers BS4 only where the published rule supports it.",
+                    ),
+                    &["BS4"],
                     helpers.segregation.open,
                     |this| this.helpers.segregation.open = !this.helpers.segregation.open,
                     Self::non_segregation_helper,
                 ),
             ),
-        ];
-        table.into_iter().filter_map(|(applies, entry)| applies.then_some(entry)).collect()
-    }
-
-    /// The helpers about patients and the dated BA1 list (the list also shows for earlier records).
-    fn patient_entries(&self) -> Vec<Entry> {
-        let (rules, helpers) = (self.rules, &self.helpers);
-        let today = self.editing == Editing::Today;
-        let table = [
             (
                 today && rules.pm3.is_some(),
-                Entry::new(
-                    ("pm3", "PM3 patients", "PM3 patients helper"),
+                entry(
+                    (
+                        "pm3",
+                        "PM3 patients",
+                        "Recessive patients → PM3",
+                        "PM3 patients helper",
+                        "For a recessive disease: adds up the points of patients who carry this variant with a second one, and suggests a PM3 strength.",
+                    ),
+                    &["PM3"],
                     helpers.pm3.open,
                     |this| this.helpers.pm3.open = !this.helpers.pm3.open,
                     Self::pm3_helper,
                 ),
             ),
             (
-                !rules.ba1_exceptions.is_empty(),
-                Entry::new(
-                    ("ba1-reference", "BA1 exceptions", "BA1 exceptions reference"),
-                    helpers.ba1_open,
-                    |this| this.helpers.ba1_open = !this.helpers.ba1_open,
-                    Self::ba1_reference,
-                ),
-            ),
-            (
                 today && rules.de_novo.is_some(),
-                Entry::new(
-                    ("de-novo", "De novo patients", "de novo helper"),
+                entry(
+                    (
+                        "de-novo",
+                        "De novo patients",
+                        "De novo patients → PS2 or PM6",
+                        "de novo helper",
+                        "Gives each patient in whom the variant arose new a number of points, and suggests PS2 (parents confirmed) or PM6 (not confirmed).",
+                    ),
+                    &["PS2", "PM6"],
                     helpers.de_novo.open,
                     |this| this.helpers.de_novo.open = !this.helpers.de_novo.open,
                     Self::de_novo_helper,
                 ),
             ),
-        ];
-        table.into_iter().filter_map(|(applies, entry)| applies.then_some(entry)).collect()
+        ]
     }
 
-    /// The population frequency helper (BA1, BS1, PM2), first: population evidence is read first.
-    fn population_entry(&self) -> Option<Entry> {
-        (self.editing == Editing::Today && self.rules.population.is_some()).then(|| {
-            Entry::new(
-                ("population", "Population frequency", "population frequency helper"),
-                self.helpers.population.open,
-                |this| this.helpers.population.open = !this.helpers.population.open,
-                Self::population_helper,
-            )
-        })
+    /// Every helper, whether or not it applies to what is being edited.
+    fn all_helper_entries(&self) -> Vec<(bool, Entry)> {
+        self.measurement_entries().into_iter().chain(self.patient_entries()).collect()
     }
 
-    fn helper_entries(&self) -> Vec<Entry> {
-        let mut entries: Vec<Entry> = self.population_entry().into_iter().collect();
-        entries.extend(self.evidence_entries());
-        entries.extend(self.patient_entries());
-        entries
+    /// Every helper that applies to what is being edited, population first: population evidence is read first.
+    pub(super) fn helper_entries(&self) -> Vec<Entry> {
+        self.all_helper_entries().into_iter().filter_map(|(applies, entry)| applies.then_some(entry)).collect()
     }
 
-    /// The bar, then the panel of each open helper. Empty when no helper applies.
-    pub(super) fn helper_section(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        let entries = self.helper_entries();
-        if entries.is_empty() {
-            return Vec::new();
+    /// Open one helper on its page and close any other, so one page fills the panel.
+    pub(in crate::view) fn open_helper(&mut self, key: &str) {
+        for entry in self.helper_entries() {
+            if entry.open != (entry.key == key) {
+                (entry.toggle)(self);
+            }
         }
-        let toggle = self.helpers_toggle(entries.len(), cx);
-        if !self.show_helpers {
-            return vec![div().child(toggle).into_any_element()];
-        }
-        let muted = cx.theme().muted_foreground;
-        let bar = div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .px_2()
-            .child(div().child(toggle))
-            .child(
-                caption(muted)
-                    .child("They read published tables and suggest a strength. You still choose what to apply."),
-            )
-            .child(self.helper_buttons(&entries, cx))
-            .into_any_element();
-        let mut out = vec![bar];
-        out.extend(entries.iter().filter(|entry| entry.open).map(|entry| (entry.panel)(self, cx)));
-        out
     }
 
-    /// The button that opens and closes the bar of helpers; `count` is how many apply.
-    fn helpers_toggle(&self, count: usize, cx: &mut Context<Self>) -> Button {
-        let label = if self.show_helpers { "Hide evidence helpers" } else { "Evidence helpers" };
-        let count = format!("{} {}", count, if self.show_helpers { "▴" } else { "▾" });
-        Button::new("evidence-tools")
-            .small()
-            .ghost()
-            .w_full()
-            .rounded(px(crate::look::CARD_RADIUS))
-            .bg(cx.theme().muted)
-            .accessibility_label(label)
-            .child(
-                div()
-                    .w_full()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child(label))
-                    .child(crate::look::figure(11.).text_color(cx.theme().muted_foreground).child(count)),
-            )
-            .toggled(self.show_helpers)
-            .on_click(cx.listener(|this, _, _, cx| {
-                this.show_helpers = !this.show_helpers;
-                cx.notify();
-            }))
-    }
-
-    /// One toggle button per helper.
-    fn helper_buttons(&self, entries: &[Entry], cx: &mut Context<Self>) -> Div {
-        let mut buttons = div().flex().flex_wrap().gap_2();
-        for entry in entries {
-            let (toggle, open) = (entry.toggle, entry.open);
-            buttons = buttons.child(
-                Button::new(SharedString::from(format!("{}-toggle", entry.key)))
-                    .label(entry.label)
-                    .accessibility_label(format!("Open the {}", entry.what))
-                    .small()
-                    .outline()
-                    .rounded(px(999.))
-                    .selected(open)
-                    .toggled(open)
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        toggle(this);
-                        cx.notify();
-                    })),
-            );
+    /// Close every open helper, including those that do not apply to what is on screen now,
+    /// so none stays open out of sight. Returns whether one was open.
+    pub(in crate::view) fn close_helpers(&mut self) -> bool {
+        let open: Vec<fn(&mut Workbench)> = self
+            .all_helper_entries()
+            .into_iter()
+            .filter(|(_, entry)| entry.open)
+            .map(|(_, entry)| entry.toggle)
+            .collect();
+        for toggle in &open {
+            toggle(self);
         }
-        buttons
+        !open.is_empty()
     }
 }

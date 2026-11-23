@@ -40,6 +40,7 @@ impl Workbench {
         let Some(c) = self.variant.condition.as_ref().filter(|c| !c.name.is_empty()) else {
             return div()
                 .flex()
+                .flex_wrap()
                 .items_center()
                 .gap_2()
                 .children(self.pick_button(Editing::Today, cx))
@@ -60,6 +61,7 @@ impl Workbench {
                 this.open_sources(Editing::Today, cx);
             }));
         crate::look::card(cx)
+            .w_full()
             .flex()
             .items_start()
             .gap_3()

@@ -179,6 +179,19 @@ pub fn segment_icon(
     segment(id, label, chosen, cx).icon(gpui_kit::component::Icon::new(icon))
 }
 
+/// One tab of a set of tabs, for example a kind of evidence in the criteria list. The open
+/// tab sits on the quiet card fill; the others are bare until the pointer is over them.
+pub fn tab(id: impl Into<SharedString>, open: bool, cx: &App) -> Button {
+    let theme = cx.theme();
+    let style = ButtonCustomVariant::new(cx)
+        .color(if open { theme.muted } else { theme.transparent })
+        .foreground(if open { theme.foreground } else { theme.muted_foreground })
+        .hover(if open { theme.muted } else { theme.accent })
+        .active(theme.muted);
+    let id: SharedString = id.into();
+    Button::new(id).small().custom(style).h(px(30.)).px_2().rounded(px(7.)).selected(open).toggled(open)
+}
+
 /// A row of `segment`s on a recessed track.
 pub fn segmented(segments: impl IntoIterator<Item = impl IntoElement>, cx: &App) -> Div {
     div().flex().items_center().gap(px(2.)).p(px(3.)).rounded(px(CARD_RADIUS)).bg(cx.theme().muted).children(segments)

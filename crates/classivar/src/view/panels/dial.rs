@@ -40,6 +40,8 @@ struct Face {
     scale: Scale,
     /// None draws an empty dial: grey bands, no needle, no class.
     class: Option<Class>,
+    /// On an empty dial, the class pointed at in the opening screen's key: its band is coloured.
+    pointed: Option<Class>,
     slices: Vec<Segment>,
     selected: Option<String>,
     /// The slice under the pointer: it gets a faint edge so the hover card is clearly about it.
@@ -92,6 +94,7 @@ impl Workbench {
             slices: segments(&steps, &scale),
             scale,
             class,
+            pointed: if class.is_none() { self.pointed_zone } else { None },
             selected: self.inspected.clone(),
             hovered: self.hovered.clone(),
             set_aside,
@@ -224,7 +227,7 @@ fn labels(face: &Face) -> Vec<AnyElement> {
     let mut out = Vec::new();
     for (zone, from, to) in &face.scale.zones {
         let middle = angle_of((*from + *to) as f32 / 2., &face.scale);
-        let active = face.class == Some(*zone);
+        let active = face.class.or(face.pointed) == Some(*zone);
         let colour = if active { face.ink } else { face.muted };
         out.push(place(face, zone.short().to_string(), (face.radius + 22., middle), colour, active));
     }

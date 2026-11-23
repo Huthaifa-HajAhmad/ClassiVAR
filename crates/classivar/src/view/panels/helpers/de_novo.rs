@@ -114,12 +114,7 @@ fn points_text(points: f64) -> String {
 impl Workbench {
     pub(in crate::view::panels) fn de_novo_helper(&self, cx: &mut Context<Self>) -> AnyElement {
         let muted = cx.theme().muted_foreground;
-        let panel = self.helper_start(
-            ("de-novo", "De novo patients → PS2 or PM6"),
-            "de novo helper",
-            |this| this.helpers.de_novo.open = !this.helpers.de_novo.open,
-            cx,
-        );
+        let panel = self.helper_start();
         let Some(table) = self.rules.de_novo.as_ref() else {
             return panel.into_any_element();
         };
@@ -132,16 +127,27 @@ impl Workbench {
             .collect();
         let outcome = de_novo_outcome(self.rules, table, &typed, self.helpers.de_novo.recessive);
         let citation = self.rules.source(&table.source).map(|s| s.citation.clone());
+        let result = div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(super::super::focus::reading(outcome.message.clone()))
+            .when(!outcome.apply.is_empty(), |d| d.child(self.de_novo_apply(&outcome, cx)));
         panel
-            .child(caption(muted).child(
+            .gap_6()
+            .child(reading_note(
                 "How many patients had this variant new (de novo)? Sort them by how well the phenotype fits the gene, and by whether the parental relationships were confirmed.",
+                muted,
             ))
-            .children(table.phenotypes.iter().enumerate().map(|(i, row)| self.de_novo_row(i, row, muted)))
-            .child(self.de_novo_recessive_choice(table, cx))
-            .child(div().text_sm().child(outcome.message.clone()))
-            .when(!outcome.apply.is_empty(), |d| d.child(self.de_novo_apply(&outcome, cx)))
-            .children(table.notes.iter().map(|note| caption(muted).child(note.clone())))
-            .when_some(citation, |d, citation| d.child(caption(muted).child(format!("Source: {citation}"))))
+            .child(
+                part("Your patients", cx)
+                    .gap_4()
+                    .children(table.phenotypes.iter().enumerate().map(|(i, row)| self.de_novo_row(i, row, muted)))
+                    .child(self.de_novo_recessive_choice(table, cx)),
+            )
+            .child(result_card(result, cx))
+            .children(notes_part(table.notes.iter().cloned(), cx))
+            .children(source_part(citation, cx))
             .into_any_element()
     }
 
@@ -155,26 +161,20 @@ impl Workbench {
         div()
             .flex()
             .flex_col()
-            .gap_1()
-            .child(div().text_sm().child(row.label.clone()))
-            .child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .items_center()
-                    .gap_2()
-                    .child(caption(muted).child(format!("Parents confirmed ({} each)", points_text(row.confirmed))))
-                    .child(div().w(px(110.)).child(
-                        Input::new(&boxes[0]).aria_label(format!("De novo patients, {} (parents confirmed)", row.id)),
-                    ))
-                    .child(caption(muted).child(format!("Not confirmed ({} each)", points_text(row.unconfirmed))))
-                    .child(
-                        div().w(px(110.)).child(
-                            Input::new(&boxes[1])
-                                .aria_label(format!("De novo patients, {} (parents not confirmed)", row.id)),
-                        ),
-                    ),
-            )
+            .gap_2()
+            .child(div().text_sm().font_weight(FontWeight::SEMIBOLD).child(row.label.clone()))
+            .child(fields([
+                field(
+                    format!("Parents confirmed · {} each", points_text(row.confirmed)),
+                    Input::new(&boxes[0]).aria_label(format!("De novo patients, {} (parents confirmed)", row.id)),
+                    muted,
+                ),
+                field(
+                    format!("Not confirmed · {} each", points_text(row.unconfirmed)),
+                    Input::new(&boxes[1]).aria_label(format!("De novo patients, {} (parents not confirmed)", row.id)),
+                    muted,
+                ),
+            ]))
             .children(limit.map(|text| caption(muted).child(text)))
     }
 
@@ -182,21 +182,18 @@ impl Workbench {
         let chosen = self.helpers.de_novo.recessive;
         div()
             .flex()
-            .flex_wrap()
-            .items_center()
-            .gap_2()
+            .flex_col()
+            .items_start()
+            .gap_1()
             .child(
-                Button::new("de-novo-recessive")
-                    .label("Recessive condition, no second variant found")
-                    .small()
-                    .selected(chosen)
-                    .toggled(chosen)
+                tick("de-novo-recessive", "Recessive condition, no second variant found", chosen, cx)
+                    .accessibility_label("Recessive condition, no second variant found")
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.helpers.de_novo.recessive = !this.helpers.de_novo.recessive;
                         cx.notify();
                     })),
             )
-            .child(caption(cx.theme().muted_foreground).child(table.recessive_text.clone()))
+            .child(caption(cx.theme().muted_foreground).whitespace_normal().child(table.recessive_text.clone()))
     }
 
     /// One Apply button for each code the total can be applied as.

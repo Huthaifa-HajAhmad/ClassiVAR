@@ -117,14 +117,15 @@ try {
         $seen = @($buttons | ForEach-Object { $_.Current.Name } | Where-Object { $_ -like "$first*" }) -join " | "
         throw "button not found like: $name. Names that start with '$first': $seen"
     }
-    # Where the criteria list sits on screen. The list starts below the pane header,
-    # about 255 px under the top of the window; a row above that line is hidden.
+    # Where the criteria list sits on screen. The pane header is the "Evidence" head
+    # plus the criteria bar and the tab row; below ~210 px is scrollable content
+    # (tabs first, then helper cards, then the codes). A row above that line is hidden.
     function Get-ListArea {
         $client = New-Object ClassiVarSmokeWin+RECT
         [ClassiVarSmokeWin]::GetClientRect($h, [ref]$client) | Out-Null
         $origin = New-Object ClassiVarSmokeWin+POINT
         [ClassiVarSmokeWin]::ClientToScreen($h, [ref]$origin) | Out-Null
-        $top = $origin.Y + 255
+        $top = $origin.Y + 210
         $bottom = $origin.Y + $client.Bottom
         $listWidth = [math]::Min(465, [math]::Max(340, $client.Right * 0.36))
         return [pscustomobject]@{
@@ -268,26 +269,48 @@ try {
     # under the pane header) ignores a click. Like a person would, scroll the list
     # (Page Up or Page Down with the pointer over it) until the button is fully on screen.
     function Scroll-To-Button([string]$name) {
-        for ($i = 0; $i -lt 10; $i++) {
+        $previous = -1
+        for ($i = 0; $i -lt 12; $i++) {
             $r = (Find-Button-Like $name).Current.BoundingRectangle
             $area = Get-ListArea
-            if ($r.Y -ge $area.Top -and ($r.Y + $r.Height) -le $area.Bottom) { return }
+            # Leave a margin at the foot: a button on the very bottom edge can sit
+            # under the taskbar, where a click lands outside the app.
+            if ($r.Y -ge $area.Top -and ($r.Y + $r.Height) -le ($area.Bottom - 60)) { return }
+            if ($r.Y -eq $previous) { return }
+            $previous = $r.Y
             Point-At-List
             if ($r.Y -lt $area.Top) { Press-Key "{PGUP}" } else { Press-Key "{PGDN}" }
         }
         throw "could not scroll the button into view: $name"
     }
     # Put the criteria list back at the top, so the next steps start from a known
-    # place. The first thing in the list is the predictor helper's button (the helper
-    # must be closed); the list is at the top when that button is below the header.
+    # place. The first controls in the list are the category tabs (no helper or guide
+    # page may be open); the list is at the top when a tab is below the header.
     function Scroll-List-To-Top {
         for ($i = 0; $i -lt 12; $i++) {
-            $r = (Find-Button "Open the predictor score helper").Current.BoundingRectangle
+            $r = (Find-Button-Like "* criteria*").Current.BoundingRectangle
             if ($r.Y -ge (Get-ListArea).Top) { return }
             Point-At-List
             Press-Key "{PGUP}"
         }
         throw "could not scroll the criteria list to the top"
+    }
+    # A helper's card sits in the tab of the criteria it sets: open that tab, then the helper.
+    function Open-Helper([string]$tab, [string]$name) {
+        Scroll-To-Button "$tab criteria*"
+        Click-Button-Like "$tab criteria*"
+        Scroll-To-Button $name
+        $closeName = "Close the " + $name.Substring("Open the ".Length)
+        for ($try = 0; $try -lt 3; $try++) {
+            if (@(Names | Where-Object { $_ -eq $closeName }).Count -gt 0) { break }
+            $r = (Find-Button $name).Current.BoundingRectangle
+            Click-Point ([int]($r.X + $r.Width / 2)) ([int]($r.Y + $r.Height / 2))
+            if (@(Names | Where-Object { $_ -eq $closeName }).Count -eq 0) { Click-Button $name }
+        }
+        if (@(Names | Where-Object { $_ -eq $closeName }).Count -eq 0) { throw "helper did not open: $name" }
+        # A focus page inherits the list's scroll handle; start at its top.
+        Point-At-List
+        for ($i = 0; $i -lt 12; $i++) { Press-Key "{PGUP}" }
     }
     function Capture([string]$name) {
         Focus-App
@@ -332,7 +355,8 @@ try {
     try { $state = $darkHalf.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Current.ToggleState } catch {}
     if ("$state" -ne "On") { throw "the Dark half of the theme switch is not marked as chosen" }
 
-    Click-Button "Evidence helpers"
+    # The gene box is always in the top panel; helpers are now cards inside their tabs,
+    # so the old "Evidence helpers" toggle no longer exists.
     Set-GeneText "brc"
     $suggest = Capture "03-suggestions"
     Find-Button "BRCA1" | Out-Null
@@ -375,6 +399,8 @@ try {
     Find-Button-Like "PVS1 Very strong:*" | Out-Null
     # The first option is visible without scrolling; later ones may be below the fold.
     Click-Button-Like "PVS1 Very strong:*"
+    # Choosing an answer applies nothing; the Apply bar at the foot of the guide does.
+    Click-Button-Like "Apply PVS1*"
     Find-Button-Like "PVS1:*applied*" | Out-Null
     Find-Button-Like "PVS1 strength: Very strong*" | Out-Null
     $after = Capture "05-pvs1-applied"
@@ -392,11 +418,9 @@ try {
 
     # The predictor helper turns a REVEL score into PP3 at the published strength.
     Scroll-List-To-Top
-    Click-Button "Open the predictor score helper"
+    Open-Helper "Computational" "Open the predictor score helper"
     Set-BoxText "Predictor score" "0.95"
     Click-Button-Like "Apply PP3 Strong*"
-    Find-Button-Like "PP3:*applied*" | Out-Null
-    Find-Button-Like "PP3 strength: Strong*" | Out-Null
     # A score between the limits gives no button, and a benign score above
     # this program's limit is lowered to Moderate.
     Set-BoxText "Predictor score" "0.5"
@@ -430,15 +454,16 @@ try {
     Find-Button-Like "Apply BP4 Supporting*" | Out-Null
     Capture "05b2-spliceai" | Out-Null
     Click-Button "Close the predictor score helper"
+    # Back in the list, the applied criterion is visible in its tab.
+    Find-Button-Like "PP3:*applied*" | Out-Null
+    Find-Button-Like "PP3 strength: Strong*" | Out-Null
 
     # The functional helper: controls route, then the OddsPath route.
-    Scroll-To-Button "Open the functional evidence helper"
-    Click-Button "Open the functional evidence helper"
+    Open-Helper "Functional" "Open the functional evidence helper"
     Click-Button "Confirm the assay has normal and abnormal experimental controls and replicates"
     Set-BoxText "Pathogenic validation control count" "6"
     Set-BoxText "Benign validation control count" "6"
     Click-Button-Like "Apply PS3 Moderate*"
-    Find-Button-Like "PS3:*applied*" | Out-Null
     Scroll-To-Button "OddsPath value"
     Click-Button "OddsPath value"
     Set-BoxText "OddsPath value from the assay" "400"
@@ -449,6 +474,7 @@ try {
     }
     $functional = Capture "05c-functional"
     Click-Button "Close the functional evidence helper"
+    Find-Button-Like "PS3:*applied*" | Out-Null
 
     # The family and phenotype helper: a yield of 60% earns 3.5 PP4 points and
     # three dominant co-segregations earn 3 PP1 points. The sum, 6.5, is cut to
@@ -457,8 +483,7 @@ try {
     $countBox = "Informative family member count"
     $variantsBox = "Variants sharing the allele"
     $anyApply = { @(Names | Where-Object { $_ -like "Apply PP1*" -or $_ -like "Apply PP4*" }).Count -ne 0 }
-    Scroll-To-Button "Open the co-segregation and phenotype helper"
-    Click-Button "Open the co-segregation and phenotype helper"
+    Open-Helper "Family and cases" "Open the co-segregation and phenotype helper"
     Set-BoxText $yieldBox "60"
     Set-BoxText $countBox "3"
     # PP1 is not counted until the curator says whether other genes can cause the phenotype.
@@ -477,8 +502,6 @@ try {
     Scroll-To-Button "Apply PP1 Strong + PP4 Supporting*"
     $locus = Capture "05e-pp1-pp4"
     Click-Button-Like "Apply PP1 Strong + PP4 Supporting*"
-    Find-Button-Like "PP1 strength: Strong*" | Out-Null
-    Find-Button-Like "PP4 strength: Supporting*" | Out-Null
     # Variants sharing an allele: the yield is divided (95.8% / 2 = 47.9%, 2.5 points),
     # and PP1 is refused because the paper's sharing worksheet is not built in.
     Set-BoxText $variantsBox "2"
@@ -493,22 +516,30 @@ try {
     Set-BoxText $yieldBox "150"
     if (& $anyApply) { throw "a yield above 100% still offered to apply PP4" }
     Click-Button "Close the co-segregation and phenotype helper"
+    Find-Button-Like "PP1 strength: Strong*" | Out-Null
+    # PP4 lives in the Phenotype tab, not Family and cases where PP1 lives.
+    Scroll-To-Button "Phenotype criteria*"
+    Click-Button-Like "Phenotype criteria*"
+    Find-Button-Like "PP4 strength: Supporting*" | Out-Null
 
     # The non-segregation helper offers BS4 only where the paper supports it.
-    Scroll-To-Button "Open the non-segregation helper"
-    Click-Button "Open the non-segregation helper"
+    Open-Helper "Family and cases" "Open the non-segregation helper"
     foreach ($label in @("Recessive, compound heterozygous", "Reduced penetrance, unaffected carriers", "Many look-alike cases (phenocopy)", "Conflicting results or a very large family")) {
         Click-Button $label
         if (@(Names | Where-Object { $_ -like "Apply BS4*" }).Count -ne 0) {
             throw "BS4 was offered for a situation where the paper does not support it: $label"
         }
     }
+    # The page shares the list's scroll handle; the last situation is below the fold,
+    # so bring the first one back into view before choosing it.
+    Point-At-List
+    for ($i = 0; $i -lt 8; $i++) { Press-Key "{PGUP}" }
     Click-Button "Does not follow the disease"
     Scroll-To-Button "Apply BS4 Strong*"
     $segregation = Capture "05f-bs4"
     Click-Button-Like "Apply BS4 Strong*"
-    Find-Button-Like "BS4 strength: Strong*" | Out-Null
     Click-Button "Close the non-segregation helper"
+    Find-Button-Like "BS4 strength: Strong*" | Out-Null
 
     # The de novo helper: two patients with a highly specific phenotype and confirmed
     # parents earn 2 + 2 = 4 points, Very Strong (ClinGen SVI v1.1, Table 2). A
@@ -516,22 +547,24 @@ try {
     # Every count box has an aria label that names its row; the first row is
     # "highly specific, confirmed".
     $patientsBox = "De novo patients, highly-specific (parents confirmed)"
-    Scroll-To-Button "Open the de novo helper"
-    Click-Button "Open the de novo helper"
+    Open-Helper "Family and cases" "Open the de novo helper"
     Set-BoxText $patientsBox "2"
     Find-Button-Like "Apply PS2 Very*" | Out-Null
     # The same total can be applied as PM6, which may also reach Very Strong (SVI Table 2).
     Find-Button-Like "Apply PM6 Very*" | Out-Null
+    # The page inherits the previous helper's scroll; start at the top.
+    Point-At-List
+    for ($i = 0; $i -lt 12; $i++) { Press-Key "{PGUP}" }
     Scroll-To-Button "Recessive condition, no second variant found"
+    $recessive = (Find-Button "Recessive condition, no second variant found").Current.BoundingRectangle
     $deNovo = Capture "05g-de-novo"
-    Click-Button "Recessive condition, no second variant found"
+    Click-Point ([int]($recessive.X + 16)) ([int]($recessive.Y + $recessive.Height / 2))
     Find-Button-Like "Apply PS2 Strong*" | Out-Null
     if (@(Names | Where-Object { $_ -like "Apply PS2 Very*" }).Count -ne 0) {
         throw "the recessive rule did not lower the de novo strength"
     }
     Scroll-To-Button "Apply PM6 Strong*"
     Click-Button-Like "Apply PM6 Strong*"
-    Find-Button-Like "PM6 strength: Strong*" | Out-Null
     # Several criteria are applied here, so rows of the 2015 table are met and marked.
     Point-At-Result 600
     for ($i = 0; $i -lt 2; $i++) { Press-Key "{PGDN}" }
@@ -542,13 +575,12 @@ try {
     if (@(Names | Where-Object { $_ -like "Apply PS2*" -or $_ -like "Apply PM6*" }).Count -ne 0) {
         throw "the de novo helper offered a strength with no patients"
     }
-    Scroll-To-Button "Close the de novo helper"
     Click-Button "Close the de novo helper"
+    Find-Button-Like "PM6 strength: Strong*" | Out-Null
     Scroll-List-To-Top
 
     # PM3: the source's PAH example gives two points, Strong. Four reaches Very Strong.
-    Scroll-To-Button "Open the PM3 patients helper"
-    Click-Button "Open the PM3 patients helper"
+    Open-Helper "Family and cases" "Open the PM3 patients helper"
     Set-BoxText "PM3 count: Pathogenic or likely pathogenic, confirmed in trans" "2"
     if (@(Names | Where-Object { $_ -like "Apply PM3*" }).Count -ne 0) {
         throw "PM3 offered evidence before its conditions were confirmed"
@@ -560,7 +592,6 @@ try {
     Scroll-To-Button "Apply PM3 Very*"
     $pm3 = Capture "05h-pm3"
     Click-Button-Like "Apply PM3 Very*"
-    Find-Button-Like "PM3 strength: Very*" | Out-Null
     Set-BoxText "PM3 count: Pathogenic or likely pathogenic, confirmed in trans" ""
     if (@(Names | Where-Object { $_ -like "Apply PM3*" }).Count -ne 0) {
         throw "PM3 offered evidence without patients"
@@ -578,13 +609,11 @@ try {
     if (@(Names | Where-Object { $_ -like "Apply PM3*" }).Count -ne 0) {
         throw "PM3 accepted a negative count"
     }
-    Scroll-To-Button "Close the PM3 patients helper"
     Click-Button "Close the PM3 patients helper"
-    Scroll-To-Button "Open the BA1 exceptions reference"
-    Click-Button "Open the BA1 exceptions reference"
+    Find-Button-Like "PM3 strength: Very*" | Out-Null
+    Open-Helper "Population" "Open the BA1 exceptions reference"
     # Plain text is not exposed to automation, so the entries themselves are
     # only a capture (05i); the engine test pins the nine published ids.
-    Scroll-To-Button "Close the BA1 exceptions reference"
     $ba1 = Capture "05i-ba1-exceptions"
     Click-Button "Close the BA1 exceptions reference"
     Scroll-List-To-Top
@@ -592,6 +621,9 @@ try {
     # Raising a strength above its default asks for a reason first. PM2 (default
     # Supporting, limit Moderate) is one of the few criteria with room above its default.
     # The helper panels above push these rows down, so each click scrolls to its button first.
+    # Only the open tab's criteria are drawn: PM2 is under Population.
+    Scroll-To-Button "Population criteria*"
+    Click-Button-Like "Population criteria*"
     Scroll-To-Button "PM2:*not applied*"
     Click-Button-Like "PM2:*not applied*"
     Choose-Strength "PM2" "Moderate"
@@ -622,7 +654,9 @@ try {
 
     # A criterion is applied by clicking its name as well as its code. The code
     # button stays the accessible control; the title is the pointer's larger target
-    # and is plain text, so this clicks the row beside the code.
+    # and is plain text, so this clicks the row beside the code. PM1 is under Variant type.
+    Scroll-To-Button "Variant type criteria*"
+    Click-Button-Like "Variant type criteria*"
     Scroll-To-Button "PM1:*not applied*"
     $pm1Row = (Find-Button-Like "PM1:*not applied*").Current.BoundingRectangle
     Click-Point ([int]($pm1Row.X + 150)) ([int]($pm1Row.Y + $pm1Row.Height / 2))
@@ -632,20 +666,22 @@ try {
     Click-Button-Like "PM1:*applied*"
     Find-Button-Like "PM1:*not applied*" | Out-Null
 
-    # "More" opens the strength ladder: every step with its points, and the program's limit.
+    # "More" opens the criterion's page, with the strength ladder and the rule's own words.
     Scroll-To-Button "More about PM1*"
     Click-Button-Like "More about PM1*"
-    Find-Button-Like "Less about PM1*" | Out-Null
+    Find-Button "Back to the criteria from PM1" | Out-Null
     $ladderTop = Capture "05j2-strength-ladder-top"
     Press-Key "{PGDN}"
     $ladder = Capture "05j2-strength-ladder"
-    Scroll-To-Button "Less about PM1*"
-    Click-Button-Like "Less about PM1*"
+    Click-Button "Back to the criteria from PM1"
     Find-Button-Like "More about PM1*" | Out-Null
 
     # Two Strong benign criteria on top of the pathogenic evidence meet rows of the
     # 2015 table on both sides. The class is withheld, and the table explains why.
     # These are drawn, not controls, so they are captures for the eye.
+    # BS1 and BS2 belong to Population, while the open tab is still Variant type.
+    Scroll-To-Button "Population criteria*"
+    Click-Button-Like "Population criteria*"
     Scroll-To-Button "BS1:*not applied*"
     Click-Button-Like "BS1:*not applied*"
     Scroll-To-Button "BS2:*not applied*"
@@ -665,6 +701,9 @@ try {
     Find-Button-Like "BS1:*not applied*" | Out-Null
 
     # Page Down and Page Up scroll the list under the mouse pointer.
+    # PS1 belongs to Variant type; the open tab is still Population after BS1/BS2.
+    Scroll-To-Button "Variant type criteria*"
+    Click-Button-Like "Variant type criteria*"
     Scroll-To-Button "PS1:*"
     $ps1 = Find-Button-Like "PS1:*"
     $r = $ps1.Current.BoundingRectangle
@@ -675,7 +714,9 @@ try {
     if ($down -ge $before) { throw "Page Down did not scroll the criteria list" }
     Press-Key "{PGUP}"
     $up = (Find-Button-Like "PS1:*").Current.BoundingRectangle.Y
-    if ([math]::Abs($up - $before) -gt 2) { throw "Page Up did not scroll the criteria list back" }
+    # A tab has fewer rows than the old full list, so the page steps need not be
+    # symmetric (Page Down may hit the bottom early); Page Up must still move back.
+    if ($up -le $down) { throw "Page Up did not scroll the criteria list back" }
 
     # Clearing the gene box and pressing Enter must not offer to wipe the case.
     Set-GeneText ""
@@ -702,6 +743,9 @@ try {
     $state = $null
     try { $state = $vus.GetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern).Current.ToggleState } catch {}
     if ("$state" -ne "On") { throw "choosing VUS for the new record did not take (toggle state '$state')" }
+    # Opening a report resets the tab to the first one; PM2 belongs to Population.
+    Scroll-To-Button "Population criteria*"
+    Click-Button-Like "Population criteria*"
     Scroll-To-Button "PM2:*not applied*"
     Click-Button-Like "PM2:*not applied*"
     Find-Button-Like "PM2:*applied*" | Out-Null
@@ -710,6 +754,9 @@ try {
     Set-BoxText "Lab or source name" "Quest Dx"
     Find-Button-Like "Quest Dx*" | Out-Null
     # Put the criteria list at the top, so the Page Down check below has room to move it.
+    # PM2 was on Population; PS1 is in Variant type and stays behind the modal.
+    Scroll-To-Button "Variant type criteria*"
+    Click-Button-Like "Variant type criteria*"
     $c = (Find-Button-Like "PS1:*").Current.BoundingRectangle
     [ClassiVarSmokeWin]::SetCursorPos([int]($c.X + $c.Width / 2), [int]($c.Y + $c.Height / 2)) | Out-Null
     Press-Key "{PGUP}"
@@ -730,7 +777,9 @@ try {
         if ($null -eq $el) { return "" }
         try { return $el.Current.Name } catch { return "" }
     }
-    $allowed = @("", "Cancel", "Yes, continue")
+    # The focus container has no accessible name, so UIA reports its named ancestor,
+    # the app window itself. That is still inside the question, not behind it.
+    $allowed = @("", "ClassiVAR", "Cancel", "Yes, continue")
     for ($i = 0; $i -lt 3; $i++) {
         Press-Key "{TAB}"
         $focused = Focused-Name
@@ -776,6 +825,9 @@ try {
     Start-Sleep -Milliseconds 900
     $small = Capture "08-small-window"
     Find-Button-Like "Save case*" | Out-Null
+    # Compare reports reset the tab; PM2 is in Population even at the minimum width.
+    Scroll-To-Button "Population criteria*"
+    Click-Button-Like "Population criteria*"
     Find-Button-Like "PM2:*applied*" | Out-Null
 
     Click-Button "Light theme"

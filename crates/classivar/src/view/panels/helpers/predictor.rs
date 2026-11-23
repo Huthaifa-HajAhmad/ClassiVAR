@@ -75,56 +75,58 @@ impl Workbench {
     /// still presses Apply.
     pub(in crate::view::panels) fn predictor_helper(&self, cx: &mut Context<Self>) -> AnyElement {
         let muted = cx.theme().muted_foreground;
-        let panel = self.helper_start(
-            ("predictor", "Predictor score → PP3 or BP4"),
-            "predictor score helper",
-            Self::toggle_predictor,
-            cx,
-        );
+        let panel = self.helper_start();
         let Some(tool) = self.rules.predictors.get(self.helpers.predictor.tool) else {
             return panel.into_any_element();
         };
         let (message, reading) =
             predictor_outcome(self.rules, tool, self.typed_number(&self.helpers.predictor.input, cx));
         let citation = self.rules.source(&tool.source).map(|s| s.citation.clone());
+        let score = fields([field(
+            format!("{} score", tool.name),
+            Input::new(&self.helpers.predictor.input).aria_label("Predictor score"),
+            muted,
+        )]);
+        let result = div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(super::super::focus::reading(message))
+            .when_some(reading, |d, reading| d.child(self.predictor_apply(tool, reading, cx)));
+        let notes = tool.note.clone().into_iter().chain(std::iter::once(
+            "Choose one tool before you see its result, and use it for the whole case. The tool, score and source are saved with the case as the reason for the strength.".to_string(),
+        ));
         panel
-            .child(self.predictor_tools(cx))
-            .child(div().flex().items_center().gap_2().child(caption(muted).child("Score")).child(
-                div().w(px(140.)).child(Input::new(&self.helpers.predictor.input).aria_label("Predictor score")),
-            ))
-            .when_some(tool.eligibility.as_deref(), |d, text| d.child(self.predictor_eligibility(text, cx)))
-            .child(div().text_sm().child(message))
-            .when_some(reading, |d, reading| d.child(self.predictor_apply(tool, reading, cx)))
-            .when_some(tool.note.clone(), |d, note| d.child(caption(muted).child(note)))
-            .child(caption(muted).child(
-                "Choose one tool before you see its result, and use it for the whole case. The tool, score and source are saved with the case as the reason for the strength.",
-            ))
-            .when_some(citation, |d, citation| d.child(caption(muted).child(format!("Source: {citation}"))))
+            .gap_6()
+            .child(
+                part("The score", cx)
+                    .gap_3()
+                    .child(self.predictor_tools(cx))
+                    .child(score)
+                    .when_some(tool.eligibility.as_deref(), |d, text| d.child(self.predictor_eligibility(text, cx))),
+            )
+            .child(result_card(result, cx))
+            .children(notes_part(notes, cx))
+            .children(source_part(citation, cx))
             .into_any_element()
     }
 
     /// One button for each tool the rules calibrate. Choosing another tool withdraws the confirmation.
     fn predictor_tools(&self, cx: &mut Context<Self>) -> Div {
-        let mut tools =
-            div().flex().flex_wrap().items_center().gap_2().child(caption(cx.theme().muted_foreground).child("Tool"));
+        let mut tools = Vec::new();
         for (i, tool) in self.rules.predictors.iter().enumerate() {
             let chosen = self.helpers.predictor.tool == i;
-            tools = tools.child(
-                Button::new(SharedString::from(format!("predictor-tool-{}", tool.id)))
-                    .label(tool.name.clone())
-                    .small()
-                    .selected(chosen)
-                    .toggled(chosen)
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        if this.helpers.predictor.tool != i {
-                            this.helpers.predictor.tool = i;
-                            this.helpers.predictor.eligible = false;
-                        }
-                        cx.notify();
-                    })),
-            );
+            tools.push(answer(format!("predictor-tool-{}", tool.id), tool.name.clone(), chosen, cx).on_click(
+                cx.listener(move |this, _, _, cx| {
+                    if this.helpers.predictor.tool != i {
+                        this.helpers.predictor.tool = i;
+                        this.helpers.predictor.eligible = false;
+                    }
+                    cx.notify();
+                }),
+            ));
         }
-        tools
+        question("Which tool?", tools, cx)
     }
 
     /// The extra condition a tool needs, and the button that confirms it was checked.
@@ -134,14 +136,11 @@ impl Workbench {
             .flex()
             .flex_col()
             .gap_1()
-            .child(caption(cx.theme().muted_foreground).child(format!("Before applying, confirm {eligibility}.")))
+            .items_start()
+            .child(reading_note(format!("Before applying, confirm {eligibility}."), cx.theme().muted_foreground))
             .child(
-                Button::new("predictor-eligible")
-                    .label("I checked this condition")
+                tick("predictor-eligible", "I checked this condition", confirmed, cx)
                     .accessibility_label(format!("Confirm {eligibility}"))
-                    .small()
-                    .selected(confirmed)
-                    .toggled(confirmed)
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.helpers.predictor.eligible = !this.helpers.predictor.eligible;
                         cx.notify();

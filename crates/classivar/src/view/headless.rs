@@ -65,10 +65,16 @@ fn the_published_case_draws_without_panicking_for_today_and_every_record(cx: &mu
     workbench.update_in(cx, |this, window, cx| {
         this.load_real_case(window, cx);
         this.set_mode(Mode::ReportedVariant);
-        // Every criterion's "More" panel is open, so the strength ladder is drawn for all of them.
-        this.open_details = this.rules.criteria.iter().map(|c| c.code.clone()).collect();
     });
     draw(cx);
+    // Every criterion's page ("More") draws, with its strength ladder.
+    let codes: Vec<String> =
+        workbench.read_with(cx, |this, _| this.rules.criteria.iter().map(|c| c.code.clone()).collect());
+    for code in codes {
+        workbench.update_in(cx, |this, _, _| this.about = Some(code));
+        draw(cx);
+    }
+    workbench.update_in(cx, |this, _, _| this.about = None);
     workbench.update_in(cx, |this, _, _| this.comparison = true);
     draw(cx);
     let records = workbench.read_with(cx, |this, _| this.records.len());
@@ -124,7 +130,6 @@ fn every_helper_open_at_once_draws_without_panicking(cx: &mut TestAppContext) {
     let (workbench, cx) = open(cx, ThemeMode::Light);
     workbench.update_in(cx, |this, _, _| {
         this.welcome = false;
-        this.show_helpers = true;
         let helpers = &mut this.helpers;
         helpers.predictor.open = true;
         helpers.functional.open = true;
@@ -243,11 +248,13 @@ fn reading_and_comparison_controls_preserve_the_editing_scope(cx: &mut TestAppCo
 
 #[gpui::test]
 fn the_opening_screen_offers_no_fictional_case(cx: &mut TestAppContext) {
-    let (_workbench, cx) = open(cx, ThemeMode::Light);
+    let (workbench, cx) = open(cx, ThemeMode::Light);
     cx.simulate_resize(gpui::size(gpui::px(960.), gpui::px(600.)));
     draw(cx);
     assert!(cx.debug_bounds("welcome-example").is_none(), "no demo case is offered on the opening screen");
-    assert!(cx.debug_bounds("welcome-dial").is_some(), "the opening screen draws an empty dial instead");
+    let preview = workbench.read_with(cx, |this, _| format!("welcome-preview-{}", this.picture.name().to_lowercase()));
+    let preview: &'static str = Box::leak(preview.into_boxed_str());
+    assert!(cx.debug_bounds(preview).is_some(), "the opening screen draws the chosen picture, empty, instead");
 }
 
 /// The published RYR1 case with the reported mode on, in a window of the given size.

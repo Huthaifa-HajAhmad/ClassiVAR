@@ -280,23 +280,6 @@ fn picking_a_panel_for_todays_case_and_typing_a_lab_name_do_not_crash(cx: &mut T
 }
 
 #[gpui::test]
-fn the_criteria_draw_folded_and_open_by_kind_of_evidence(cx: &mut TestAppContext) {
-    let (workbench, cx) = open(cx, ThemeMode::Light);
-    workbench.update_in(cx, |this, _, _| {
-        this.set_mode(Mode::NewVariant);
-        this.today.insert("PM2".into(), Choice::new(Strength::Supporting));
-        this.folded = classivar_core::Category::ALL.into_iter().collect();
-    });
-    draw(cx);
-    workbench.read_with(cx, |this, _| assert_eq!(this.folded.len(), classivar_core::Category::ALL.len()));
-    workbench.update_in(cx, |this, _, cx| {
-        this.folded.clear();
-        cx.notify();
-    });
-    draw(cx);
-}
-
-#[gpui::test]
 fn sources_opened_from_todays_condition_choose_todays_condition_even_while_a_report_is_open(cx: &mut TestAppContext) {
     let (workbench, cx) = open(cx, ThemeMode::Light);
     workbench.update_in(cx, |this, window, cx| {

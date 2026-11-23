@@ -10,12 +10,12 @@ impl Workbench {
         let choice = self.current().get(&c.code);
         let strength = choice.map(|choice| choice.strength);
         let reason = choice.and_then(|choice| choice.reason.clone());
-        let guide_open = self.editing == Editing::Today && self.guide_open.as_deref() == Some(c.code.as_str());
         let raise_open =
             self.editing == Editing::Today && self.raising.as_ref().is_some_and(|raise| raise.code == c.code);
-        let open = self.open_details.contains(&c.code);
 
+        let selector = format!("criterion-{}", c.code);
         div()
+            .debug_selector(move || selector)
             .flex()
             .flex_col()
             .gap_1()
@@ -31,9 +31,8 @@ impl Workbench {
                     .child(self.criterion_apply_button(c, strength.is_some(), cx))
                     .child(self.criterion_title(c, cx))
                     .when_some(strength, |row, strength| row.child(self.criterion_strength_button(c, strength, cx)))
-                    .child(self.criterion_detail_button(c, open, cx)),
+                    .child(self.criterion_detail_button(c, cx)),
             )
-            .when(open, |col| col.child(self.criterion_explanation(c, choice, cx)))
             .when_some(reason, |col, reason| {
                 col.child(
                     div()
@@ -44,7 +43,6 @@ impl Workbench {
                 )
             })
             .when(raise_open, |col| col.child(self.raise_prompt(c, cx)))
-            .when(guide_open, |col| col.child(self.strength_guide(c, cx)))
             .into_any_element()
     }
 
@@ -66,7 +64,8 @@ impl Workbench {
                 .hover(theme.accent)
                 .active(theme.accent)
         };
-        div().w(px(58.)).flex_none().child(
+        let selector = format!("criterion-code-{}", c.code);
+        div().debug_selector(move || selector).w(px(58.)).flex_none().child(
             Button::new(SharedString::from(format!("apply-{}", c.code)))
                 .custom(style)
                 .w_full()
@@ -155,83 +154,20 @@ impl Workbench {
             .into_any_element()
     }
 
-    fn criterion_detail_button(&self, c: &'static Criterion, open: bool, cx: &mut Context<Self>) -> Button {
-        let word = if open { "Less" } else { "More" };
+    /// "More": the criterion's page, with what it means, its strengths and its sources.
+    fn criterion_detail_button(&self, c: &'static Criterion, cx: &mut Context<Self>) -> Div {
         let code = c.code.clone();
-        Button::new(SharedString::from(format!("detail-{}", c.code)))
-            .icon(Icon::new(if open { IconName::ChevronUp } else { IconName::ChevronDown }))
-            .label(word)
-            .tooltip(if open { "Hide the rule" } else { "Read the rule" })
-            .accessibility_label(format!("{word} about {}: {}", c.code, c.title))
+        let button = Button::new(SharedString::from(format!("detail-{}", c.code)))
+            .icon(Icon::new(IconName::ChevronRight))
+            .label("More")
+            .tooltip("What it means, its strengths and what to check")
+            .accessibility_label(format!("More about {}: {}", c.code, c.title))
             .small()
             .ghost()
             .on_click(cx.listener(move |this, _, _, cx| {
-                if !this.open_details.remove(&code) {
-                    this.open_details.insert(code.clone());
-                }
+                this.about = Some(code.clone());
                 cx.notify();
-            }))
-    }
-
-    /// The rule in plain words under the row, opened with "More": all of it,
-    /// with the note, the source and (for a guided criterion) the way to remove it.
-    fn criterion_explanation(&self, c: &'static Criterion, choice: Option<&Choice>, cx: &mut Context<Self>) -> Div {
-        let muted = cx.theme().muted_foreground;
-        let strength = choice.map(|choice| choice.strength);
-        let guide_option = choice.and_then(|choice| choice.situation.as_deref()).and_then(|id| c.guide_option(id));
-        let mut text = div().pl(px(66.)).flex().flex_col().gap_1().text_xs().text_color(muted);
-        text = text.child(div().child(c.summary.clone()));
-        if let Some(note) = c.note.clone() {
-            text = text.child(format!("Note: {note}"));
-        }
-        text = text.child(self.strength_ladder(c, strength, cx));
-        text = text.children(self.interactions_panel(c, cx));
-        if let Some(option) = guide_option {
-            text = text.child(format!("Guide answer: {} — {}", option.short, option.situation));
-        }
-        if !c.guide.is_empty() && strength.is_none() {
-            text = text.child(
-                div().child("Click the code to answer a short decision tree; nothing is applied until you choose."),
-            );
-        }
-        if strength.is_some() && self.editing == Editing::Today {
-            text = text.child(self.criterion_note_button(c, cx));
-        }
-        if strength.is_some() && !c.guide.is_empty() && self.editing == Editing::Today {
-            text = text.child(self.criterion_remove_button(c, cx));
-        }
-        if let Some(citation) = self.rules.source(&c.source).map(|s| s.citation.clone()) {
-            text = text.child(format!("Source: {citation}"));
-        }
-        text
-    }
-
-    /// Note what the evidence behind an applied criterion was (any criterion, not only a raised one).
-    fn criterion_note_button(&self, c: &'static Criterion, cx: &mut Context<Self>) -> Button {
-        let code = c.code.clone();
-        let has_note = self.today.get(&c.code).is_some_and(|choice| choice.reason.is_some());
-        Button::new(SharedString::from(format!("note-{}", c.code)))
-            .label(if has_note { "Edit note" } else { "Add a note" })
-            .accessibility_label(format!("Note what you looked at for {}", c.code))
-            .small()
-            .ghost()
-            .on_click(cx.listener(move |this, _, window, cx| {
-                this.start_note(&code, window, cx);
-                cx.notify();
-            }))
-    }
-
-    /// Removing a guided criterion has its own button: its code button only reopens the guide.
-    fn criterion_remove_button(&self, c: &'static Criterion, cx: &mut Context<Self>) -> Button {
-        let code = c.code.clone();
-        Button::new(SharedString::from(format!("remove-{}", c.code)))
-            .label(format!("Remove {}", c.code))
-            .accessibility_label(format!("Remove {}", c.code))
-            .small()
-            .ghost()
-            .on_click(cx.listener(move |this, _, _, cx| {
-                this.remove_criterion(&code);
-                cx.notify();
-            }))
+            }));
+        super::focus::tagged(format!("criterion-more-{}", c.code), button)
     }
 }

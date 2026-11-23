@@ -212,7 +212,7 @@ fn a_note_on_any_applied_criterion_keeps_its_strength_and_guide_answers(cx: &mut
     workbench.update_in(cx, |this, window, cx| {
         this.set_mode(Mode::NewVariant);
         this.today.insert("PVS1".into(), Choice::guided(Strength::Strong, "nmd".into(), Some("lower_one".into())));
-        this.open_details.insert("PVS1".into());
+        this.about = Some("PVS1".into());
         this.start_note("PVS1", window, cx);
         assert!(this.raising.as_ref().is_some_and(|r| r.note && r.code == "PVS1"));
     });

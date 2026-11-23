@@ -59,12 +59,7 @@ fn pm3_outcome(rules: &RuleSet, table: &Pm3Rules, typed: &[Option<Result<u32, ()
 
 impl Workbench {
     pub(in crate::view::panels) fn pm3_helper(&self, cx: &mut Context<Self>) -> AnyElement {
-        let panel = self.helper_start(
-            ("pm3", "Recessive patients: PM3"),
-            "PM3 patients helper",
-            |this| this.helpers.pm3.open = !this.helpers.pm3.open,
-            cx,
-        );
+        let panel = self.helper_start();
         let Some(table) = self.rules.pm3.as_ref() else {
             return panel.into_any_element();
         };
@@ -72,42 +67,48 @@ impl Workbench {
         let typed: Vec<_> = self.helpers.pm3.inputs.iter().map(|input| self.typed_count(input, cx)).collect();
         let outcome = pm3_outcome(self.rules, table, &typed, self.helpers.pm3.eligible);
         let citation = self.rules.source(&table.source).map(|s| s.citation.clone());
+        let result = div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .child(super::super::focus::reading(outcome.message))
+            .when_some(outcome.apply, |d, (evidence, reason)| d.child(self.pm3_apply(evidence, reason, cx)));
         panel
-            .children(table.notes.iter().map(|note| caption(muted).child(note.clone())))
-            .children(self.pm3_rows(table))
-            .child(self.pm3_eligibility(cx))
-            .child(div().text_sm().child(outcome.message))
-            .when_some(outcome.apply, |d, (evidence, reason)| d.child(self.pm3_apply(evidence, reason, cx)))
-            .when_some(citation, |d, citation| d.child(caption(muted).child(format!("Source: {citation}"))))
+            .gap_6()
+            .children(notes_part(table.notes.iter().cloned(), cx))
+            .child(
+                part("Your patients", cx)
+                    .gap_3()
+                    .child(self.pm3_eligibility(cx))
+                    .child(fields(self.pm3_rows(table, muted))),
+            )
+            .child(result_card(result, cx))
+            .children(source_part(citation, cx))
             .into_any_element()
     }
 
     /// A count box for each patient group of the table.
-    fn pm3_rows(&self, table: &Pm3Rules) -> Vec<Div> {
+    fn pm3_rows(&self, table: &Pm3Rules, muted: Hsla) -> Vec<Div> {
         table
             .rows
             .iter()
             .zip(&self.helpers.pm3.inputs)
             .map(|(row, input)| {
                 let limit = row.max_points.map(|n| format!("; row limit {n}")).unwrap_or_default();
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .child(div().text_xs().child(format!("{} ({} per patient{})", row.label, row.points, limit)))
-                    .child(div().w(px(210.)).child(Input::new(input).aria_label(format!("PM3 count: {}", row.label))))
+                field(
+                    format!("{} ({} per patient{})", row.label, row.points, limit),
+                    Input::new(input).aria_label(format!("PM3 count: {}", row.label)),
+                    muted,
+                )
             })
             .collect()
     }
 
     fn pm3_eligibility(&self, cx: &mut Context<Self>) -> Div {
         let confirmed = self.helpers.pm3.eligible;
-        div().child(
-            Button::new("pm3-eligible")
-                .label("I checked the PM3 conditions")
-                .small()
-                .selected(confirmed)
-                .toggled(confirmed)
+        div().flex().child(
+            tick("pm3-eligible", "I checked the PM3 conditions", confirmed, cx)
+                .accessibility_label("I checked the PM3 conditions")
                 .on_click(cx.listener(|this, _, _, cx| {
                     this.helpers.pm3.eligible = !this.helpers.pm3.eligible;
                     cx.notify();
