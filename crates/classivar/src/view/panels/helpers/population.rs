@@ -86,12 +86,7 @@ fn population_reason(finding: &PopulationFinding, source: &str) -> String {
 
 impl Workbench {
     pub(in crate::view::panels) fn population_helper(&self, cx: &mut Context<Self>) -> AnyElement {
-        let panel = self.helper_start(
-            ("population", "Population frequency → BA1, BS1 or PM2"),
-            "population frequency helper",
-            |this| this.helpers.population.open = !this.helpers.population.open,
-            cx,
-        );
+        let panel = self.helper_start();
         let Some(table) = self.rules.population.as_ref() else { return panel.into_any_element() };
         let muted = cx.theme().muted_foreground;
         let state = &self.helpers.population;
@@ -107,60 +102,55 @@ impl Workbench {
             }
             known => format!("Inheritance (from the case): {}.", known.label()),
         };
+        let result = match outcome {
+            Ok(findings) => self.population_findings(findings, cx).into_any_element(),
+            Err(problem) => notice(problem, warning_fill(), warning_ink()).into_any_element(),
+        };
         panel
-            .children(table.notes.iter().map(|note| caption(muted).child(note.clone())))
-            .child(div().text_sm().child(inheritance_line))
-            .child(self.population_absent_button(cx))
-            .child(self.population_boxes())
-            .child(match outcome {
-                Ok(findings) => self.population_findings(findings, cx).into_any_element(),
-                Err(problem) => notice(problem, warning_fill(), warning_ink()).into_any_element(),
-            })
+            .gap_6()
+            .child(
+                part("Your numbers", cx)
+                    .gap_3()
+                    .child(reading_note(inheritance_line, muted))
+                    .child(div().flex().child(self.population_absent_button(cx)))
+                    .child(self.population_boxes(muted)),
+            )
+            .child(result_card(result, cx))
+            .children(notes_part(table.notes.iter().cloned(), cx))
             .into_any_element()
     }
 
     fn population_absent_button(&self, cx: &mut Context<Self>) -> Button {
         let absent = self.helpers.population.absent;
-        Button::new("population-absent")
-            .label("Absent from the population data (allele count 0, site well covered)")
+        tick("population-absent", "Absent from the population data (allele count 0, site well covered)", absent, cx)
             .accessibility_label("The variant is absent from the population data")
-            .small()
-            .selected(absent)
-            .toggled(absent)
             .on_click(cx.listener(|this, _, _, cx| {
                 this.helpers.population.absent = !this.helpers.population.absent;
                 cx.notify();
             }))
     }
 
-    fn population_boxes(&self) -> Div {
-        let mut grid = div().flex().flex_wrap().gap_2();
-        for ((label, _), input) in POPULATION_BOXES.iter().zip(&self.helpers.population.inputs) {
-            grid = grid.child(
-                div()
-                    .w(px(220.))
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .child(div().text_xs().child(*label))
-                    .child(Input::new(input).aria_label(*label)),
-            );
-        }
-        grid
+    fn population_boxes(&self, muted: Hsla) -> Div {
+        fields(
+            POPULATION_BOXES
+                .iter()
+                .zip(&self.helpers.population.inputs)
+                .map(|((label, _), input)| field(*label, Input::new(input).aria_label(*label), muted)),
+        )
     }
 
     /// One line per criterion: why it does or does not apply, and an Apply button when it does.
     fn population_findings(&self, findings: Vec<PopulationFinding>, cx: &mut Context<Self>) -> Div {
-        let mut list = div().flex().flex_col().gap_1();
+        let mut list = div().flex().flex_col().gap_2();
         for finding in findings {
-            let line = div().text_sm().child(format!("{}: {}", finding.code, finding.why));
+            let line = super::super::focus::reading(format!("{}: {}", finding.code, finding.why));
             let Some(reading) = finding.reading.clone() else {
                 list = list.child(line);
                 continue;
             };
             let source = self.population_source(finding.code);
             let reason = population_reason(&finding, &source);
-            list = list.child(line).child(self.population_apply(reading, reason, cx));
+            list = list.child(line).child(div().child(self.population_apply(reading, reason, cx)));
         }
         list
     }

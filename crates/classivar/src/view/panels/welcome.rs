@@ -90,33 +90,4 @@ impl Workbench {
             ))
             .child(self.welcome_actions(cx))
     }
-
-    /// The dial with no evidence on it: grey bands, no needle and no class, so the
-    /// opening screen shows the instrument without suggesting any class.
-    fn empty_figure(&self, cx: &mut Context<Self>) -> Div {
-        let muted = cx.theme().muted_foreground;
-        let card = crate::look::panel(cx)
-            .flex_1()
-            .min_w_0()
-            .p_6()
-            .flex()
-            .flex_col()
-            .items_center()
-            .gap_3()
-            .child(crate::look::eyebrow("How the evidence adds up", cx));
-        let Ok(result) = self.rules.assess(&[]) else {
-            return card;
-        };
-        card.child(div().debug_selector(|| "welcome-dial".into()).child(self.dial(
-            &result,
-            None,
-            (560., 380.),
-            false,
-            cx,
-        )))
-        .child(
-            caption(muted).child("Each criterion you choose moves the needle. No class is shown until you choose one."),
-        )
-        .child(super::picture::status_pill(self.rules, cx))
-    }
 }

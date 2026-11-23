@@ -52,7 +52,7 @@ impl Workbench {
             crate::settings::Picture::Column => {
                 div().flex().justify_center().child(self.empty_column(cx)).into_any_element()
             }
-            crate::settings::Picture::Track => self.empty_track(cx),
+            crate::settings::Picture::Track => self.empty_track(self.stage.width.get(), cx),
         }
     }
 
@@ -69,10 +69,9 @@ impl Workbench {
                         .toggled(self.category == Some(category))
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.category = Some(category);
-                            // Show that kind of evidence and fold the others, without hiding them.
-                            this.folded = Category::ALL.into_iter().filter(|c| *c != category).collect();
+                            // Open that kind of evidence's tab in the criteria list.
                             this.reading = false;
-                            // Child 1 of the sheet is the "Show all" bar that sits above the filtered list.
+                            // Child 1 of the sheet is the criteria bar, just above the tabs.
                             this.handles.criteria_scroll.scroll_to_top_of_item(1);
                             cx.notify();
                         })),

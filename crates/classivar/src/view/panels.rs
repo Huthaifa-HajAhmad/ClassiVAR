@@ -18,15 +18,19 @@ mod combining_table;
 mod condition_pick;
 mod criteria;
 mod criteria_sections;
+mod criterion_page;
 mod criterion_row;
 mod dial;
 mod dial_geometry;
 mod empty_track;
 mod evidence_stack;
+mod focus;
 mod frame;
 mod gene_cards;
 mod gene_drawer;
+mod guide_page;
 mod helper_bar;
+mod helper_cards;
 mod helpers;
 mod source_inheritance;
 
@@ -56,6 +60,7 @@ mod variant_card;
 mod verdict;
 mod welcome;
 mod welcome_more;
+mod welcome_preview;
 mod what_if;
 
 impl Workbench {

@@ -168,8 +168,7 @@ impl Workbench {
         self.gene_error = None;
         // A question or an open guide belongs to the case that was on screen.
         self.confirm = None;
-        self.guide_open = None;
-        self.open_details.clear();
+        self.close_pages();
         self.next_record = Self::next_record_number(&self.records);
         // Gene answers from the network are not saved; the curator checks the gene again.
         self.gene = GeneChecks::idle();
@@ -245,9 +244,8 @@ impl Workbench {
         self.gene_error = None;
         self.file_status = None;
         self.forget_saved();
-        self.guide_open = None;
         self.confirm = None;
-        self.open_details.clear();
+        self.close_pages();
         self.next_record = 1;
         self.boxes.variant.update(cx, |input, cx| input.set_value("", window, cx));
         self.reset_helpers(window, cx);

@@ -52,8 +52,9 @@ pub(super) fn spoke(
 
 pub(super) fn paint_face(face: &Face, needle: f32, origin: Point<Pixels>, window: &mut Window) {
     for (zone, from, to) in &face.scale.zones {
-        let active = face.class == Some(*zone);
+        let active = face.class.or(face.pointed) == Some(*zone);
         let fill: Hsla = match face.class {
+            None if active => class_fill(*zone, face.dark).into(),
             None => face.blank,
             Some(_) if active => class_fill(*zone, face.dark).into(),
             Some(_) => Rgba { a: 0.8, ..class_fill(*zone, face.dark) }.into(),

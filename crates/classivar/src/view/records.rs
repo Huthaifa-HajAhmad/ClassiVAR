@@ -6,6 +6,8 @@ impl Workbench {
     pub(super) fn set_mode(&mut self, mode: Mode) {
         self.welcome = false;
         self.category = None;
+        self.pointed_zone = None;
+        self.close_pages();
         self.baseline = None;
         self.reading = false;
         self.comparison = false;
@@ -20,7 +22,11 @@ impl Workbench {
 
     /// Open an earlier record for editing and show its name in the name box.
     pub(super) fn show_record(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(record) = self.records.get(index) else { return };
+        if index >= self.records.len() {
+            return;
+        }
+        self.close_pages();
+        let record = &self.records[index];
         let name = record.label.clone();
         self.inspected = None;
         self.preview = false;

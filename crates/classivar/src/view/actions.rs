@@ -66,14 +66,17 @@ impl Workbench {
     }
 
     /// What Escape does: answer "Cancel" to a question, otherwise close the gene-sources
-    /// drawer or the open strength guide.
+    /// drawer, the open strength guide or reason prompt, a criterion's page, or an open helper.
     pub(super) fn escape(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.confirm.is_some() {
             self.cancel_confirm(window, cx);
         } else if self.gene_cards_open {
             self.gene_cards_open = false;
             cx.notify();
-        } else if self.guide_open.take().is_some() || self.raising.take().is_some() {
+        } else if self.guide_open.is_some() {
+            self.close_guide();
+            cx.notify();
+        } else if self.raising.take().is_some() || self.about.take().is_some() || self.close_helpers() {
             cx.notify();
         }
     }
@@ -113,22 +116,20 @@ impl Workbench {
             self.raising = None;
         }
         if self.guide_open.as_deref() == Some(criterion.code.as_str()) {
-            self.guide_open = None;
+            self.close_guide();
             return;
         }
         let scope = self.editing;
         if let Some(choice) = self.evidence_mut(scope).remove(&criterion.code) {
             // A guided criterion on today's evidence stays: this click only opens its guide.
             if scope == Editing::Today && !criterion.guide.is_empty() {
-                self.guide_gene_level = choice.gene_level.clone();
+                self.open_guide(&criterion.code, choice.gene_level.clone(), choice.situation.clone());
                 self.evidence_mut(scope).insert(criterion.code.clone(), choice);
-                self.guide_open = Some(criterion.code.clone());
             }
             return;
         }
         if scope == Editing::Today && !criterion.guide.is_empty() {
-            self.guide_gene_level = None;
-            self.guide_open = Some(criterion.code.clone());
+            self.open_guide(&criterion.code, None, None);
             return;
         }
         // A record should start from the strength the 2015 paper used, not from
@@ -147,14 +148,43 @@ impl Workbench {
         }
         self.evidence_mut(self.editing).remove(code);
         if self.guide_open.as_deref() == Some(code) {
-            self.guide_open = None;
+            self.close_guide();
         }
+    }
+
+    /// Give the panel to a criterion's strength guide, starting from a saved answer when there is one.
+    fn open_guide(&mut self, code: &str, gene_level: Option<String>, situation: Option<String>) {
+        self.about = None;
+        self.guide_open = Some(code.to_string());
+        self.guide_gene_level = gene_level;
+        self.guide_pick = situation;
+    }
+
+    /// Close every page that takes the right panel (a criterion's page, a guide, an open helper).
+    /// Pages belong to the evidence on screen, so they close when that evidence changes.
+    pub(super) fn close_pages(&mut self) {
+        self.about = None;
+        self.close_guide();
+        self.close_helpers();
+    }
+
+    #[cfg(test)]
+    pub(super) fn open_guide_for_test(&mut self, code: &str) {
+        self.open_guide(code, None, None);
+    }
+
+    /// Leave the strength guide without answering it: nothing changes in the evidence.
+    pub(super) fn close_guide(&mut self) {
+        self.guide_open = None;
+        self.guide_gene_level = None;
+        self.guide_pick = None;
     }
 
     /// The curator's answer to a strength guide, with the gene-level answer when
     /// the criterion asks one. `None` means the criterion does not apply.
     pub(super) fn answer_guide(&mut self, code: &str, strength: Option<Strength>, situation: String) {
         self.guide_open = None;
+        self.guide_pick = None;
         let gene_level = self.guide_gene_level.take();
         match strength {
             Some(strength) => {
@@ -169,8 +199,10 @@ impl Workbench {
     pub(super) fn next_strength(&mut self, criterion: &Criterion, window: &mut Window, cx: &mut Context<Self>) {
         let Some(current) = self.current().get(&criterion.code).map(|choice| choice.strength) else { return };
         if self.editing == Editing::Today && !criterion.guide.is_empty() {
-            self.guide_gene_level = self.today.get(&criterion.code).and_then(|choice| choice.gene_level.clone());
-            self.guide_open = Some(criterion.code.clone());
+            let choice = self.today.get(&criterion.code);
+            let (level, situation) =
+                (choice.and_then(|c| c.gene_level.clone()), choice.and_then(|c| c.situation.clone()));
+            self.open_guide(&criterion.code, level, situation);
             return;
         }
         let options = self.strength_options(criterion);

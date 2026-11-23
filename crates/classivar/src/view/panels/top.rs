@@ -113,9 +113,7 @@ impl Workbench {
                         .icon(Icon::new(IconName::Search))
                         .label("Check")
                         .accessibility_label("Check gene")
-                        .small()
                         .outline()
-                        .rounded(px(999.))
                         .on_click(cx.listener(|this, _, _, cx| {
                             this.check_gene(cx);
                         })),

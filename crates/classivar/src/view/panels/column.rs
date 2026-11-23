@@ -85,10 +85,12 @@ impl Workbench {
         let theme = cx.theme();
         let (ink, muted, fill, border) = (theme.foreground, theme.muted_foreground, theme.muted, theme.border);
         let scale = scale_for(self.rules);
+        let (pointed, dark) = (self.pointed_zone, theme.is_dark());
         let mut zones =
             div().absolute().left_0().top_0().w(px(TODAY_WIDTH)).h(px(HEIGHT)).rounded_lg().overflow_hidden();
-        for (_, from, to) in &scale.zones {
+        for (zone, from, to) in &scale.zones {
             let (top, height) = span(*from, *to, &scale);
+            let colour: Hsla = if pointed == Some(*zone) { class_fill(*zone, dark).into() } else { fill };
             zones = zones.child(
                 div()
                     .absolute()
@@ -96,7 +98,7 @@ impl Workbench {
                     .w_full()
                     .top(px(top * HEIGHT))
                     .h(px(height * HEIGHT))
-                    .bg(fill)
+                    .bg(colour)
                     .border_b_1()
                     .border_color(border),
             );
@@ -109,7 +111,7 @@ impl Workbench {
             // The zone names hang to the right; the same room on the left centres the column.
             .ml(px(LABEL_ROOM))
             .child(zones)
-            .child(zone_names(&scale, None, TODAY_WIDTH + 12., (ink, muted)))
+            .child(zone_names(&scale, pointed, TODAY_WIDTH + 12., (ink, muted)))
             .child(foot("Today", "your evidence", 0., TODAY_WIDTH, ink, muted))
             .into_any_element()
     }
