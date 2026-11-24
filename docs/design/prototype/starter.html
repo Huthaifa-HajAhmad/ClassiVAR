@@ -101,7 +101,7 @@
     *, *::before, *::after { box-sizing: border-box; }
     .cv-panel { background: var(--popover); color: var(--popover-foreground); border: 1px solid var(--border); border-radius: var(--panel-radius); box-shadow: var(--shadow-panel); }
     .cv-card { background: var(--muted); border-radius: var(--card-radius); padding: var(--space-3); }
-    .cv-eyebrow { font-family: var(--font-mono); font-size: 10.5px; line-height: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted-foreground); }
+    .cv-eyebrow { font-family: var(--font-mono); font-size: 11px; line-height: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted-foreground); }
     .cv-section-head { display: flex; flex-direction: column; gap: 2px; }
     .cv-section-title { font-size: 18px; line-height: 24px; font-weight: 600; color: var(--foreground); }
     .cv-display { font-size: 34px; line-height: 40px; font-weight: 600; color: var(--foreground); }
@@ -524,7 +524,7 @@
     }
     .tab-count {
       font-family: var(--font-mono);
-      font-size: 10.5px;
+      font-size: 11px;
       font-weight: 600;
       padding: 0 6px;
       border-radius: 999px;
@@ -587,7 +587,7 @@
     }
     .history-table th {
       font-family: var(--font-mono);
-      font-size: 10.5px;
+      font-size: 11px;
       text-transform: uppercase;
       color: var(--muted-foreground);
     }
@@ -855,7 +855,7 @@
         const yTop = yOf(z.to), yBot = yOf(z.from);
         const active = info && !info.withheld && info.short === z.cls;
         return `<rect x="44" y="${yTop}" width="44" height="${Math.max(4, yBot - yTop)}" rx="4" fill="${z.c}" fill-opacity="${active ? 1 : 0.35}" stroke="${active ? 'var(--edge-emphasis)' : 'none'}" stroke-width="1.5"/>
-                <text x="36" y="${(yTop + yBot) / 2 + 4}" text-anchor="end" font-family="JetBrains Mono" font-size="10.5" fill="var(--muted-foreground)">${z.cls}</text>`;
+                <text x="36" y="${(yTop + yBot) / 2 + 4}" text-anchor="end" font-family="JetBrains Mono" font-size="11" fill="var(--muted-foreground)">${z.cls}</text>`;
       }).join("");
       let cursor = yOf(0);
       const blocks = items.map(it => {
@@ -866,7 +866,7 @@
         const dashed = state.previewWithout && state.inspected === it.code;
         return `<g onclick="inspectBlock('${it.code}')" style="cursor:pointer">
           <rect x="96" y="${y + 1}" width="84" height="${h - 2}" rx="5" fill="${dashed ? 'none' : fill}" stroke="${dashed ? fill : 'none'}" stroke-dasharray="${dashed ? '4 3' : ''}" stroke-width="2"/>
-          <text x="138" y="${y + h / 2 + 4}" text-anchor="middle" font-family="JetBrains Mono" font-size="10.5" font-weight="600" fill="${dashed ? 'var(--foreground)' : '#ffffff'}">${it.code} +${it.pts}</text>
+          <text x="138" y="${y + h / 2 + 4}" text-anchor="middle" font-family="JetBrains Mono" font-size="11" font-weight="600" fill="${dashed ? 'var(--foreground)' : '#ffffff'}">${it.code} +${it.pts}</text>
         </g>`;
       }).join("");
       return `<svg width="240" height="190" viewBox="0 0 240 190" role="img" aria-label="Classification column">${bands}${blocks}</svg>`;

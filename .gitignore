@@ -7,3 +7,7 @@ Thumbs.db
 # and must not be committed by accident.
 *.classivar.json
 *.case.json
+
+# Cache of the design hook; the shared settings in .impeccable/config.json are kept.
+.impeccable/hook.cache.json
+.impeccable/config.local.json

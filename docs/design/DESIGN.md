@@ -38,7 +38,7 @@ Two faces. The system interface font for words; **JetBrains Mono** (built into t
 |---|---|---|
 | Display | `display()`, 34 px semibold | the class name |
 | Figure | `figure(size)`, mono semibold | the total (28 px), codes on chips and blocks (11 to 12 px) |
-| Eyebrow | `eyebrow(text)`, mono 10.5 px capitals, muted | the small label above a value or section ("TODAY'S ASSESSMENT", "2015 TABLE") |
+| Eyebrow | `eyebrow(text)`, mono 11 px capitals, muted (`SMALL_TEXT`, the smallest text in the app) | the small label above a value or section ("TODAY'S ASSESSMENT", "2015 TABLE") |
 | Emphasis edge | `edge()`: the text colour at `EDGE_STRENGTH` (0.55) | the outline around the one marked thing in a group: the class shown on the dial and the class strip, the chosen picture on the opening screen, a history cell that differs from the latest record. Full-strength ink read as a bright white line in the dark theme; a test keeps the softer edge at 3:1 or more on the page, card and panel colours in both themes. The outline on a selected block keeps full ink, because it marks what the user clicked. |
 | Section head | `section_head(label, title)`: an eyebrow over an 18 px semibold title | every section of the explanation ("COMPOSITION" over "What it is made of", "2015 TABLE", "MOVES", "NOTES", "RULES") |
 | Body | `text_sm` | everything else |

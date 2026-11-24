@@ -1,4 +1,4 @@
-﻿//! The evidence helpers on screen: a card at the top of each tab whose criteria a
+//! The evidence helpers on screen: a card at the top of each tab whose criteria a
 //! helper sets, and, once opened, the helper on its own page over the list.
 
 use super::focus::{Page, tagged};
@@ -21,7 +21,13 @@ impl Workbench {
     fn helper_card(&self, entry: &Entry, cx: &mut Context<Self>) -> AnyElement {
         let border = cx.theme().border;
         let codes = entry.codes.iter().map(|code| {
-            crate::look::figure(10.5).px(px(6.)).py(px(1.)).rounded(px(5.)).border_1().border_color(border).child(*code)
+            crate::look::figure(crate::look::SMALL_TEXT)
+                .px(px(6.))
+                .py(px(1.))
+                .rounded(px(5.))
+                .border_1()
+                .border_color(border)
+                .child(*code)
         });
         let key = entry.key;
         let open = Button::new(SharedString::from(format!("{key}-toggle")))

@@ -22,6 +22,10 @@ use gpui_kit::*;
 /// The monospaced face for numbers, codes and small labels. It is built into the program.
 pub const MONO: &str = "JetBrains Mono";
 
+/// The smallest text on screen, in pixels. Smaller text is hard to read on a dense or
+/// high-resolution display, so labels, counts and codes never go below it.
+pub const SMALL_TEXT: f32 = 11.;
+
 /// Corner radii, in pixels.
 pub const PANEL_RADIUS: f32 = 16.;
 pub const CARD_RADIUS: f32 = 10.;
@@ -108,7 +112,7 @@ pub fn card(cx: &App) -> Div {
 pub fn eyebrow(text: impl AsRef<str>, cx: &App) -> Div {
     div()
         .font_family(MONO)
-        .text_size(px(10.5))
+        .text_size(px(SMALL_TEXT))
         .line_height(px(14.))
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(cx.theme().muted_foreground)
