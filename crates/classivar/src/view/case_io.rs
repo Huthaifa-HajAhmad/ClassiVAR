@@ -21,6 +21,16 @@ fn saved_evidence(list: &[Applied]) -> Evidence {
         .collect()
 }
 
+/// Read and check a case file from disk before opening it.
+pub(crate) fn read_case_file(path: &std::path::Path, rules: &RuleSet) -> Result<CaseFile, String> {
+    let size = std::fs::metadata(path).map(|meta| meta.len()).map_err(|error| error.to_string())?;
+    if size > MAX_CASE_BYTES {
+        return Err(format!("the file is larger than {} MB and cannot be a case file", MAX_CASE_BYTES / (1024 * 1024)));
+    }
+    let text = std::fs::read_to_string(path).map_err(|error| error.to_string())?;
+    CaseFile::from_json(&text, rules).map_err(|error| error.to_string())
+}
+
 impl Workbench {
     /// Everything the curator entered, ready to be written to a file. Results are
     /// not saved: they are worked out again when the case is opened.
@@ -100,20 +110,7 @@ impl Workbench {
             let shown_path = path.display().to_string();
             // Reading and re-scoring a case can be slow, so it runs off the UI
             // thread. The size check stops a huge file from being read at all.
-            let loaded = cx
-                .background_spawn(async move {
-                    let size = std::fs::metadata(&path).map(|meta| meta.len()).map_err(|error| error.to_string())?;
-                    if size > MAX_CASE_BYTES {
-                        return Err(format!(
-                            "the file is larger than {} MB and cannot be a case file",
-                            MAX_CASE_BYTES / (1024 * 1024)
-                        ));
-                    }
-                    let text = std::fs::read_to_string(&path).map_err(|error| error.to_string())?;
-                    let case = CaseFile::from_json(&text, rules).map_err(|error| error.to_string())?;
-                    Ok(case)
-                })
-                .await;
+            let loaded = cx.background_spawn(async move { read_case_file(&path, rules) }).await;
             this.update_in(cx, |this, window, cx| match loaded {
                 Err(error) => {
                     this.set_file_status(Status::attention(format!("Could not open {shown_path}: {error}")), cx)
@@ -134,7 +131,7 @@ impl Workbench {
     }
 
     /// Replace what is on screen with a case that was already checked by `CaseFile::from_json`.
-    pub(super) fn apply_case(&mut self, case: CaseFile, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn apply_case(&mut self, case: CaseFile, window: &mut Window, cx: &mut Context<Self>) {
         self.category = None;
         self.baseline = None;
         self.reading = false;
@@ -278,7 +275,7 @@ fn open_status(rules: &RuleSet, case: &CaseFile, adjusted: &[String]) -> Status 
 mod tests {
     use classivar_core::{CASE_FORMAT, CaseFile, GeneDecision, RuleSet};
 
-    use super::open_status;
+    use super::{MAX_CASE_BYTES, open_status, read_case_file};
     use crate::status::Tone;
 
     fn case(rules: &RuleSet) -> CaseFile {
@@ -294,6 +291,39 @@ mod tests {
             records: vec![],
             identity: None,
             condition: None,
+        }
+    }
+
+    #[test]
+    fn a_case_file_that_cannot_be_read_is_refused_with_a_reason() {
+        let rules = RuleSet::builtin().unwrap();
+        let path = |tag: &str| {
+            std::env::temp_dir().join(format!("classivar-case-read-{}-{tag}.classivar.json", std::process::id()))
+        };
+        let good_text = case(rules).to_json();
+        let too_big = vec![b' '; usize::try_from(MAX_CASE_BYTES).unwrap() + 1];
+        let files: [(&str, Vec<u8>); 4] = [
+            ("good", good_text.clone().into_bytes()),
+            ("truncated", good_text.as_bytes()[..good_text.len() / 2].to_vec()),
+            ("not-utf8", vec![0xff, 0xfe, 0x00]),
+            ("too-big", too_big),
+        ];
+        for (tag, bytes) in &files {
+            std::fs::write(path(tag), bytes).expect("the temp folder is writable");
+        }
+
+        assert!(read_case_file(&path("good"), rules).is_ok());
+        for tag in ["truncated", "not-utf8"] {
+            let error = read_case_file(&path(tag), rules).unwrap_err();
+            assert!(!error.is_empty(), "{tag} is refused with a reason");
+        }
+        let error = read_case_file(&path("too-big"), rules).unwrap_err();
+        assert!(error.contains("larger than 4 MB"), "{error}");
+        let error = read_case_file(&path("missing"), rules).unwrap_err();
+        assert!(!error.is_empty(), "a missing file is refused with a reason");
+
+        for (tag, _) in &files {
+            std::fs::remove_file(path(tag)).ok();
         }
     }
 

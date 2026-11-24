@@ -19,9 +19,12 @@ Non-negotiables:
 ```powershell
 cargo run -p classivar                  # run the app
 cargo run -p classivar -- --rules path\to\file.toml   # try another rule file
+cargo run -p classivar -- --open path\to\case.classivar.json   # debug only: launch directly into a saved case
+powershell -ExecutionPolicy Bypass -File scripts/prototype.ps1   # live-reload HTML/CSS screen prototypes
 cargo test --workspace --locked         # all offline tests
 cargo test -p classivar-sources -- --ignored           # live service tests (network)
 powershell -ExecutionPolicy Bypass -File scripts/check.ps1   # the merge gate
+cargo check -p classivar --release --locked            # after editing #[cfg(debug_assertions)] code
 powershell -ExecutionPolicy Bypass -File scripts/gui-smoke.ps1   # Windows UI smoke test
 cargo run -p classivar-core --example review_packet > docs/review/REVIEW-PACKET.md   # after editing rules or sign-offs
 cargo run -p classivar-core --example erepo_benchmark > docs/review/BENCHMARK-erepo.md # after a clinical rule change
@@ -44,7 +47,8 @@ crates/classivar/            GPUI app: main.rs, view.rs (Workbench state), view/
                              view/panels/identity_card.rs: the checked variant as a card (`identity_view` is the tested words). view/real_case.rs (tests only): the published RYR1 case the window tests load.
                              view/types.rs: the plain screen types (Choice, Record, Lookup, Boxes, Handles, StageMemory). view/variant.rs + variant_state.rs: the variant check, condition and ClinVar import; view/clinvar_records.rs: submissions to records (tested); view/rules_window.rs: Rules… opens another rule file in a new window; rule_file.rs: reading a rule file (start-up and Rules…)
                              view/headless.rs: tests that draw the real window in GPUI's test platform (see "Verify a UI change"); view/headless_case.rs: the variant, condition, ClinVar, PVS1 gene-level and note paths; view/headless_keys.rs: the same window with real key events (Tab, Enter, Escape)
-docs/                        ROADMAP.md is the current status; ARCHITECTURE.md is the map; AUDIT is historical
+                             dev_reload.rs, view/reload.rs: #[cfg(debug_assertions)] live reload for assets/classivar-theme.json (with WCAG contrast warnings) and --rules; view/headless_dev.rs: headless tests for live reload and --open
+docs/                        ROADMAP.md is the current status; ARCHITECTURE.md is the map; AUDIT is historical; design/prototype/ (tokens.css, starter.html, README.md) is the HTML/CSS prototype kit
 ```
 
 Key types: `RuleSet` → `Applied` → `Assessment` (`class()`, `points_class`, `classic_class`, `conflicts`, `both_sides_met`) → `Reevaluation`/`Verdict` → `CaseFile`.
@@ -68,6 +72,9 @@ Key types: `RuleSet` → `Applied` → `Assessment` (`class()`, `points_class`, 
 - Colours: use theme tokens for chrome, and the checked WCAG pairs in `design.rs` (`class_fill`/`class_ink`, `direction_colour`/`direction_ink`, warning pair) for meaning. Do not write a raw `rgb(...)` in a view file. Extend the contrast test for both themes if you add a pair.
 - The debug build once overflowed the 1 MB Windows stack. Keep render functions small; `build.rs` requests 16 MB as a second safety net.
 - Saved case files contain variant, gene and lab history. `*.classivar.json` is git-ignored; keep it that way. `CaseFile::from_json` caps field lengths and the record count. The variant, lab-name and year limits are public constants in `case.rs` that the app types against, so there is one number to change. The gene symbol shape is `classivar_sources::is_gene_symbol`.
+- Keep dev helpers out of release builds: `--open`, `--theme`, `dev_reload.rs` and `view/reload.rs` stay gated behind `#[cfg(debug_assertions)]`. Release builds accept only `--rules` and run no file watchers.
+- No user-overridable runtime UI shell: keep the production UI in tested Rust/GPUI rather than a runtime script layer, so `UNVERIFIED` status, withheld classes, WCAG contrast and `accessibility_label`/`aria_label` hooks remain compile-time and test-enforced.
+- Prototype major UI changes first: start new screens or large layout changes from `docs/design/prototype/starter.html` (using real RYR1 data, never fictional cases) and verify Light/Dark, 1240×900/960×600, Empty/Withheld states and the `UNVERIFIED` pill before porting to Rust/GPUI.
 
 ## Verify a UI change
 
@@ -76,6 +83,8 @@ The unit tests do not draw the window, and a stack overflow or a bad binding onl
 1. `scripts/check.ps1`. It includes the headless window tests (`crates/classivar/src/view/headless.rs`): they draw the real window in GPUI's test platform with no screen, mouse or keyboard, so run them freely, also while the user is working. Most set state directly and do not click. `headless_keys.rs` sends key events and reads which element has the focus: use it for any keyboard path. A button answers Enter on key release, so send both the press and the release (see `press_enter` there).
 2. `scripts/gui-smoke.ps1`. **It takes over the user's mouse and keyboard and must not run while the user is using the machine** (it also fails when they touch it). Ask first, or run it only when the user says the machine is free. (it never calls the live sources, so it runs offline; it refuses to act unless ClassiVAR is the foreground window; screenshots go to `%TEMP%\classivar-smoke`)
 3. Click the changed path yourself if the smoke script does not cover it (Save/Open dialogs and keyboard are not covered).
+4. If you touched `#[cfg(debug_assertions)]` code, also run `cargo check -p classivar --release --locked` (the merge gate builds debug only, so release-mode unused imports or dead code would otherwise be missed).
+5. When creating or editing a prototype in `docs/design/prototype/`, verify both Light and Dark themes and avoid `vh` units or `height: 100%` on `html`/`body` so browser and inline previews render cleanly.
 
 ## Gotchas
 
@@ -94,4 +103,5 @@ Update, in the same change:
 - `docs/ROADMAP.md`: what is done, what is next, and any decision the user must make.
 - `docs/ARCHITECTURE.md`: layout, data flow, test counts, known problems.
 - `docs/MVP.md` and `docs/design/design-brief.md` only if scope or the design claim changed.
+- `docs/design/prototype/tokens.css` (and the inline fallback block in `starter.html`) when colours or layout tokens change in `assets/classivar-theme.json`, `design.rs` or `look.rs`.
 - `rules/acmg-amp-points.toml` header/notes if clinical content changed.

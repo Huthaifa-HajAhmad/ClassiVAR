@@ -84,6 +84,8 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo build --workspace --locked
+      # Debug-only code is compiled out here, so unused imports or dead code show only in release mode.
+      - run: cargo check -p classivar --release --locked
 
   audit:
     runs-on: ubuntu-latest

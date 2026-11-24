@@ -48,6 +48,8 @@ mod gene;
 mod headless;
 #[cfg(test)]
 mod headless_case;
+#[cfg(all(test, debug_assertions))]
+mod headless_dev;
 #[cfg(test)]
 mod headless_focus;
 #[cfg(test)]
@@ -63,6 +65,8 @@ mod real_case;
 use helper_state::{AssayRoute, Helpers, PhenotypeGenes, new_box};
 mod panels;
 mod records;
+#[cfg(debug_assertions)]
+mod reload;
 mod rules_window;
 mod types;
 mod unsaved;
@@ -70,6 +74,9 @@ mod variant;
 mod variant_state;
 mod watchers;
 mod widgets;
+
+#[cfg(debug_assertions)]
+pub(crate) use case_io::read_case_file;
 
 use types::*;
 
@@ -151,6 +158,8 @@ pub struct Workbench {
     next_record: u32,
     /// Counts lookups, so a slow old answer cannot replace a newer one.
     lookup_id: u64,
+    #[cfg(debug_assertions)]
+    _dev_watch: Option<Task<()>>,
     _lookup_tasks: Vec<Task<()>>,
     _file_task: Option<Task<()>>,
     _subscriptions: Vec<Subscription>,
@@ -203,6 +212,8 @@ impl Workbench {
             saved_case: None,
             next_record: 1,
             lookup_id: 0,
+            #[cfg(debug_assertions)]
+            _dev_watch: None,
             _lookup_tasks: Vec::new(),
             _file_task: None,
             _subscriptions: subscriptions,

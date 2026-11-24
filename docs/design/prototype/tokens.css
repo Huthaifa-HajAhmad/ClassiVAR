@@ -1,0 +1,347 @@
+/* ClassiVAR Prototype Tokens & Calm-Instrument Components
+ * Mirrors crates/classivar/assets/classivar-theme.json, design.rs, and look.rs.
+ */
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src:
+    local("JetBrains Mono"),
+    url("/assets/fonts/JetBrainsMono-Regular.ttf") format("truetype"),
+    url("../../../crates/classivar/assets/fonts/JetBrainsMono-Regular.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src:
+    local("JetBrains Mono SemiBold"),
+    url("/assets/fonts/JetBrainsMono-SemiBold.ttf") format("truetype"),
+    url("../../../crates/classivar/assets/fonts/JetBrainsMono-SemiBold.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src:
+    local("JetBrains Mono Bold"),
+    url("/assets/fonts/JetBrainsMono-Bold.ttf") format("truetype"),
+    url("../../../crates/classivar/assets/fonts/JetBrainsMono-Bold.ttf") format("truetype");
+}
+
+:root {
+  color-scheme: light;
+
+  /* Chrome (light, from classivar-theme.json) */
+  --background: #eeede9;
+  --foreground: #141414;
+  --border: #dcdad3;
+  --input-border: #85827a;
+  --muted: #e5e4df;
+  --muted-foreground: #5a5954;
+  --accent: #e2e0da;
+  --accent-foreground: #141414;
+  --secondary: #e5e4df;
+  --secondary-foreground: #141414;
+  --popover: #fdfdfc;
+  --popover-foreground: #141414;
+  --primary: #141414;
+  --primary-hover: #2a2a28;
+  --primary-active: #000000;
+  --primary-foreground: #ffffff;
+  --ring: #141414;
+
+  /* Semantic colours (from design.rs) */
+  --pathogenic: #c62828;
+  --benign: #1f5fb5;
+  --direction-ink: #ffffff;
+  --warning-fill: #ffe9a8;
+  --warning-ink: #2b2100;
+  --confirm-fill: #d6efdc;
+  --confirm-ink: #0b2a14;
+  --scrim: rgba(0, 0, 0, 0.45);
+
+  /* Classes (light, from design.rs) */
+  --class-p-fill: #c62828;
+  --class-p-ink: #ffffff;
+  --class-lp-fill: #f6c9c8;
+  --class-lp-ink: #0b0b0b;
+  --class-vus-fill: #e6e5e0;
+  --class-vus-ink: #0b0b0b;
+  --class-lb-fill: #cde2fb;
+  --class-lb-ink: #0b0b0b;
+  --class-b-fill: #1f5fb5;
+  --class-b-ink: #ffffff;
+
+  /* PanelApp ratings */
+  --panel-green-fill: #cdebd3;
+  --panel-green-ink: #0b3a17;
+  --panel-amber-fill: #ffe0a6;
+  --panel-amber-ink: #3d2600;
+  --panel-red-fill: #f8d0cc;
+  --panel-red-ink: #5c0f0b;
+
+  /* Geometry, type, shadows (from look.rs) */
+  --panel-radius: 16px;
+  --card-radius: 10px;
+  --chip-radius: 7px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --edge-emphasis: color-mix(in srgb, var(--foreground) 55%, transparent);
+  --edge-hover: color-mix(in srgb, var(--foreground) 30%, transparent);
+  --shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.06), 0 12px 32px -12px rgba(0, 0, 0, 0.1);
+  --shadow-lift: 0 1px 3px rgba(0, 0, 0, 0.12);
+  --segment-raised: var(--popover);
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --background: #0e0f11;
+  --foreground: #eceae4;
+  --border: #272a2f;
+  --input-border: #6d6e6a;
+  --muted: #1d2024;
+  --muted-foreground: #a3a39c;
+  --accent: #2a2e34;
+  --accent-foreground: #f4f2ec;
+  --secondary: #1d2024;
+  --secondary-foreground: #eceae4;
+  --popover: #16181b;
+  --popover-foreground: #eceae4;
+  --primary: #eceae4;
+  --primary-hover: #ffffff;
+  --primary-active: #c9c7c0;
+  --primary-foreground: #0e0f11;
+  --ring: #c9c7c0;
+
+  --class-p-fill: #c62828;
+  --class-p-ink: #ffffff;
+  --class-lp-fill: #5f1b1b;
+  --class-lp-ink: #ffd9d5;
+  --class-vus-fill: #33332f;
+  --class-vus-ink: #e8e7e1;
+  --class-lb-fill: #173a5e;
+  --class-lb-ink: #d6e8ff;
+  --class-b-fill: #1f5fb5;
+  --class-b-ink: #ffffff;
+
+  --shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.5), 0 12px 32px -12px rgba(0, 0, 0, 0.45);
+  --shadow-lift: 0 1px 3px rgba(0, 0, 0, 0.55);
+  --segment-raised: var(--accent);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+.cv-panel {
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--panel-radius);
+  box-shadow: var(--shadow-panel);
+}
+
+.cv-card {
+  background: var(--muted);
+  border-radius: var(--card-radius);
+  padding: var(--space-3);
+}
+
+.cv-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted-foreground);
+}
+
+.cv-section-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cv-section-title {
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.cv-display {
+  font-size: 34px;
+  line-height: 40px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.cv-figure {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.cv-caption {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted-foreground);
+}
+
+.cv-segmented {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--card-radius);
+  background: var(--muted);
+}
+
+.cv-segment {
+  border: none;
+  background: transparent;
+  color: var(--muted-foreground);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: var(--chip-radius);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.cv-segment:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+.cv-segment[aria-pressed="true"] {
+  background: var(--segment-raised);
+  color: var(--foreground);
+  box-shadow: var(--shadow-lift);
+}
+
+.cv-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+
+.cv-pill-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--warning-fill);
+  border: 1px solid var(--warning-ink);
+  flex: none;
+}
+
+.cv-btn {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.cv-btn:focus-visible,
+.cv-segment:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.cv-btn-ghost:hover {
+  background: var(--accent);
+}
+
+.cv-btn-outline {
+  border-color: var(--border);
+}
+
+.cv-btn-outline:hover {
+  background: var(--accent);
+}
+
+.cv-btn-primary {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.cv-btn-primary:hover {
+  background: var(--primary-hover);
+}
+
+.cv-notice {
+  background: var(--warning-fill);
+  color: var(--warning-ink);
+  border-radius: var(--card-radius);
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 19px;
+  font-weight: 500;
+}
+
+.cv-chip {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cv-chip-pathogenic {
+  background: var(--pathogenic);
+  color: var(--direction-ink);
+}
+
+.cv-chip-benign {
+  background: var(--benign);
+  color: var(--direction-ink);
+}
+
+.cv-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
