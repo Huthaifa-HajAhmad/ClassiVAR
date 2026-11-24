@@ -91,7 +91,7 @@ impl Workbench {
                 .child(div().w(px(64.)).flex_none().text_sm().font_weight(FontWeight::SEMIBOLD).child(row.gene.clone()))
                 .child(div().flex_1().min_w_0().text_sm().whitespace_normal().child(row.variant.clone()))
                 .child(
-                    crate::look::figure(10.5)
+                    crate::look::figure(crate::look::SMALL_TEXT)
                         .flex_none()
                         .text_color(muted)
                         .font_weight(FontWeight::NORMAL)

@@ -85,7 +85,7 @@ impl Workbench {
         let theme = cx.theme();
         let (ink, muted) = (theme.foreground, theme.muted_foreground);
         let count = (applied > 0).then(|| {
-            crate::look::figure(10.5)
+            crate::look::figure(crate::look::SMALL_TEXT)
                 .px(px(6.))
                 .rounded_full()
                 .bg(theme.foreground)

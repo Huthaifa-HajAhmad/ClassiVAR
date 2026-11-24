@@ -15,4 +15,6 @@ Run @('cargo', 'fmt', '--all', '--check')
 Run @('cargo', 'clippy', '--workspace', '--all-targets', '--locked', '--', '-D', 'warnings')
 Run @('cargo', 'test', '--workspace', '--locked')
 Run @('cargo', 'build', '--workspace', '--locked')
+# The lines above build debug only; this catches code that is unused once debug-only code is left out.
+Run @('cargo', 'check', '-p', 'classivar', '--release', '--locked')
 Write-Host 'All checks passed.' -ForegroundColor Green

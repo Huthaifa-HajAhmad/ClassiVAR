@@ -1,0 +1,1305 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ClassiVAR Prototype · Calm Instrument Workbench</title>
+  <style id="tokens-fallback">
+    :root {
+      color-scheme: light;
+      --background: #eeede9;
+      --foreground: #141414;
+      --border: #dcdad3;
+      --input-border: #85827a;
+      --muted: #e5e4df;
+      --muted-foreground: #5a5954;
+      --accent: #e2e0da;
+      --accent-foreground: #141414;
+      --secondary: #e5e4df;
+      --secondary-foreground: #141414;
+      --popover: #fdfdfc;
+      --popover-foreground: #141414;
+      --primary: #141414;
+      --primary-hover: #2a2a28;
+      --primary-active: #000000;
+      --primary-foreground: #ffffff;
+      --ring: #141414;
+      --pathogenic: #c62828;
+      --benign: #1f5fb5;
+      --direction-ink: #ffffff;
+      --warning-fill: #ffe9a8;
+      --warning-ink: #2b2100;
+      --confirm-fill: #d6efdc;
+      --confirm-ink: #0b2a14;
+      --scrim: rgba(0, 0, 0, 0.45);
+      --class-p-fill: #c62828;
+      --class-p-ink: #ffffff;
+      --class-lp-fill: #f6c9c8;
+      --class-lp-ink: #0b0b0b;
+      --class-vus-fill: #e6e5e0;
+      --class-vus-ink: #0b0b0b;
+      --class-lb-fill: #cde2fb;
+      --class-lb-ink: #0b0b0b;
+      --class-b-fill: #1f5fb5;
+      --class-b-ink: #ffffff;
+      --panel-green-fill: #cdebd3;
+      --panel-green-ink: #0b3a17;
+      --panel-amber-fill: #ffe0a6;
+      --panel-amber-ink: #3d2600;
+      --panel-red-fill: #f8d0cc;
+      --panel-red-ink: #5c0f0b;
+      --panel-radius: 16px;
+      --card-radius: 10px;
+      --chip-radius: 7px;
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-6: 24px;
+      --space-8: 32px;
+      --edge-emphasis: color-mix(in srgb, var(--foreground) 55%, transparent);
+      --edge-hover: color-mix(in srgb, var(--foreground) 30%, transparent);
+      --shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.06), 0 12px 32px -12px rgba(0, 0, 0, 0.1);
+      --shadow-lift: 0 1px 3px rgba(0, 0, 0, 0.12);
+      --segment-raised: var(--popover);
+      --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    [data-theme="dark"] {
+      color-scheme: dark;
+      --background: #0e0f11;
+      --foreground: #eceae4;
+      --border: #272a2f;
+      --input-border: #6d6e6a;
+      --muted: #1d2024;
+      --muted-foreground: #a3a39c;
+      --accent: #2a2e34;
+      --accent-foreground: #f4f2ec;
+      --secondary: #1d2024;
+      --secondary-foreground: #eceae4;
+      --popover: #16181b;
+      --popover-foreground: #eceae4;
+      --primary: #eceae4;
+      --primary-hover: #ffffff;
+      --primary-active: #c9c7c0;
+      --primary-foreground: #0e0f11;
+      --ring: #c9c7c0;
+      --class-p-fill: #c62828;
+      --class-p-ink: #ffffff;
+      --class-lp-fill: #5f1b1b;
+      --class-lp-ink: #ffd9d5;
+      --class-vus-fill: #33332f;
+      --class-vus-ink: #e8e7e1;
+      --class-lb-fill: #173a5e;
+      --class-lb-ink: #d6e8ff;
+      --class-b-fill: #1f5fb5;
+      --class-b-ink: #ffffff;
+      --shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.5), 0 12px 32px -12px rgba(0, 0, 0, 0.45);
+      --shadow-lift: 0 1px 3px rgba(0, 0, 0, 0.55);
+      --segment-raised: var(--accent);
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    .cv-panel { background: var(--popover); color: var(--popover-foreground); border: 1px solid var(--border); border-radius: var(--panel-radius); box-shadow: var(--shadow-panel); }
+    .cv-card { background: var(--muted); border-radius: var(--card-radius); padding: var(--space-3); }
+    .cv-eyebrow { font-family: var(--font-mono); font-size: 11px; line-height: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted-foreground); }
+    .cv-section-head { display: flex; flex-direction: column; gap: 2px; }
+    .cv-section-title { font-size: 18px; line-height: 24px; font-weight: 600; color: var(--foreground); }
+    .cv-display { font-size: 34px; line-height: 40px; font-weight: 600; color: var(--foreground); }
+    .cv-figure { font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .cv-caption { font-size: 12px; line-height: 16px; color: var(--muted-foreground); }
+    .cv-segmented { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: var(--card-radius); background: var(--muted); }
+    .cv-segment { border: none; background: transparent; color: var(--muted-foreground); font: inherit; font-size: 12px; font-weight: 500; padding: 4px 10px; border-radius: var(--chip-radius); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+    .cv-segment:hover { background: var(--accent); color: var(--foreground); }
+    .cv-segment[aria-pressed="true"] { background: var(--segment-raised); color: var(--foreground); box-shadow: var(--shadow-lift); }
+    .cv-pill { display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; border-radius: 999px; background: var(--popover); border: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px; color: var(--muted-foreground); white-space: nowrap; }
+    .cv-pill-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--warning-fill); border: 1px solid var(--warning-ink); flex: none; }
+    .cv-btn { border: 1px solid transparent; background: transparent; color: var(--foreground); font: inherit; font-size: 12px; font-weight: 500; padding: 5px 10px; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+    .cv-btn:focus-visible, .cv-segment:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+    .cv-btn-ghost:hover { background: var(--accent); }
+    .cv-btn-outline { border-color: var(--border); }
+    .cv-btn-outline:hover { background: var(--accent); }
+    .cv-btn-primary { background: var(--primary); color: var(--primary-foreground); }
+    .cv-btn-primary:hover { background: var(--primary-hover); }
+    .cv-notice { background: var(--warning-fill); color: var(--warning-ink); border-radius: var(--card-radius); padding: 10px 14px; font-size: 13px; line-height: 19px; font-weight: 500; }
+    .cv-chip { font-family: var(--font-mono); font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 6px; display: inline-flex; align-items: center; gap: 5px; }
+    .cv-chip-pathogenic { background: var(--pathogenic); color: var(--direction-ink); }
+    .cv-chip-benign { background: var(--benign); color: var(--direction-ink); }
+    .cv-badge { font-family: var(--font-mono); font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; }
+  </style>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      font-family: var(--font-sans);
+      background: #d8d6d0;
+      color: var(--foreground);
+      min-height: 100%;
+    }
+    [data-theme="dark"] body {
+      background: #060708;
+    }
+
+    /* Collapsible prototype toolbar (outside the simulated app frame) */
+    .proto-bar {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 16px;
+      background: var(--popover);
+      color: var(--foreground);
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+    .proto-bar.collapsed .proto-controls {
+      display: none;
+    }
+    .proto-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+    }
+    .proto-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .proto-status {
+      margin-left: auto;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted-foreground);
+    }
+
+    /* Viewport frame */
+    .proto-stage-wrap {
+      display: flex;
+      justify-content: center;
+      padding: 16px;
+    }
+    .proto-stage-wrap.frame-full {
+      padding: 0;
+    }
+    .app-frame {
+      width: 100%;
+      background: var(--background);
+      color: var(--foreground);
+      display: flex;
+      flex-direction: column;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-panel);
+      overflow: hidden;
+    }
+    .app-frame.size-1240 {
+      width: 1240px;
+      min-height: 820px;
+    }
+    .app-frame.size-960 {
+      width: 960px;
+      min-height: 600px;
+    }
+    .app-frame.size-full {
+      width: 100%;
+      min-height: 760px;
+      border-radius: 0;
+      border: none;
+    }
+
+    /* Title bar & Top bar */
+    .titlebar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px 4px;
+      background: var(--background);
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 16px 12px;
+    }
+    .topbar .spacer { flex: 1; }
+    .divider-v {
+      width: 1px;
+      height: 18px;
+      background: var(--border);
+    }
+    .app-frame.is-narrow .research-note {
+      display: none;
+    }
+
+    /* Main 3-column workspace */
+    .workspace {
+      display: flex;
+      gap: 16px;
+      padding: 0 16px 16px;
+      flex: 1;
+      min-height: 0;
+      align-items: stretch;
+    }
+
+    /* Rail */
+    .rail {
+      width: 244px;
+      flex: none;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      padding: 6px 2px;
+    }
+    .app-frame.is-narrow .rail {
+      display: none;
+    }
+    .rail-stops {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-left: 18px;
+    }
+    .rail-stops::before {
+      content: "";
+      position: absolute;
+      left: 5px;
+      top: 18px;
+      bottom: 24px;
+      width: 1px;
+      background: var(--border);
+    }
+    .stop-row {
+      position: relative;
+    }
+    .stop-dot {
+      position: absolute;
+      left: -18px;
+      top: 14px;
+      width: 11px;
+      height: 11px;
+      border-radius: 999px;
+      border: 2px solid var(--muted-foreground);
+      background: var(--background);
+    }
+    .stop-row.active .stop-dot {
+      border-color: var(--foreground);
+      background: var(--foreground);
+    }
+    .stop-btn {
+      width: 100%;
+      text-align: left;
+      border: none;
+      background: transparent;
+      color: var(--foreground);
+      padding: 8px 10px;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font: inherit;
+    }
+    .stop-btn:hover { background: var(--accent); }
+    .stop-row.active .stop-btn {
+      background: var(--popover);
+      box-shadow: var(--shadow-lift);
+    }
+    .stop-title {
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 17px;
+    }
+    .mini-scale {
+      display: grid;
+      grid-template-columns: 2fr 5fr 7fr 4fr 2fr;
+      gap: 1px;
+      height: 5px;
+      border-radius: 999px;
+      overflow: hidden;
+      margin-top: 2px;
+    }
+    .mini-zone { opacity: 0.28; }
+    .mini-zone.active { opacity: 1; }
+    .stop-pts {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted-foreground);
+      text-align: right;
+    }
+
+    /* Stage */
+    .stage {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .stage-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 22px 8px;
+      flex-wrap: wrap;
+    }
+    .stage-body {
+      padding: 10px 28px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+      overflow-y: auto;
+    }
+    .hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      text-align: center;
+    }
+    .hero-left {
+      align-items: stretch;
+      text-align: left;
+    }
+    .readout-pts {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+    }
+    .block-chip {
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--foreground);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font: inherit;
+      font-size: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+    .block-chip:hover { background: var(--accent); }
+    .block-chip.selected { border-color: var(--foreground); background: var(--muted); }
+    .dot-dir {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      display: inline-block;
+    }
+    .inspector-box {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      text-align: left;
+      border: 1px solid var(--border);
+    }
+    .insights-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+      gap: 12px;
+      width: 100%;
+    }
+    .sections-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+    .makeup-row {
+      display: grid;
+      grid-template-columns: 92px 1fr auto;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 0;
+    }
+    .makeup-row + .makeup-row {
+      border-top: 1px solid var(--border);
+    }
+    .bar-track {
+      height: 8px;
+      background: var(--popover);
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .bar-fill {
+      height: 100%;
+      background: var(--pathogenic);
+      border-radius: 999px;
+    }
+
+    /* Right Editor Sheet */
+    .sheet {
+      width: 380px;
+      flex: none;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .app-frame.is-narrow .sheet {
+      width: 340px;
+    }
+    .app-frame.is-reading .sheet {
+      display: none;
+    }
+    .sheet-head {
+      padding: 14px 18px 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .sheet-body {
+      padding: 12px 16px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+    }
+    .form-section {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .form-section + .form-section {
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: 96px 1fr;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+    .cv-input {
+      width: 100%;
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--input-border);
+      background: var(--popover);
+      color: var(--foreground);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    .tabs-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab-btn {
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted-foreground);
+      font: inherit;
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 7px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .tab-btn.active {
+      background: var(--muted);
+      color: var(--foreground);
+      font-weight: 600;
+      border-color: var(--border);
+    }
+    .tab-count {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 0 6px;
+      border-radius: 999px;
+      background: var(--foreground);
+      color: var(--background);
+    }
+    .criterion-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border-radius: var(--card-radius);
+    }
+    .criterion-row.applied {
+      background: var(--muted);
+    }
+    .code-btn {
+      width: 56px;
+      flex: none;
+      padding: 4px 0;
+      border-radius: 7px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--foreground);
+    }
+    .code-btn.applied-p {
+      background: var(--pathogenic);
+      color: var(--direction-ink);
+      border-color: transparent;
+    }
+    .code-btn.applied-b {
+      background: var(--benign);
+      color: var(--direction-ink);
+      border-color: transparent;
+    }
+    .strength-pill {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--foreground);
+      white-space: nowrap;
+    }
+
+    /* Comparison table */
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    .history-table th,
+    .history-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+    }
+    .history-table th {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      color: var(--muted-foreground);
+    }
+  </style>
+</head>
+<body>
+  <header class="proto-bar" id="proto-bar">
+    <span class="cv-eyebrow">Prototype</span>
+    <div class="proto-controls">
+      <div class="proto-group">
+        <span class="cv-caption">Theme</span>
+        <div class="cv-segmented" role="group" aria-label="Prototype theme">
+          <button class="cv-segment" id="proto-light" aria-pressed="true" onclick="setTheme('light')">Light</button>
+          <button class="cv-segment" id="proto-dark" aria-pressed="false" onclick="setTheme('dark')">Dark</button>
+        </div>
+      </div>
+      <div class="proto-group">
+        <span class="cv-caption">Window</span>
+        <div class="cv-segmented" role="group" aria-label="Preview viewport">
+          <button class="cv-segment" id="vp-1240" aria-pressed="true" onclick="setViewport('1240')">1240×900</button>
+          <button class="cv-segment" id="vp-960" aria-pressed="false" onclick="setViewport('960')">960×600</button>
+          <button class="cv-segment" id="vp-full" aria-pressed="false" onclick="setViewport('full')">Full</button>
+        </div>
+      </div>
+      <div class="proto-group">
+        <span class="cv-caption">Case state</span>
+        <div class="cv-segmented" role="group" aria-label="Case state">
+          <button class="cv-segment" id="case-ryr1" aria-pressed="true" onclick="setCase('ryr1')">RYR1 (Pathogenic +12)</button>
+          <button class="cv-segment" id="case-withheld" aria-pressed="false" onclick="setCase('withheld')">Withheld (Conflict)</button>
+          <button class="cv-segment" id="case-empty" aria-pressed="false" onclick="setCase('empty')">Empty (No class)</button>
+        </div>
+      </div>
+      <span class="proto-status" id="proto-sync">Local preview</span>
+    </div>
+    <button class="cv-btn cv-btn-ghost" id="proto-bar-toggle" onclick="toggleProtoBar()">Hide bar</button>
+  </header>
+
+  <main class="proto-stage-wrap" id="stage-wrap">
+    <section class="app-frame size-1240" id="app-frame" aria-label="ClassiVAR Workbench Prototype">
+      <div class="titlebar">
+        <svg width="18" height="11" viewBox="0 0 18 11" aria-hidden="true">
+          <path d="M 2 10 A 7 7 0 0 1 16 10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <line x1="9" y1="10" x2="13" y2="3.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <span style="font-size:13px;font-weight:600">ClassiVAR</span>
+      </div>
+
+      <div class="topbar">
+        <div class="cv-segmented" role="group" aria-label="Assessment mode">
+          <button class="cv-segment" id="mode-new" aria-pressed="false" onclick="setMode('new')">New variant</button>
+          <button class="cv-segment" id="mode-reported" aria-pressed="true" onclick="setMode('reported')">Reported variant</button>
+        </div>
+        <span class="cv-caption research-note">Research use · not for clinical reporting</span>
+        <span class="spacer"></span>
+        <span class="cv-pill" id="rules-pill">
+          <span class="cv-pill-dot"></span>
+          <span>UNVERIFIED rules v0.14.0-draft</span>
+        </span>
+        <span class="divider-v"></span>
+        <button class="cv-btn cv-btn-ghost" id="app-rules">Rules</button>
+        <button class="cv-btn cv-btn-ghost" id="app-open">Open</button>
+        <button class="cv-btn cv-btn-primary" id="app-save">Save</button>
+        <span class="divider-v"></span>
+        <div class="cv-segmented" role="group" aria-label="Theme">
+          <button class="cv-segment" id="app-light" aria-pressed="true" onclick="setTheme('light')">Light</button>
+          <button class="cv-segment" id="app-dark" aria-pressed="false" onclick="setTheme('dark')">Dark</button>
+        </div>
+      </div>
+
+      <div class="workspace">
+        <aside class="rail" id="rail" aria-label="Case and reports over time"></aside>
+        <section class="stage cv-panel" aria-label="Explanation stage">
+          <div class="stage-toolbar" id="stage-toolbar"></div>
+          <div class="stage-body" id="stage-body"></div>
+        </section>
+        <aside class="sheet cv-panel" aria-label="Evidence editor">
+          <div class="sheet-head">
+            <span class="cv-eyebrow">Today (you)</span>
+            <strong style="font-size:16px">Evidence</strong>
+            <span class="cv-caption">Click a code to apply it. You decide which criteria apply.</span>
+          </div>
+          <div class="sheet-body" id="sheet-body"></div>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const REAL_RECORDS = [
+      {
+        label: "ClinGen Malignant Hyperthermia Susceptibility VCEP",
+        year: 2023,
+        cls: "LP",
+        clsName: "Likely Pathogenic",
+        condition: "malignant hyperthermia, susceptibility to, 1 (MONDO:0007783)",
+        total: 8,
+        criteria: { PP1: "Moderate", PM1: "Moderate", PS4: "Moderate", PS3: "Moderate" }
+      },
+      {
+        label: "ClinGen Congenital Myopathies VCEP",
+        year: 2026,
+        cls: "P",
+        clsName: "Pathogenic",
+        condition: "RYR1-related myopathy (MONDO:0100150)",
+        total: 12,
+        criteria: { PP3: "Supporting", PS3: "Moderate", PM2: "Supporting", PS4: "Strong", PP1: "Strong" }
+      }
+    ];
+
+    const CRITERIA_TABS = [
+      { id: "variant", label: "Variant type", codes: [
+        { code: "PVS1", dir: "p", title: "Null variant where LoF is a known mechanism", def: "Very strong" },
+        { code: "PS1", dir: "p", title: "Same amino acid change as established pathogenic", def: "Strong" },
+        { code: "PM1", dir: "p", title: "Mutational hot spot or critical functional domain", def: "Moderate" },
+        { code: "BP7", dir: "b", title: "Synonymous variant with no predicted splicing impact", def: "Supporting" }
+      ]},
+      { id: "population", label: "Population", helper: "Population frequency", codes: [
+        { code: "BA1", dir: "b", title: "Allele frequency > 5% in population dataset", def: "Stand-alone" },
+        { code: "BS1", dir: "b", title: "Allele frequency greater than expected for disorder", def: "Strong" },
+        { code: "PM2", dir: "p", title: "Absent from controls (or extremely low frequency)", def: "Supporting" }
+      ]},
+      { id: "computational", label: "Computational", helper: "Predictor score", codes: [
+        { code: "PP3", dir: "p", title: "Multiple lines of computational evidence support deleterious effect", def: "Supporting" },
+        { code: "BP4", dir: "b", title: "Multiple lines of computational evidence suggest no impact", def: "Supporting" }
+      ]},
+      { id: "functional", label: "Functional", helper: "Functional assay", codes: [
+        { code: "PS3", dir: "p", title: "Well-established functional studies show damaging effect", def: "Strong" },
+        { code: "BS3", dir: "b", title: "Well-established functional studies show no damaging effect", def: "Strong" }
+      ]},
+      { id: "family", label: "Family & cases", helper: "Family and phenotype", codes: [
+        { code: "PS4", dir: "p", title: "Prevalence in affected significantly increased over controls", def: "Strong" },
+        { code: "PP1", dir: "p", title: "Cosegregation with disease in multiple affected family members", def: "Supporting" },
+        { code: "BS4", dir: "b", title: "Lack of segregation in affected family members", def: "Strong" }
+      ]}
+    ];
+
+    const state = {
+      theme: "light",
+      viewport: "1240",
+      caseKind: "ryr1",
+      mode: "reported",
+      stageTab: "evidence",
+      picture: "dial",
+      reading: false,
+      activeTab: "family",
+      inspected: null,
+      previewWithout: false,
+      today: [
+        { code: "PS4", dir: "p", strength: "Strong", pts: 4, summary: "Prevalence in affected individuals significantly increased over controls." },
+        { code: "PP1", dir: "p", strength: "Strong", pts: 4, summary: "Co-segregation with disease in multiple affected family members." },
+        { code: "PS3", dir: "p", strength: "Moderate", pts: 2, summary: "Functional studies supportive of a damaging effect." },
+        { code: "PM2", dir: "p", strength: "Supporting", pts: 1, summary: "Absent or extremely rare in population databases." },
+        { code: "PP3", dir: "p", strength: "Supporting", pts: 1, summary: "Computational evidence supports a deleterious effect." }
+      ]
+    };
+
+    function setTheme(t) {
+      state.theme = t;
+      document.documentElement.setAttribute("data-theme", t);
+      ["proto-light", "app-light"].forEach(id => document.getElementById(id).setAttribute("aria-pressed", String(t === "light")));
+      ["proto-dark", "app-dark"].forEach(id => document.getElementById(id).setAttribute("aria-pressed", String(t === "dark")));
+    }
+
+    function setViewport(vp) {
+      state.viewport = vp;
+      const wrap = document.getElementById("stage-wrap");
+      const frame = document.getElementById("app-frame");
+      wrap.classList.toggle("frame-full", vp === "full");
+      frame.classList.remove("size-1240", "size-960", "size-full", "is-narrow");
+      frame.classList.add("size-" + vp);
+      if (vp === "960") frame.classList.add("is-narrow");
+      ["1240", "960", "full"].forEach(k => document.getElementById("vp-" + k).setAttribute("aria-pressed", String(vp === k)));
+      render();
+    }
+
+    function setCase(kind) {
+      state.caseKind = kind;
+      state.inspected = null;
+      state.previewWithout = false;
+      state.stageTab = "evidence";
+      state.mode = kind === "ryr1" ? "reported" : "new";
+      ["ryr1", "withheld", "empty"].forEach(k => document.getElementById("case-" + k).setAttribute("aria-pressed", String(kind === k)));
+      render();
+    }
+
+    function setMode(m) {
+      state.mode = m;
+      if (m === "new") state.stageTab = "evidence";
+      render();
+    }
+
+    function toggleProtoBar() {
+      const bar = document.getElementById("proto-bar");
+      bar.classList.toggle("collapsed");
+      bar.querySelector("button:last-child").textContent = bar.classList.contains("collapsed") ? "Show bar" : "Hide bar";
+    }
+
+    function activeItems() {
+      if (state.caseKind === "empty") return [];
+      if (state.caseKind === "withheld") {
+        return [
+          { code: "PS4", dir: "p", strength: "Strong", pts: 4, summary: "Prevalence in affected individuals increased." },
+          { code: "PM2", dir: "p", strength: "Supporting", pts: 1, summary: "Absent in controls." },
+          { code: "BS1", dir: "b", strength: "Strong", pts: -4, summary: "Allele frequency greater than expected for disorder." }
+        ];
+      }
+      return state.today;
+    }
+
+    function classFor(items) {
+      if (state.caseKind === "empty" || items.length === 0) return null;
+      if (state.caseKind === "withheld") return { withheld: true };
+      const sum = items.reduce((a, b) => a + b.pts, 0);
+      if (sum >= 10) return { name: "Pathogenic", short: "P", fill: "var(--class-p-fill)", ink: "var(--class-p-ink)", total: sum, next: null };
+      if (sum >= 6) return { name: "Likely Pathogenic", short: "LP", fill: "var(--class-lp-fill)", ink: "var(--class-lp-ink)", total: sum, next: `${10 - sum} points below Pathogenic` };
+      if (sum >= 0) return { name: "Uncertain Significance", short: "VUS", fill: "var(--class-vus-fill)", ink: "var(--class-vus-ink)", total: sum, next: `${6 - sum} points below Likely Pathogenic` };
+      return { name: "Likely Benign", short: "LB", fill: "var(--class-lb-fill)", ink: "var(--class-lb-ink)", total: sum, next: null };
+    }
+
+    function renderDialSvg(items, info) {
+      const empty = !info || info.withheld;
+      const zones = [
+        { c: "var(--class-b-fill)", a0: 180, a1: 148, cls: "B" },
+        { c: "var(--class-lb-fill)", a0: 148, a1: 112, cls: "LB" },
+        { c: "var(--class-vus-fill)", a0: 112, a1: 68, cls: "VUS" },
+        { c: "var(--class-lp-fill)", a0: 68, a1: 32, cls: "LP" },
+        { c: "var(--class-p-fill)", a0: 32, a1: 0, cls: "P" }
+      ];
+      const pt = (r, deg) => {
+        const rad = (deg * Math.PI) / 180;
+        return [160 + r * Math.cos(rad), 156 - r * Math.sin(rad)];
+      };
+      const arc = (r1, r2, d0, d1) => {
+        const [x1, y1] = pt(r2, d0), [x2, y2] = pt(r2, d1);
+        const [x3, y3] = pt(r1, d1), [x4, y4] = pt(r1, d0);
+        return `M ${x1} ${y1} A ${r2} ${r2} 0 0 1 ${x2} ${y2} L ${x3} ${y3} A ${r1} ${r1} 0 0 0 ${x4} ${y4} Z`;
+      };
+      const bandPaths = zones.map(z => {
+        const isCurrent = info && !info.withheld && info.short === z.cls;
+        const fill = empty ? "var(--muted)" : z.c;
+        const op = empty ? 1 : (isCurrent ? 1 : 0.35);
+        const stroke = isCurrent ? "var(--edge-emphasis)" : "none";
+        return `<path d="${arc(106, 134, z.a0, z.a1)}" fill="${fill}" fill-opacity="${op}" stroke="${stroke}" stroke-width="2" />`;
+      }).join("");
+      const total = info && !info.withheld ? info.total : 0;
+      const needleDeg = empty ? null : Math.max(4, Math.min(176, 180 - ((total + 8) / 22) * 180));
+      const needle = needleDeg === null ? "" : (() => {
+        const [nx, ny] = pt(102, needleDeg);
+        return `<line x1="160" y1="156" x2="${nx}" y2="${ny}" stroke="var(--foreground)" stroke-width="3" stroke-linecap="round"/>
+                <circle cx="160" cy="156" r="5" fill="var(--foreground)"/>`;
+      })();
+      return `<svg width="320" height="172" viewBox="0 0 320 172" role="img" aria-label="Classification dial">${bandPaths}${needle}</svg>`;
+    }
+
+    function renderColumnSvg(items, info) {
+      const yOf = pts => Math.max(8, Math.min(182, 182 - ((pts + 8) / 22) * 174));
+      const zones = [
+        { c: "var(--class-p-fill)", from: 10, to: 14, cls: "P" },
+        { c: "var(--class-lp-fill)", from: 6, to: 10, cls: "LP" },
+        { c: "var(--class-vus-fill)", from: 0, to: 6, cls: "VUS" },
+        { c: "var(--class-lb-fill)", from: -6, to: 0, cls: "LB" },
+        { c: "var(--class-b-fill)", from: -8, to: -6, cls: "B" }
+      ];
+      const bands = zones.map(z => {
+        const yTop = yOf(z.to), yBot = yOf(z.from);
+        const active = info && !info.withheld && info.short === z.cls;
+        return `<rect x="44" y="${yTop}" width="44" height="${Math.max(4, yBot - yTop)}" rx="4" fill="${z.c}" fill-opacity="${active ? 1 : 0.35}" stroke="${active ? 'var(--edge-emphasis)' : 'none'}" stroke-width="1.5"/>
+                <text x="36" y="${(yTop + yBot) / 2 + 4}" text-anchor="end" font-family="JetBrains Mono" font-size="11" fill="var(--muted-foreground)">${z.cls}</text>`;
+      }).join("");
+      let cursor = yOf(0);
+      const blocks = items.map(it => {
+        const h = Math.max(12, Math.abs(yOf(it.pts) - yOf(0)));
+        const y = it.pts >= 0 ? cursor - h : cursor;
+        if (it.pts >= 0) cursor -= h;
+        const fill = it.dir === "p" ? "var(--pathogenic)" : "var(--benign)";
+        const dashed = state.previewWithout && state.inspected === it.code;
+        return `<g onclick="inspectBlock('${it.code}')" style="cursor:pointer">
+          <rect x="96" y="${y + 1}" width="84" height="${h - 2}" rx="5" fill="${dashed ? 'none' : fill}" stroke="${dashed ? fill : 'none'}" stroke-dasharray="${dashed ? '4 3' : ''}" stroke-width="2"/>
+          <text x="138" y="${y + h / 2 + 4}" text-anchor="middle" font-family="JetBrains Mono" font-size="11" font-weight="600" fill="${dashed ? 'var(--foreground)' : '#ffffff'}">${it.code} +${it.pts}</text>
+        </g>`;
+      }).join("");
+      return `<svg width="240" height="190" viewBox="0 0 240 190" role="img" aria-label="Classification column">${bands}${blocks}</svg>`;
+    }
+
+    function renderTrackSvg(items, info) {
+      const total = info && !info.withheld ? info.total : 0;
+      const xOf = pts => Math.max(0, Math.min(480, ((pts + 8) / 22) * 480));
+      let cursor = xOf(0);
+      const blocks = items.map(it => {
+        const w = Math.max(22, (Math.abs(it.pts) / 22) * 480);
+        const x = it.pts >= 0 ? cursor : cursor - w;
+        if (it.pts >= 0) cursor += w;
+        const fill = it.dir === "p" ? "var(--pathogenic)" : "var(--benign)";
+        const dashed = state.previewWithout && state.inspected === it.code;
+        return `<g onclick="inspectBlock('${it.code}')" style="cursor:pointer">
+          <rect x="${x}" y="18" width="${w - 2}" height="28" rx="6" fill="${dashed ? 'none' : fill}" stroke="${dashed ? fill : 'none'}" stroke-dasharray="${dashed ? '4 3' : ''}" stroke-width="2"/>
+          <text x="${x + (w - 2) / 2}" y="36" text-anchor="middle" font-family="JetBrains Mono" font-size="11" font-weight="600" fill="${dashed ? 'var(--foreground)' : '#ffffff'}">${it.code}</text>
+        </g>`;
+      }).join("");
+      const markerX = xOf(total);
+      return `<svg width="100%" height="78" viewBox="0 0 480 78" role="img" aria-label="Evidence track">
+        <rect x="0" y="10" width="96" height="44" fill="var(--class-b-fill)" fill-opacity="0.28"/>
+        <rect x="96" y="10" width="90" height="44" fill="var(--class-lb-fill)" fill-opacity="0.35"/>
+        <rect x="186" y="10" width="110" height="44" fill="var(--class-vus-fill)" fill-opacity="0.45"/>
+        <rect x="296" y="10" width="84" height="44" fill="var(--class-lp-fill)" fill-opacity="0.45"/>
+        <rect x="380" y="10" width="100" height="44" fill="var(--class-p-fill)" fill-opacity="0.28"/>
+        ${blocks}
+        <line x1="${markerX}" y1="6" x2="${markerX}" y2="62" stroke="var(--foreground)" stroke-width="2.5"/>
+      </svg>`;
+    }
+
+    function renderRail() {
+      const rail = document.getElementById("rail");
+      const title = state.caseKind === "ryr1" ? "NM_000540.3(RYR1):c.7354C>T" : state.caseKind === "withheld" ? "Conflict example" : "New assessment";
+      const stopsHtml = state.caseKind === "ryr1" ? REAL_RECORDS.map((r, i) => `
+        <div class="stop-row">
+          <span class="stop-dot"></span>
+          <button class="stop-btn" id="stop-${i}" aria-label="${r.label}, ${r.year}, class ${r.cls}, ${r.total} points">
+            <div class="stop-title">${r.label} · ${r.year}</div>
+            <div class="cv-figure" style="font-size:11px">${r.cls}</div>
+            <div class="mini-scale">
+              <div class="mini-zone" style="background:var(--class-b-fill)"></div>
+              <div class="mini-zone" style="background:var(--class-lb-fill)"></div>
+              <div class="mini-zone" style="background:var(--class-vus-fill)"></div>
+              <div class="mini-zone ${r.cls==='LP'?'active':''}" style="background:var(--class-lp-fill)"></div>
+              <div class="mini-zone ${r.cls==='P'?'active':''}" style="background:var(--class-p-fill)"></div>
+            </div>
+            <div class="stop-pts">${r.total} pts</div>
+          </button>
+        </div>`).join("") : "";
+      const todayClass = state.caseKind === "ryr1" ? "P" : state.caseKind === "withheld" ? "Withheld" : "No class yet";
+      rail.innerHTML = `
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <span class="cv-eyebrow">Case</span>
+            <button class="cv-btn cv-btn-ghost" id="clear-case" style="padding:2px 6px" onclick="setCase('empty')">Clear case</button>
+          </div>
+          <div style="font-size:15px;font-weight:600;margin-top:4px;word-break:break-word">${title}</div>
+          ${state.caseKind === "ryr1" ? '<div class="cv-figure cv-caption" style="margin-top:2px">RYR1</div>' : ''}
+        </div>
+        <span class="cv-eyebrow">${state.mode === "reported" ? "Reports over time" : "Your evidence"}</span>
+        <div class="rail-stops">
+          ${stopsHtml}
+          <div class="stop-row active">
+            <span class="stop-dot"></span>
+            <button class="stop-btn" id="stop-today" aria-label="Today (you), ${todayClass}">
+              <div class="stop-title">Today (you)</div>
+              <div class="cv-figure" style="font-size:11px">${todayClass}</div>
+              <div class="mini-scale">
+                <div class="mini-zone" style="background:var(--class-b-fill)"></div>
+                <div class="mini-zone" style="background:var(--class-lb-fill)"></div>
+                <div class="mini-zone" style="background:var(--class-vus-fill)"></div>
+                <div class="mini-zone" style="background:var(--class-lp-fill)"></div>
+                <div class="mini-zone ${state.caseKind==='ryr1'?'active':''}" style="background:var(--class-p-fill)"></div>
+              </div>
+              ${state.caseKind === "ryr1" ? '<div class="stop-pts">+12 pts</div>' : ''}
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderStage() {
+      document.getElementById("mode-new").setAttribute("aria-pressed", String(state.mode === "new"));
+      document.getElementById("mode-reported").setAttribute("aria-pressed", String(state.mode === "reported"));
+      const toolbar = document.getElementById("stage-toolbar");
+      const showPicSwitch = !(state.mode === "reported" && state.stageTab === "compare");
+      toolbar.innerHTML = `
+        ${state.mode === "reported" ? `
+          <div class="cv-segmented">
+            <button class="cv-segment" id="stage-evidence" aria-pressed="${state.stageTab==='evidence'}" onclick="state.stageTab='evidence';render()">Evidence</button>
+            <button class="cv-segment" id="stage-compare" aria-pressed="${state.stageTab==='compare'}" onclick="state.stageTab='compare';render()">Compare reports</button>
+          </div>` : `<span class="cv-eyebrow">Explanation</span>`}
+        <span style="flex:1"></span>
+        ${showPicSwitch ? `
+          <div class="cv-segmented">
+            <button class="cv-segment" id="picture-dial" aria-pressed="${state.picture==='dial'}" onclick="state.picture='dial';render()">Dial</button>
+            <button class="cv-segment" id="picture-column" aria-pressed="${state.picture==='column'}" onclick="state.picture='column';render()">Column</button>
+            <button class="cv-segment" id="picture-track" aria-pressed="${state.picture==='track'}" onclick="state.picture='track';render()">Track</button>
+          </div>` : ""}
+        <button class="cv-btn cv-btn-ghost" id="reading-toggle" onclick="state.reading=!state.reading;render()">${state.reading ? "Show editor" : "Expand"}</button>
+      `;
+      document.getElementById("app-frame").classList.toggle("is-reading", state.reading);
+
+      const body = document.getElementById("stage-body");
+      if (state.mode === "reported" && state.stageTab === "compare") {
+        body.innerHTML = renderCompareView();
+        return;
+      }
+
+      const rawItems = activeItems();
+      const shownItems = (state.previewWithout && state.inspected) ? rawItems.filter(i => i.code !== state.inspected) : rawItems;
+      const info = classFor(shownItems);
+
+      let heroHtml = "";
+      if (!info) {
+        heroHtml = `
+          <div class="hero">
+            ${renderDialSvg([], null)}
+            <div class="cv-display" style="color:var(--muted-foreground)">No class yet</div>
+            <div class="cv-caption" style="max-width:440px">Choose an evidence category to browse its criteria. A class appears once you apply evidence that counts.</div>
+            <div class="chip-row">
+              ${CRITERIA_TABS.map(t => `<button class="cv-btn cv-btn-outline" id="start-tab-${t.id}" style="border-radius:999px" onclick="state.activeTab='${t.id}';render()">${t.label}</button>`).join("")}
+            </div>
+          </div>`;
+      } else if (info.withheld) {
+        heroHtml = `
+          <div class="hero hero-left">
+            <span class="cv-eyebrow">Today's assessment · your evidence</span>
+            <div class="cv-notice">Needs expert judgment: this evidence meets a pathogenic rule and a benign rule at the same time.</div>
+            <div style="font-size:13px;line-height:20px">Pathogenic side: PS4, PM2. Benign side: BS1. The 2015 guidance calls this uncertain (VUS). The points alone would add up to 1, which hides the conflict, so ClassiVAR shows no class.</div>
+          </div>`;
+      } else {
+        const pic = state.picture === "track"
+          ? renderTrackSvg(rawItems, info)
+          : state.picture === "column"
+            ? renderColumnSvg(rawItems, info)
+            : renderDialSvg(shownItems, info);
+        const chips = rawItems.map(it => {
+          const col = it.dir === "p" ? "var(--pathogenic)" : "var(--benign)";
+          const sel = state.inspected === it.code;
+          return `<button class="block-chip ${sel ? 'selected' : ''}" id="chip-${it.code}" aria-label="${it.code}: ${criterionTitle(it.code)}, ${it.strength}, ${it.pts} ${it.pts === 1 ? 'point' : 'points'}" onclick="inspectBlock('${it.code}')">
+            <span class="dot-dir" style="background:${col}"></span>
+            <span class="cv-figure">${it.code} +${it.pts}</span>
+            <span class="cv-caption">${it.strength}</span>
+          </button>`;
+        }).join("");
+        const inspectedItem = rawItems.find(i => i.code === state.inspected);
+        const inspectorHtml = inspectedItem ? `
+          <div class="cv-card inspector-box">
+            <div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="cv-chip ${inspectedItem.dir==='p'?'cv-chip-pathogenic':'cv-chip-benign'}">${inspectedItem.code}</span>
+                <strong>${inspectedItem.strength} (${inspectedItem.pts > 0 ? '+' : ''}${inspectedItem.pts} points)</strong>
+              </div>
+              <div class="cv-caption" style="margin-top:4px">${inspectedItem.summary}</div>
+            </div>
+            <button class="cv-btn cv-btn-outline" id="preview-without" onclick="state.previewWithout=!state.previewWithout;render()">
+              ${state.previewWithout ? "Show full evidence" : "Preview without " + inspectedItem.code}
+            </button>
+          </div>` : "";
+        heroHtml = `
+          <div class="hero">
+            ${pic}
+            <span class="cv-eyebrow">Today's assessment · your evidence</span>
+            <div class="cv-display">${info.name}</div>
+            <div class="readout-pts">
+              <span class="cv-figure" style="font-size:28px">${info.total > 0 ? '+' : ''}${info.total}</span>
+              <span class="cv-caption">points${info.next ? ' · ' + info.next : ''}</span>
+            </div>
+            <span class="cv-pill"><span class="cv-pill-dot"></span><span>UNVERIFIED rules v0.14.0-draft</span></span>
+            <div class="chip-row">${chips}</div>
+            ${inspectorHtml}
+            <div class="insights-grid" style="text-align:left">
+              <div class="cv-card">
+                <div class="cv-eyebrow">2015 table</div>
+                <div style="font-weight:600;margin:4px 0">Agrees: ${info.short}</div>
+                <div class="cv-caption">The 2015 table also gives ${info.name}.</div>
+              </div>
+              <div class="cv-card">
+                <div class="cv-eyebrow">What would change it</div>
+                <div style="font-weight:600;margin:4px 0">−${Math.max(1, info.total - 9)} → LP</div>
+                <div class="cv-caption">Drops below Pathogenic at 9 points.</div>
+              </div>
+              <div class="cv-card">
+                <div class="cv-eyebrow">Since Congenital Myopathies VCEP · 2026</div>
+                <div style="font-weight:600;margin:4px 0">12 → ${info.total} points</div>
+                <div class="cv-caption">Same condition (MONDO:0100150); earlier MH VCEP record differs.</div>
+              </div>
+            </div>
+          </div>`;
+      }
+
+      const sectionsHtml = info && !info.withheld ? `
+        <div class="sections-grid">
+          <div>
+            <div class="cv-section-head" style="margin-bottom:8px">
+              <span class="cv-eyebrow">Composition</span>
+              <span class="cv-section-title">What it is made of</span>
+            </div>
+            <div class="cv-card">
+              ${rawItems.map(it => `
+                <div class="makeup-row">
+                  <span class="cv-eyebrow">${it.code}</span>
+                  <div class="bar-track"><div class="bar-fill" style="width:${Math.min(100, Math.abs(it.pts) * 22)}%"></div></div>
+                  <span class="cv-figure" style="font-size:12px">+${it.pts}</span>
+                </div>`).join("")}
+            </div>
+          </div>
+          <div>
+            <div class="cv-section-head" style="margin-bottom:8px">
+              <span class="cv-eyebrow">2015 table</span>
+              <span class="cv-section-title">What the 2015 table says</span>
+            </div>
+            <div class="cv-card" style="display:flex;flex-direction:column;gap:8px;font-size:12.5px">
+              <div><strong>Pathogenic · 1 of 7 met</strong></div>
+              <div class="cv-figure" style="font-size:11.5px;color:var(--foreground)">✓ ≥ 2 Strong (PS1-PS4 / PVS1 lowered) · met</div>
+              <div class="cv-figure" style="font-size:11.5px;color:var(--muted-foreground)">1 Strong + 1-2 Moderate + ≥ 2 Supporting · needs 1 more Supporting</div>
+            </div>
+          </div>
+        </div>` : "";
+
+      body.innerHTML = heroHtml + sectionsHtml;
+    }
+
+    function renderCompareView() {
+      return `
+        <div>
+          <div class="cv-section-head" style="margin-bottom:10px">
+            <span class="cv-eyebrow">Verdict</span>
+            <span class="cv-section-title">Verdict against the latest report</span>
+          </div>
+          <div class="cv-card" style="display:flex;flex-direction:column;gap:6px">
+            <div style="font-size:18px;font-weight:600">Still holds: Pathogenic</div>
+            <div class="cv-caption">Compared against ClinGen Congenital Myopathies VCEP (2026, MONDO:0100150). The 2023 Malignant Hyperthermia record (MONDO:0007783) names a different condition and is never compared.</div>
+          </div>
+        </div>
+        <div>
+          <div class="cv-section-head" style="margin-bottom:10px">
+            <span class="cv-eyebrow">History</span>
+            <span class="cv-section-title">History against today's rules</span>
+          </div>
+          <div class="cv-card">
+            <table class="history-table">
+              <thead><tr><th>Criterion</th><th>MH VCEP 2023 (other condition)</th><th>Myopathies VCEP 2026</th><th>Today (you)</th></tr></thead>
+              <tbody>
+                <tr><td class="cv-figure">PS4</td><td>Moderate</td><td>Strong</td><td><span class="cv-chip cv-chip-pathogenic">Strong</span></td></tr>
+                <tr><td class="cv-figure">PP1</td><td>Moderate</td><td>Strong</td><td><span class="cv-chip cv-chip-pathogenic">Strong</span></td></tr>
+                <tr><td class="cv-figure">PS3</td><td>Moderate</td><td>Moderate</td><td><span class="cv-chip cv-chip-pathogenic">Moderate</span></td></tr>
+                <tr><td class="cv-figure">PM2</td><td>—</td><td>Supporting</td><td><span class="cv-chip cv-chip-pathogenic">Supporting</span></td></tr>
+                <tr><td class="cv-figure">PP3</td><td>—</td><td>Supporting</td><td><span class="cv-chip cv-chip-pathogenic">Supporting</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderSheet() {
+      const sheet = document.getElementById("sheet-body");
+      const activeCodes = new Map(activeItems().map(i => [i.code, i]));
+      const activeTab = CRITERIA_TABS.find(t => t.id === state.activeTab) || CRITERIA_TABS[0];
+
+      sheet.innerHTML = `
+        <div class="form-section">
+          <span class="cv-eyebrow">Variant</span>
+          <div class="form-row">
+            <span class="cv-caption">Variant</span>
+            <input class="cv-input" aria-label="Variant" value="${state.caseKind === 'ryr1' ? 'NM_000540.3(RYR1):c.7354C>T' : ''}" placeholder="HGVS, VCF or rsID" readonly />
+          </div>
+          ${state.caseKind === "ryr1" ? `
+            <div class="cv-card" style="display:flex;flex-direction:column;gap:4px;font-size:12px">
+              <div style="display:flex;align-items:center;justify-content:space-between">
+                <span class="cv-eyebrow">Checked · MANE Select</span>
+                <span class="cv-badge" style="background:var(--foreground);color:var(--background)">RYR1</span>
+              </div>
+              <div class="cv-figure" style="font-size:13px">NM_000540.3:c.7354C>T</div>
+              <div class="cv-caption">CA024770 · VCV000065979 · rs118192122</div>
+            </div>` : ""}
+        </div>
+
+        <div class="form-section">
+          <span class="cv-eyebrow">Gene &amp; Condition</span>
+          <div class="form-row">
+            <span class="cv-caption">Symbol</span>
+            <input class="cv-input" aria-label="Gene symbol" value="${state.caseKind === 'ryr1' ? 'RYR1' : ''}" placeholder="e.g. BRCA1" readonly />
+          </div>
+          <div class="form-row">
+            <span class="cv-caption">Condition</span>
+            <span class="cv-caption" style="color:var(--foreground)">${state.caseKind === 'ryr1' ? 'RYR1-related myopathy (MONDO:0100150)' : 'Not chosen'}</span>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <span class="cv-eyebrow">Criteria · ${activeCodes.size} applied</span>
+          <div class="tabs-wrap">
+            ${CRITERIA_TABS.map(tab => {
+              const count = tab.codes.filter(c => activeCodes.has(c.code)).length;
+              return `<button class="tab-btn ${tab.id === activeTab.id ? 'active' : ''}" id="tab-${tab.id}" onclick="state.activeTab='${tab.id}';render()">
+                <span>${tab.label}</span>
+                ${count > 0 ? `<span class="tab-count">${count}</span>` : ""}
+              </button>`;
+            }).join("")}
+          </div>
+          ${activeTab.helper ? `
+            <div class="cv-card" style="display:flex;align-items:center;gap:8px;padding:8px 10px">
+              <span class="cv-eyebrow">Helper</span>
+              <span style="font-size:12.5px;font-weight:600;flex:1">${activeTab.helper}</span>
+              <button class="cv-btn cv-btn-outline" id="helper-open" aria-label="Open helper: ${activeTab.helper}" style="padding:3px 8px">Open</button>
+            </div>` : ""}
+          <div>
+            ${activeTab.codes.map(c => {
+              const hit = activeCodes.get(c.code);
+              const cls = hit ? (hit.dir === "p" ? "applied-p" : "applied-b") : "";
+              return `<div class="criterion-row ${hit ? 'applied' : ''}">
+                <button class="code-btn ${cls}" id="code-${c.code}" aria-label="${c.code}: ${c.title}${hit ? ', applied as ' + hit.strength : ''}" onclick="inspectBlock('${c.code}')">${c.code}</button>
+                <span style="flex:1;font-size:12.5px;line-height:17px">${c.title}</span>
+                ${hit ? `<span class="strength-pill">${hit.strength}</span>` : ""}
+              </div>`;
+            }).join("")}
+          </div>
+        </div>
+      `;
+    }
+
+    // The full name of a criterion, for the accessible name of a button that shows only its code.
+    function criterionTitle(code) {
+      for (const tab of CRITERIA_TABS) {
+        const found = tab.codes.find(c => c.code === code);
+        if (found) return found.title;
+      }
+      return code;
+    }
+
+    function inspectBlock(code) {
+      if (state.inspected === code) {
+        state.previewWithout = !state.previewWithout;
+      } else {
+        state.inspected = code;
+        state.previewWithout = false;
+      }
+      render();
+    }
+
+    function render() {
+      renderRail();
+      renderStage();
+      renderSheet();
+    }
+
+    function attachExternalTokens() {
+      if (location.hostname === "t3-page.localhost") return;
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = "tokens.css";
+      document.head.appendChild(link);
+    }
+
+    function isLocalDevServer() {
+      return (location.protocol === "http:" || location.protocol === "https:") &&
+        (location.hostname === "127.0.0.1" || location.hostname === "localhost");
+    }
+
+    async function syncThemeFromCheckout() {
+      const syncEl = document.getElementById("proto-sync");
+      if (!isLocalDevServer()) return;
+      try {
+        const res = await fetch("/assets/classivar-theme.json", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        const keyMap = {
+          "background": "--background",
+          "foreground": "--foreground",
+          "border": "--border",
+          "input.border": "--input-border",
+          "muted.background": "--muted",
+          "muted.foreground": "--muted-foreground",
+          "accent.background": "--accent",
+          "accent.foreground": "--accent-foreground",
+          "secondary.background": "--secondary",
+          "secondary.foreground": "--secondary-foreground",
+          "popover.background": "--popover",
+          "popover.foreground": "--popover-foreground",
+          "primary.background": "--primary",
+          "primary.hover.background": "--primary-hover",
+          "primary.active.background": "--primary-active",
+          "primary.foreground": "--primary-foreground",
+          "ring": "--ring"
+        };
+        const toCss = (sel, colors) => {
+          const rows = Object.entries(keyMap)
+            .filter(([k]) => colors && colors[k])
+            .map(([k, css]) => `  ${css}: ${colors[k]};`)
+            .join("\n");
+          return `${sel} {\n${rows}\n}`;
+        };
+        const light = data.themes.find(t => t.mode === "light");
+        const dark = data.themes.find(t => t.mode === "dark");
+        let style = document.getElementById("live-theme-tokens");
+        if (!style) {
+          style = document.createElement("style");
+          style.id = "live-theme-tokens";
+          document.head.appendChild(style);
+        }
+        style.textContent = [light ? toCss(":root", light.colors) : "", dark ? toCss('[data-theme="dark"]', dark.colors) : ""].join("\n");
+        syncEl.textContent = "Live reload active";
+      } catch (_) {}
+    }
+
+    function startLiveReload() {
+      if (!isLocalDevServer()) return;
+      let lastVersion = null;
+      setInterval(async () => {
+        try {
+          const res = await fetch("/__version", { cache: "no-store" });
+          if (!res.ok) return;
+          const version = await res.text();
+          if (lastVersion !== null && version !== lastVersion) {
+            location.reload();
+          }
+          lastVersion = version;
+        } catch (_) {}
+      }, 400);
+    }
+
+    attachExternalTokens();
+    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      setTheme("dark");
+    }
+    render();
+    syncThemeFromCheckout();
+    startLiveReload();
+  </script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "nested-cards",
+        "value": "*",
+        "files": [
+          "docs/design/prototype/starter.html"
+        ],
+        "createdAt": "2026-11-24T10:10:32.670Z",
+        "reason": "Assistant decision, delegated by the user: cards inside a bordered panel are the app's documented pattern (look.rs card() 'a card inside a panel', docs/design/DESIGN.md); checked in the browser, no card sits inside another card"
+      }
+    ]
+  }
+}

@@ -25,6 +25,29 @@ cargo run -p classivar -- --rules path\to\acmg-amp-points.toml
 
 The file is checked at start-up; an invalid file stops the program with the reason.
 
+## Fast UI iteration & prototyping
+
+Debug builds (`cargo run -p classivar`) include two extra developer aids that are compiled out of release builds (`#[cfg(debug_assertions)]`):
+
+- **Live reload of theme and rules:** edits saved to `crates/classivar/assets/classivar-theme.json` (or `--theme <file.json>`) and `--rules <file.toml>` are picked up automatically off the UI thread and re-applied without restarting. Theme reloads run the WCAG contrast checks and surface any warning in the status banner; invalid JSON or invalid TOML is skipped while keeping the previous state.
+- **What a rules reload does:** today's evidence is carried to the new rules, and the status lists what changed. Earlier reports keep the evidence they recorded; a report that uses a criterion the new rules lack is named in the status and cannot be scored. An open strength guide closes, and helper boxes that no longer fit are rebuilt. A file that cannot be read is reported once; saving it again reloads it.
+- **Limits of live reload (debug builds only):** the text-box subscriptions of the old helpers are not freed when an edit changes the number of PM3 or de novo rows; two files saved within one 350 ms poll show one status message; each reloaded rule set stays in memory until the program ends (about 70 kB each).
+- **Debug startup flags:** pass `--open <case.classivar.json>` to launch directly into a saved case (skipping the welcome screen) and/or `--theme <theme.json>` to test an alternate theme file:
+
+```powershell
+cargo run -p classivar -- --open path\to\case.classivar.json --rules path\to\rules.toml --theme path\to\theme.json
+```
+
+Release builds keep only `--rules <rule-file.toml>`.
+
+**Prototyping new screens in HTML/CSS:** for rapid layout experiments before writing GPUI panels, copy `docs/design/prototype/starter.html` (styled by `docs/design/prototype/tokens.css`, using real published RYR1 case data) and launch the zero-dependency live-reload server:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/prototype.ps1
+```
+
+It serves `docs/design/prototype/` on `127.0.0.1:4173`, reloads on edits, and pulls live colours from `crates/classivar/assets/classivar-theme.json`. See `docs/design/prototype/README.md`.
+
 ## The merge gate
 
 ```powershell
