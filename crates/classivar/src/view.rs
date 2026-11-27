@@ -56,6 +56,8 @@ mod headless_focus;
 #[cfg(test)]
 mod headless_guided;
 #[cfg(test)]
+mod headless_guided_keys;
+#[cfg(test)]
 mod headless_keys;
 #[cfg(test)]
 mod headless_layout;

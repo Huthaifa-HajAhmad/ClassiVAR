@@ -127,7 +127,7 @@ impl Workbench {
                 self.open_guide(&criterion.code, choice.gene_level.clone(), choice.situation.clone());
                 self.evidence_mut(scope).insert(criterion.code.clone(), choice);
             } else if scope == Editing::Today {
-                self.clear_kept_for(&criterion.code);
+                self.drop_settled_keeps();
             }
             return;
         }
@@ -157,7 +157,7 @@ impl Workbench {
         }
         self.evidence_mut(self.editing).remove(code);
         if self.editing == Editing::Today {
-            self.clear_kept_for(code);
+            self.drop_settled_keeps();
         }
         if self.guide_open.as_deref() == Some(code) {
             self.close_guide();

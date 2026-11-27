@@ -117,16 +117,11 @@ impl Workbench {
         self.kept.remove(proposal);
     }
 
-    /// Forget kept-aside proposals whose rival changed, or the criterion itself.
-    pub(super) fn clear_kept_for(&mut self, code: &str) {
-        self.kept.remove(code);
-        for pair in &self.rules.exclusive_pairs {
-            if pair.a == code {
-                self.kept.remove(pair.b.as_str());
-            } else if pair.b == code {
-                self.kept.remove(pair.a.as_str());
-            }
-        }
+    /// A "Keep" stands while a criterion applied today still contradicts the kept
+    /// proposal. Once none does, the plain Apply button returns.
+    pub(super) fn drop_settled_keeps(&mut self) {
+        let (rules, today) = (self.rules, &self.today);
+        self.kept.retain(|proposal| !rivals(rules, |code| today.contains_key(code), proposal).is_empty());
     }
 
     /// Count a criterion on today's evidence. Counting answers its review, so a "does
@@ -134,7 +129,7 @@ impl Workbench {
     /// evidence goes through this, which keeps the screen and the saved file in step.
     pub(super) fn count_today(&mut self, code: String, choice: Choice) {
         self.preview = false;
-        self.clear_kept_for(&code);
+        self.kept.remove(&code);
         self.review.decisions.remove(&code);
         self.today.insert(code, choice);
     }

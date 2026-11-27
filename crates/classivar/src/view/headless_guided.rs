@@ -1,15 +1,17 @@
 //! Headless window tests for the guided review: the welcome entry, every step in
 //! both themes and window sizes, decisions, the labelled replacement, the Guided
-//! and Free switch, set-aside decisions, and the keyboard through a step.
+//! and Free switch, and set-aside decisions. Keyboard paths are in
+//! `headless_guided_keys.rs`.
 //!
 //! Explicit imports on purpose (see `headless.rs`).
 
 use classivar_core::case::{ReviewDecision, ReviewState};
 use classivar_core::{EvidenceReading, LocusChoice, Strength};
-use gpui::{Entity, KeyDownEvent, KeyUpEvent, Keystroke, TestAppContext, VisualTestContext};
+use gpui::{Entity, TestAppContext, VisualTestContext};
 use gpui_kit::component::ThemeMode;
 
 use super::headless::{draw, open};
+use super::headless_keys::press;
 use super::{Choice, Raise, Workbench};
 
 fn click(cx: &mut VisualTestContext, selector: &'static str) {
@@ -20,7 +22,7 @@ fn click(cx: &mut VisualTestContext, selector: &'static str) {
 }
 
 /// A window in the guided review, started from the welcome screen as a curator would.
-fn guided(cx: &mut TestAppContext, theme: ThemeMode) -> (Entity<Workbench>, &mut VisualTestContext) {
+pub(super) fn guided(cx: &mut TestAppContext, theme: ThemeMode) -> (Entity<Workbench>, &mut VisualTestContext) {
     let (workbench, cx) = open(cx, theme);
     click(cx, "welcome-guided");
     assert_eq!(workbench.read_with(cx, |this, _| this.guided), Some(0), "the welcome entry opens step 1");
@@ -207,42 +209,6 @@ fn the_pvs1_guide_opens_from_its_step_and_escape_returns_to_the_step(cx: &mut Te
     assert!(cx.debug_bounds("guided-step-page").is_some());
 }
 
-fn press(cx: &mut VisualTestContext, keys: &str) {
-    cx.simulate_keystrokes(keys);
-    draw(cx);
-}
-
-fn press_enter(cx: &mut VisualTestContext) {
-    let keystroke = Keystroke::parse("enter").expect("enter is a key");
-    cx.simulate_event(KeyDownEvent { keystroke: keystroke.clone(), is_held: false, prefer_character_input: false });
-    cx.simulate_event(KeyUpEvent { keystroke });
-    draw(cx);
-}
-
-#[gpui::test]
-fn the_keyboard_moves_through_the_steps_with_next_and_previous(cx: &mut TestAppContext) {
-    let (workbench, cx) = guided(cx, ThemeMode::Light);
-    let step = |cx: &mut VisualTestContext| workbench.read_with(cx, |this, _| this.guided);
-    let (previous, next) =
-        workbench.read_with(cx, |this, _| (this.handles.step_previous.clone(), this.handles.step_next.clone()));
-    let focused = |cx: &mut VisualTestContext| cx.update(|window, cx| window.focused(cx));
-    for _ in 0..200 {
-        press(cx, "tab");
-        if focused(cx).as_ref() == Some(&next) {
-            break;
-        }
-    }
-    assert_eq!(focused(cx), Some(next.clone()), "Tab reaches Next");
-    press_enter(cx);
-    assert_eq!(step(cx), Some(1));
-    press_enter(cx);
-    assert_eq!(step(cx), Some(2), "the focus stays on Next");
-    press(cx, "shift-tab");
-    assert_eq!(focused(cx), Some(previous), "Shift+Tab goes back to Previous");
-    press_enter(cx);
-    assert_eq!(step(cx), Some(1));
-}
-
 #[gpui::test]
 fn the_population_helper_offers_keep_or_a_labelled_replacement_against_pm2(cx: &mut TestAppContext) {
     let (workbench, cx) = guided(cx, ThemeMode::Light);
@@ -387,6 +353,30 @@ fn reloading_rules_without_a_path_clears_guided_step_and_kept_proposals(cx: &mut
         this.reload_rules(leaked, window, cx);
         assert_eq!(this.guided, None);
         assert!(this.kept.is_empty());
+    });
+    draw(cx);
+}
+
+#[gpui::test]
+fn a_keep_stands_while_any_applied_criterion_still_contradicts_the_proposal(cx: &mut TestAppContext) {
+    let (workbench, cx) = guided(cx, ThemeMode::Light);
+    workbench.update_in(cx, |this, _, _| {
+        this.count_today("BA1".into(), Choice::new(Strength::StandAlone));
+        this.count_today("BS1".into(), Choice::new(Strength::Strong));
+        this.keep_rival("PM2");
+        this.remove_criterion("BA1");
+        assert!(this.kept.contains("PM2"), "BS1 still contradicts PM2, so the Keep stands");
+        this.count_today("BS1".into(), Choice::new(Strength::Supporting));
+        assert!(this.kept.contains("PM2"), "changing a rival's strength does not undo the Keep");
+        let bs1 = this.rules.criterion("BS1").unwrap();
+        this.toggle(bs1);
+        assert!(!this.kept.contains("PM2"), "nothing contradicts PM2 any more");
+    });
+    workbench.update_in(cx, |this, _, _| {
+        this.count_today("BS1".into(), Choice::new(Strength::Strong));
+        this.keep_rival("PM2");
+        this.count_today("PM2".into(), Choice::new(Strength::Supporting));
+        assert!(!this.kept.contains("PM2"), "applying the proposal itself ends its Keep");
     });
     draw(cx);
 }

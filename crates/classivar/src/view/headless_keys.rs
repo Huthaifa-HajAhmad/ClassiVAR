@@ -23,20 +23,20 @@ fn open_editor(cx: &mut TestAppContext) -> (Entity<Workbench>, &mut VisualTestCo
 }
 
 /// Press a key, then draw, as a real session does between key presses.
-fn press(cx: &mut VisualTestContext, keys: &str) {
+pub(super) fn press(cx: &mut VisualTestContext, keys: &str) {
     cx.simulate_keystrokes(keys);
     draw(cx);
 }
 
 /// Press and release Enter, as a keyboard does: a button answers on the release.
-fn press_enter(cx: &mut VisualTestContext) {
+pub(super) fn press_enter(cx: &mut VisualTestContext) {
     let keystroke = Keystroke::parse("enter").expect("enter is a key");
     cx.simulate_event(KeyDownEvent { keystroke: keystroke.clone(), is_held: false, prefer_character_input: false });
     cx.simulate_event(KeyUpEvent { keystroke });
     draw(cx);
 }
 
-fn focused(cx: &mut VisualTestContext) -> Option<FocusHandle> {
+pub(super) fn focused(cx: &mut VisualTestContext) -> Option<FocusHandle> {
     cx.update(|window, cx| window.focused(cx))
 }
 

@@ -1130,7 +1130,7 @@ text = "Synonymous (silent) variants are relevant to BP7 when no splicing impact
 fact = "consequence"
 answer = "intronic"
 source = "walker2023"
-text = "Walker 2023 extends BP7 Supporting to intronic variants at or beyond +7 and −21 that also meet BP4; canonical ±1,2 splice variants go through the PVS1 guide instead."
+text = "Walker 2023 extends BP7 Supporting to intronic variants at or beyond +7 and -21 that also meet BP4; canonical ±1,2 splice variants go through the PVS1 guide instead."
 
 [[path.hints]]
 fact = "splicing"
@@ -1148,7 +1148,7 @@ text = "A predicted splicing impact outside ±1,2 is assessed via PP3 on the pre
 fact = "splicing"
 answer = "no predicted splicing impact"
 source = "walker2023"
-text = "With no predicted splicing impact (BP4 met), BP7 Supporting may apply to synonymous variants (outside the first base and last three bases of an exon) or intronic variants at or beyond +7 and −21."
+text = "With no predicted splicing impact (BP4 met), BP7 Supporting may apply to synonymous variants (outside the first base and last three bases of an exon) or intronic variants at or beyond +7 and -21."
 
 [[path.hints]]
 fact = "splicing"
@@ -1172,7 +1172,7 @@ helper = "predictor"
 fact = "consequence"
 answer = "missense"
 source = "pejaver2022"
-text = "For missense variants, pick one calibrated missense predictor (REVEL, BayesDel without AF, MutPred2, VEST4, AlphaMissense or VARITY_R) before looking at its score. PP3 is applied once."
+text = "For missense variants, pick one calibrated missense predictor (REVEL, BayesDel without AF, MutPred2 or VEST4: Pejaver 2022; AlphaMissense or VARITY_R: Bergquist 2025) before looking at its score. PP3 is applied once."
 
 [[path.hints]]
 fact = "consequence"
