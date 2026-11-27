@@ -485,3 +485,83 @@ date = "2026-11-21"
 verdict = "matches source"
 checked_against = "Walker 2023 (PMC text)"
 note = "Supporting or Strong (RNA) only; intronic extension at +7/-21 noted."
+
+[[signoff]]
+item = "path:population"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+note = "Review order only, from the approved guided prototype; no source sets this order."
+
+[[signoff]]
+item = "path:variant-type"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+note = "Review order only, from the approved guided prototype; no source sets this order."
+
+[[signoff]]
+item = "path:predictors"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+note = "Review order only, from the approved guided prototype; no source sets this order."
+
+[[signoff]]
+item = "path:functional"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+note = "Review order only, from the approved guided prototype; no source sets this order."
+
+[[signoff]]
+item = "path:case-data"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+note = "Review order only, from the approved guided prototype; no source sets this order."
+
+[[signoff]]
+item = "path:segregation"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+note = "Review order only, from the approved guided prototype; no source sets this order."
+
+[[signoff]]
+item = "path:de-novo"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+note = "Review order only, from the approved guided prototype; no source sets this order."
+
+[[signoff]]
+item = "path:other-allele"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+note = "Review order only, from the approved guided prototype; no source sets this order."
+
+[[signoff]]
+item = "path:other-cause"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+note = "Review order only, from the approved guided prototype; no source sets this order."
+
+[[signoff]]
+item = "path:other-sources"
+reviewer = "Claude (AI, claude-opus-5-5)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+note = "Review order only, from the approved guided prototype; no source sets this order."

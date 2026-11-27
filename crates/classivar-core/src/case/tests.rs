@@ -7,12 +7,58 @@ fn rules() -> &'static RuleSet {
     RuleSet::builtin().expect("the built-in rules are valid")
 }
 
+#[test]
+fn review_decisions_and_unknown_facts_survive_reopening() {
+    let mut json = serde_json::to_value(sample()).unwrap();
+    json["review"] = serde_json::json!({
+        "decisions": {"BS1": "deferred", "BA1": "does_not_apply", "OTHER1": "deferred"},
+        "facts": {"consequence": "unknown", "other-rule-fact": "other"}
+    });
+    let opened = CaseFile::from_json(&json.to_string(), rules()).unwrap();
+    let saved = serde_json::to_value(&opened).unwrap();
+    assert_eq!(saved["review"], json["review"]);
+    assert_eq!(opened.today, sample().today);
+    assert_eq!(CaseFile::from_json(&opened.to_json(), rules()).unwrap(), opened);
+}
+
+#[test]
+fn decisions_for_criteria_these_rules_lack_are_set_aside_not_counted() {
+    let mut review = super::CaseReview::default();
+    review.decisions.insert("BS1".into(), super::ReviewDecision::Deferred);
+    review.decisions.insert("OTHER1".into(), super::ReviewDecision::DoesNotApply);
+    review.facts.insert("other-rule-fact".into(), "unknown".into());
+    assert_eq!(review.set_aside(rules()), vec!["OTHER1", "other-rule-fact"]);
+}
+
+#[test]
+fn review_cannot_exclude_or_defer_counted_evidence() {
+    for decision in ["does_not_apply", "deferred"] {
+        let mut json = serde_json::to_value(sample()).unwrap();
+        json["review"] = serde_json::json!({"decisions": {"PM2": decision}});
+        assert!(CaseFile::from_json(&json.to_string(), rules()).is_err());
+    }
+}
+
+#[test]
+fn review_refuses_empty_or_overlong_names_and_answers() {
+    for (key, value) in [
+        ("".to_string(), "unknown".to_string()),
+        ("x".repeat(super::MAX_REVIEW_NAME_CHARS + 1), "unknown".to_string()),
+        ("consequence".into(), "x".repeat(super::MAX_REVIEW_ANSWER_CHARS + 1)),
+    ] {
+        let mut json = serde_json::to_value(sample()).unwrap();
+        json["review"] = serde_json::json!({"facts": {key: value}});
+        assert!(CaseFile::from_json(&json.to_string(), rules()).is_err());
+    }
+}
+
 fn applied(code: &str, strength: crate::model::Strength) -> Applied {
     Applied::new(code, strength)
 }
 
 fn sample() -> CaseFile {
     CaseFile {
+        review: Default::default(),
         format: CASE_FORMAT,
         app_version: "0.1.0".into(),
         saved_on: "2026-11-04".into(),

@@ -13,6 +13,7 @@ impl Workbench {
 
     pub(super) fn has_case_data(&self, cx: &App) -> bool {
         !self.today.is_empty()
+            || !self.review.is_empty()
             || !self.records.is_empty()
             || self.variant_name(cx).is_some()
             || self.gene_link != GeneDecision::NotDecided
@@ -138,7 +139,13 @@ impl Workbench {
             Editing::Today => criterion.strength,
             Editing::Record(_) => criterion.original_strength.unwrap_or(criterion.strength),
         };
-        self.evidence_mut(scope).insert(criterion.code.clone(), Choice::new(strength));
+        let (code, choice) = (criterion.code.clone(), Choice::new(strength));
+        match scope {
+            Editing::Today => self.count_today(code, choice),
+            Editing::Record(_) => {
+                self.evidence_mut(scope).insert(code, choice);
+            }
+        }
     }
 
     /// Take a criterion off the evidence being edited, including a guided one.
@@ -188,7 +195,7 @@ impl Workbench {
         let gene_level = self.guide_gene_level.take();
         match strength {
             Some(strength) => {
-                self.today.insert(code.to_string(), Choice::guided(strength, situation, gene_level));
+                self.count_today(code.to_string(), Choice::guided(strength, situation, gene_level));
             }
             None => {
                 self.today.remove(code);
@@ -254,7 +261,7 @@ impl Workbench {
                 }
             }
             Some(raise) => {
-                self.today.insert(raise.code, Choice::with_reason(raise.to, reason));
+                self.count_today(raise.code, Choice::with_reason(raise.to, reason));
             }
             None => {}
         }

@@ -22,6 +22,8 @@
 #   [pm3]            recessive patient points (ClinGen 2019 Tables 1 and 2)
 #   [[ba1_exceptions]] dated reference list (ClinGen July 2018), no automatic matching
 #   [[criteria]]     the 28 ACMG/AMP criteria
+#   [[path]]         the guided review order: ten questions, each criterion once.
+#                    It only orders the review; it changes no points, caps or classes.
 #
 # Changing a rule means editing this file. The program checks the file when it
 # loads: every rule needs a source that exists in [[sources]].
@@ -1059,3 +1061,63 @@ summary = "A synonymous (silent) variant with no predicted effect on splicing, a
 source = "richards2015"
 strength_source = "walker2023"
 note = "Walker 2023 extends BP7 to intronic variants at or beyond +7 and -21 that also meet BP4, and says not to apply it in the splice region or to a silent change at the first base or the last three bases of an exon. It advises against using conservation without a calibrated tool. Supporting is the level for a prediction. Strong (written BP7_Strong (RNA)) is only for an RNA splicing assay that shows no effect; say so in the reason. No source gives BP7 at Moderate, so it is not offered."
+
+# The guided review order (approved 2026-11-27). A step names a helper only when
+# all of that helper's criteria are on the step, so the PP1/PP4 helper is not
+# named here (PP4 is a case-data question, PP1 a segregation question).
+
+[[path]]
+id = "population"
+question = "How common is the variant in population data?"
+criteria = ["BA1", "BS1", "PM2"]
+helper = "population"
+
+[[path]]
+id = "variant-type"
+question = "What kind of change is it, and where?"
+criteria = ["PVS1", "PS1", "PM1", "PM4", "PM5", "PP2", "BP1", "BP3", "BP7"]
+
+[[path]]
+id = "predictors"
+question = "What do the predictors say?"
+criteria = ["PP3", "BP4"]
+helper = "predictor"
+
+[[path]]
+id = "functional"
+question = "What do functional studies show?"
+criteria = ["PS3", "BS3"]
+helper = "functional"
+
+[[path]]
+id = "case-data"
+question = "How often is it seen in affected and healthy people?"
+criteria = ["PS4", "PP4", "BS2"]
+
+[[path]]
+id = "segregation"
+question = "Does it track with disease in families?"
+criteria = ["PP1", "BS4"]
+helper = "segregation"
+
+[[path]]
+id = "de-novo"
+question = "Did it arise de novo?"
+criteria = ["PS2", "PM6"]
+helper = "de-novo"
+
+[[path]]
+id = "other-allele"
+question = "What is on the other allele?"
+criteria = ["PM3", "BP2"]
+helper = "pm3"
+
+[[path]]
+id = "other-cause"
+question = "Is there another cause for the disease?"
+criteria = ["BP5"]
+
+[[path]]
+id = "other-sources"
+question = "What do other sources report? Reference only."
+criteria = ["PP5", "BP6"]

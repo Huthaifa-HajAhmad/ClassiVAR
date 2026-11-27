@@ -12,6 +12,8 @@ mod check_locus;
 mod check_predictors;
 mod check_tables;
 mod criterion;
+mod facts;
+mod path;
 mod population;
 mod read;
 mod review;
@@ -27,6 +29,8 @@ use crate::model::{Class, Strength};
 
 pub use basics::*;
 pub use criterion::{Criterion, GeneLevel, StrengthGuide};
+pub use facts::{Fact, Hint};
+pub use path::{HELPER_CRITERIA, ReviewStep};
 pub use population::{
     DiseaseArchitecture, PopulationFacts, PopulationFinding, PopulationRules, max_credible_frequency,
 };
@@ -43,6 +47,9 @@ const MAX_POINTS: i32 = 1000;
 /// The rule file as written. It becomes a `RuleSet` only after `RuleSet::check` passes.
 #[derive(Deserialize)]
 struct RuleSetFile {
+    path: Option<Vec<ReviewStep>>,
+    #[serde(default)]
+    facts: Vec<Fact>,
     meta: Meta,
     sources: Vec<Source>,
     points: Points,
@@ -69,6 +76,10 @@ struct RuleSetFile {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(try_from = "RuleSetFile")]
 pub struct RuleSet {
+    /// Optional ordered review; absent rules keep the free workbench available.
+    pub path: Option<Vec<ReviewStep>>,
+    /// Optional fact questions whose answers add hints to the review steps.
+    pub facts: Vec<Fact>,
     pub meta: Meta,
     pub sources: Vec<Source>,
     pub points: Points,
@@ -99,6 +110,8 @@ impl TryFrom<RuleSetFile> for RuleSet {
 
     fn try_from(file: RuleSetFile) -> Result<Self, RuleError> {
         let rules = RuleSet {
+            path: file.path,
+            facts: file.facts,
             meta: file.meta,
             sources: file.sources,
             points: file.points,
@@ -123,6 +136,8 @@ impl TryFrom<RuleSetFile> for RuleSet {
 
 #[derive(Debug, thiserror::Error)]
 pub enum RuleError {
+    #[error("guided review path: {0}")]
+    BadPath(String),
     #[error("could not read the rule file: {0}")]
     Parse(#[from] toml::de::Error),
     #[error("criterion {0} appears twice")]

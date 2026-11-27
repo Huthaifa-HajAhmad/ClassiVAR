@@ -148,6 +148,7 @@ fn pm3_calculation_reason_survives_case_reopening() {
     let item = Applied::new("PM3", r.evidence.unwrap().strength)
         .with_reason("PM3: 4 x confirmed = 4 patient points after row limits; conditions checked (clingen-svi-pm3)");
     let case = CaseFile {
+        review: Default::default(),
         format: CASE_FORMAT,
         app_version: "test".into(),
         saved_on: "2026-11-05".into(),

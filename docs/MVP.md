@@ -15,6 +15,7 @@ Status on 2026-11-04 is in `docs/ROADMAP.md` and in `docs/AUDIT-2026-11-04.md` s
 5. ~~Learning layer and lesson set~~ dropped 2026-11-22: each criterion's rule text opens on demand instead.
 6. ~~Practice shelf~~ dropped 2026-11-22.
 7. **Windows and macOS builds.**
+8. **Guided assessment (added 2026-11-27):** the same evidence reviewed one question at a time along the rule file's ten-step path, with "does not apply" and "deferred" saved in the case and review progress shown. It shows progress only; it does not claim the class is settled.
 
 ## Not covered: other frameworks
 

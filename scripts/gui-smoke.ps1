@@ -422,20 +422,22 @@ try {
     Set-BoxText "Predictor score" "0.95"
     Click-Button-Like "Apply PP3 Strong*"
     # A score between the limits gives no button, and a benign score above
-    # this program's limit is lowered to Moderate.
+    # this program's limit is lowered to Moderate. PP3 is applied, so BP4 is
+    # offered only as a named replacement ("Replace PP3 with BP4 ..." or "Keep PP3").
     Set-BoxText "Predictor score" "0.5"
-    if (@(Names | Where-Object { $_ -like "Apply PP3*" -or $_ -like "Apply BP4*" }).Count -ne 0) {
+    if (@(Names | Where-Object { $_ -like "Apply PP3*" -or $_ -like "Apply BP4*" -or $_ -like "Replace PP3 with BP4*" }).Count -ne 0) {
         throw "a score between the limits still offered to apply a criterion"
     }
     Set-BoxText "Predictor score" "0.01"
-    Find-Button-Like "Apply BP4 Moderate*" | Out-Null
+    Find-Button-Like "Replace PP3 with BP4 Moderate*" | Out-Null
+    Find-Button-Like "Keep PP3*" | Out-Null
     $predictor = Capture "05b-predictor"
     # SpliceAI is applied at Supporting only; 0.1 to 0.2 gives nothing (Walker 2023).
     # The paper's table is only for variants outside donor/acceptor +/-1,2, so the
     # helper withholds Apply until the curator confirms that, and it accepts 0 to 1.
     Click-Button "SpliceAI"
     Set-BoxText "Predictor score" "0.9"
-    if (@(Names | Where-Object { $_ -like "Apply PP3*" -or $_ -like "Apply BP4*" }).Count -ne 0) {
+    if (@(Names | Where-Object { $_ -like "Apply PP3*" -or $_ -like "Apply BP4*" -or $_ -like "Replace PP3 with BP4*" }).Count -ne 0) {
         throw "SpliceAI offered Apply before its scope was confirmed"
     }
     Scroll-To-Button "Confirm the variant is outside*"
@@ -443,15 +445,15 @@ try {
     Set-BoxText "Predictor score" "0.9"
     Find-Button-Like "Apply PP3 Supporting*" | Out-Null
     Set-BoxText "Predictor score" "0.15"
-    if (@(Names | Where-Object { $_ -like "Apply PP3*" -or $_ -like "Apply BP4*" }).Count -ne 0) {
+    if (@(Names | Where-Object { $_ -like "Apply PP3*" -or $_ -like "Apply BP4*" -or $_ -like "Replace PP3 with BP4*" }).Count -ne 0) {
         throw "a SpliceAI score between 0.1 and 0.2 still offered to apply a criterion"
     }
     Set-BoxText "Predictor score" "1.5"
-    if (@(Names | Where-Object { $_ -like "Apply PP3*" -or $_ -like "Apply BP4*" }).Count -ne 0) {
+    if (@(Names | Where-Object { $_ -like "Apply PP3*" -or $_ -like "Apply BP4*" -or $_ -like "Replace PP3 with BP4*" }).Count -ne 0) {
         throw "a SpliceAI score outside 0 to 1 still offered to apply a criterion"
     }
     Set-BoxText "Predictor score" "0.05"
-    Find-Button-Like "Apply BP4 Supporting*" | Out-Null
+    Find-Button-Like "Replace PP3 with BP4 Supporting*" | Out-Null
     Capture "05b2-spliceai" | Out-Null
     Click-Button "Close the predictor score helper"
     # Back in the list, the applied criterion is visible in its tab.
@@ -839,6 +841,25 @@ try {
     Point-At-Result 520
     for ($i = 0; $i -lt 6; $i++) { Press-Key "{PGDN}" }
     $history = Capture "09-history-narrow"
+
+    # The guided review over the same evidence: switch to it, mark a criterion, move
+    # to the next step with Next, and switch back to the free list.
+    Click-Button "New variant"
+    Click-Button "Guided review: one step at a time"
+    Find-Button-Like "Step 1, Population*" | Out-Null
+    Scroll-To-Button "Mark BA1 as does not apply"
+    Click-Button "Mark BA1 as does not apply"
+    Find-Button-Like "Clear the review of BA1*" | Out-Null
+    Capture "10-guided-population" | Out-Null
+    Scroll-To-Button "Next step"
+    Click-Button "Next step"
+    Scroll-To-Button "Mark PVS1 as deferred"
+    Find-Button-Like "Mark PVS1 as deferred" | Out-Null
+    Capture "10b-guided-variant-type" | Out-Null
+    Click-Button "Free review: every criterion by kind"
+    Scroll-To-Button "Population criteria*"
+    Click-Button-Like "Population criteria*"
+    Find-Button-Like "PM2:*applied*" | Out-Null
 
     Write-Host "GUI smoke passed. Screenshots:" -ForegroundColor Green
     $shots | ForEach-Object { Write-Host "  $_" }

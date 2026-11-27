@@ -261,7 +261,7 @@ impl Workbench {
     /// Put the strength a score or an assay result gives onto today's evidence.
     /// The reason records where the number came from, so it is saved with the case.
     pub(super) fn apply_reading(&mut self, reading: &classivar_core::EvidenceReading, reason: String) {
-        self.today.insert(reading.code.to_string(), Choice::with_reason(reading.strength, reason));
+        self.count_today(reading.code.to_string(), Choice::with_reason(reading.strength, reason));
     }
 
     /// Put the PP1 and PP4 strengths of one paper-allowed choice onto today's
@@ -270,7 +270,7 @@ impl Workbench {
     pub(super) fn apply_locus_choice(&mut self, choice: classivar_core::LocusChoice, reason: String) {
         for (code, strength) in [("PP1", choice.pp1), ("PP4", choice.pp4)] {
             if let Some(strength) = strength {
-                self.today.insert(code.to_string(), Choice::with_reason(strength, reason.clone()));
+                self.count_today(code.to_string(), Choice::with_reason(strength, reason.clone()));
             }
         }
     }
@@ -278,6 +278,7 @@ impl Workbench {
     /// Forget what the helpers hold, and any strength waiting for its reason.
     pub(super) fn reset_helpers(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.raising = None;
+        self.kept.clear();
         self.helpers.reset(window, cx);
     }
 }

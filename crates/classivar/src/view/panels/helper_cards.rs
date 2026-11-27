@@ -17,6 +17,15 @@ impl Workbench {
             .collect()
     }
 
+    /// The cards of the helpers that set any of `codes`, for a guided step.
+    pub(super) fn helper_cards_for(&self, codes: &[String], cx: &mut Context<Self>) -> Vec<AnyElement> {
+        self.helper_entries()
+            .into_iter()
+            .filter(|entry| entry.codes.iter().any(|code| codes.iter().any(|c| c == code)))
+            .map(|entry| self.helper_card(&entry, cx))
+            .collect()
+    }
+
     /// One helper as a compact card: its name, the codes it sets, and Open.
     fn helper_card(&self, entry: &Entry, cx: &mut Context<Self>) -> AnyElement {
         let border = cx.theme().border;

@@ -160,6 +160,9 @@ pub(super) struct Handles {
     pub(super) confirm_focus: FocusHandle,
     /// Holds the focus when no control does, so Tab always has a place to start from.
     pub(super) page_focus: FocusHandle,
+    /// Previous and Next of the guided review, so the focus stays on them between steps.
+    pub(super) step_previous: FocusHandle,
+    pub(super) step_next: FocusHandle,
 }
 
 impl Handles {
@@ -169,6 +172,8 @@ impl Handles {
             result_scroll: ScrollHandle::new(),
             confirm_focus: cx.focus_handle(),
             page_focus: cx.focus_handle(),
+            step_previous: cx.focus_handle(),
+            step_next: cx.focus_handle(),
         }
     }
 }

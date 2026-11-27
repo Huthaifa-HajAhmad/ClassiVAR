@@ -44,6 +44,7 @@ mod describe;
 mod evidence;
 mod file_io;
 mod gene;
+mod guided;
 #[cfg(test)]
 mod headless;
 #[cfg(test)]
@@ -52,6 +53,8 @@ mod headless_case;
 mod headless_dev;
 #[cfg(test)]
 mod headless_focus;
+#[cfg(test)]
+mod headless_guided;
 #[cfg(test)]
 mod headless_keys;
 #[cfg(test)]
@@ -96,6 +99,11 @@ pub struct Workbench {
     mode: Mode,
     /// The curator's own evidence, today.
     today: Evidence,
+    review: classivar_core::case::CaseReview,
+    /// The open step of the guided review; `None` shows the free list.
+    guided: Option<usize>,
+    /// Helper proposals the curator set aside to keep a contradicting applied criterion.
+    kept: std::collections::BTreeSet<String>,
     records: Vec<Record>,
     /// Which evidence set the criteria list is editing.
     editing: Editing,
@@ -177,6 +185,9 @@ impl Workbench {
             rules,
             mode: Mode::NewVariant,
             today: Evidence::new(),
+            review: Default::default(),
+            guided: None,
+            kept: Default::default(),
             records: Vec::new(),
             editing: Editing::Today,
             category: None,

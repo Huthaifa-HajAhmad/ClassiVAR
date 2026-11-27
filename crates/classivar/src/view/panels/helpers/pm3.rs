@@ -117,17 +117,7 @@ impl Workbench {
     }
 
     fn pm3_apply(&self, evidence: EvidenceReading, reason: String, cx: &mut Context<Self>) -> Div {
-        let label = format!("Apply PM3 {}", evidence.strength.label());
-        div().child(
-            Button::new("pm3-apply")
-                .label(label.clone())
-                .accessibility_label(format!("{label} to today's evidence"))
-                .small()
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.apply_reading(&evidence, reason.clone());
-                    cx.notify();
-                })),
-        )
+        div().child(self.reading_apply("pm3-apply", evidence, reason, cx))
     }
 }
 

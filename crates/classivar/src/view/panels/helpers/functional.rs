@@ -201,7 +201,6 @@ impl Workbench {
     /// The Apply button, with a caution when the reading is Very strong PS3.
     fn functional_apply(&self, reading: EvidenceReading, cx: &mut Context<Self>) -> Div {
         let state = &self.helpers.functional;
-        let label = format!("Apply {} {}", reading.code, reading.strength.label());
         let reason = match state.route {
             AssayRoute::Controls => format!(
                 "Functional assay with experimental controls and replicates; {} pathogenic and {} benign validation controls; no statistical analysis (Brnich 2019)",
@@ -215,18 +214,12 @@ impl Workbench {
                 "Even Very strong functional evidence is not enough alone for a Pathogenic class (Brnich 2019). The program does not check this for you.",
             )
         });
-        div().flex().flex_col().gap_2().children(caution).child(
-            div().child(
-                Button::new("functional-apply")
-                    .label(label.clone())
-                    .accessibility_label(format!("{label} to today's evidence"))
-                    .small()
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.apply_reading(&reading, reason.clone());
-                        cx.notify();
-                    })),
-            ),
-        )
+        div().flex().flex_col().gap_2().children(caution).child(div().child(self.reading_apply(
+            "functional-apply",
+            reading,
+            reason,
+            cx,
+        )))
     }
 }
 

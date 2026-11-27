@@ -98,7 +98,10 @@ impl Workbench {
         variant: Option<&str>,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        body.child(self.hero(result, variant, cx)).child(self.explanation_grid(result, variant, cx)).into_any_element()
+        body.child(self.hero(result, variant, cx))
+            .children(self.review_strip(cx))
+            .child(self.explanation_grid(result, variant, cx))
+            .into_any_element()
     }
 
     /// The sections under the class. They flow into two columns when the stage has

@@ -154,19 +154,9 @@ impl Workbench {
             return div()
                 .child(caption(cx.theme().muted_foreground).child("Confirm the condition above before applying."));
         }
-        let label = format!("Apply {} {}", reading.code, reading.strength.label());
         let score = self.helpers.predictor.input.read(cx).value().trim().to_string();
         let reason = predictor_reason(tool, &reading, &score);
-        div().child(
-            Button::new("predictor-apply")
-                .label(label.clone())
-                .accessibility_label(format!("{label} to today's evidence"))
-                .small()
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.apply_reading(&reading, reason.clone());
-                    cx.notify();
-                })),
-        )
+        div().child(self.reading_apply("predictor-apply", reading, reason, cx))
     }
 }
 

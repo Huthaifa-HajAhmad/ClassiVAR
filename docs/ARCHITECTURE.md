@@ -1,5 +1,13 @@
 # Architecture and framework
 
+## Guided review
+
+`case/review.rs` owns the saved exclusions, deferrals and fact answers, and the public limits on them (`MAX_REVIEW_ENTRIES`, `MAX_REVIEW_NAME_CHARS`, `MAX_REVIEW_ANSWER_CHARS`). `CaseFile::check` validates them where a saved file is read, and refuses a criterion that is both counted and excluded or deferred. `CaseReview::set_aside(&RuleSet)` names the entries the rules in use cannot read (unknown criteria, unknown facts, unlisted answers); they stay in the file. `case/progress.rs` derives one `ReviewState` per criterion from today's evidence and the decisions, and counts `Progress` (reviewed, of which deferred, and total) per step and overall. Reference-only PP5/BP6 and set-aside entries are left out.
+
+`rules/path.rs` defines the optional ordered review steps, checks that they cover every criterion once and that a step names a helper only when all of that helper's criteria are on it, and lists the guided entries for sign-off. `rules/facts.rs` defines optional fact questions (every one must allow "unknown" and "other") and the hints a step shows for an answer; a hint is words only and never changes evidence. A misspelled key in a step, fact or hint is refused. The built-in rules carry the ten-step path and no facts or hints. The window's helper list (`view/panels/helper_bar.rs`) still names each helper's criteria itself instead of reading `HELPER_CRITERIA`. Tests: `tests/guided_path.rs` and the module tests beside the code.
+
+In the app, `view/guided.rs` holds the guided state and actions (`Workbench.guided` is the open step, `None` is the free list; `decide`, `replace_with_reading`, `keep_rival`). Today's evidence is added through `count_today`, which ends the criterion's decision at once. `view/panels/guided_page.rs` draws the step chips and the step page, `guided_row.rs` one criterion with its decisions and the shared state cell, `guided_strip.rs` the review strip under the class, and `helpers/apply.rs` the Apply / Replace / Keep button the helpers use. Previous and Next own focus handles (`Handles::step_previous`, `step_next`). Window tests: `view/headless_guided.rs`.
+
 ## Framework decision
 
 | Choice | Value | Why |
