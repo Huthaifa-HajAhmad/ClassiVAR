@@ -49,6 +49,9 @@ impl Workbench {
 
     fn sanitize_selection(&mut self, rules: &RuleSet) {
         self.raising = None;
+        self.kept.clear();
+        self.guided =
+            self.guided.and_then(|i| rules.path.as_ref().filter(|p| !p.is_empty()).map(|p| i.min(p.len() - 1)));
         if self.about.as_deref().is_some_and(|code| rules.criterion(code).is_none()) {
             self.about = None;
         }

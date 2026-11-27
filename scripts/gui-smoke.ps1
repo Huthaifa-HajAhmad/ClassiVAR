@@ -432,6 +432,15 @@ try {
     Find-Button-Like "Replace PP3 with BP4 Moderate*" | Out-Null
     Find-Button-Like "Keep PP3*" | Out-Null
     $predictor = Capture "05b-predictor"
+    # Keep sets the proposal aside; Reconsider brings the two answers back.
+    Click-Button-Like "Keep PP3*"
+    Find-Button "Show the BP4 proposal again" | Out-Null
+    if (@(Names | Where-Object { $_ -like "Replace PP3 with BP4*" }).Count -ne 0) {
+        throw "a kept proposal still offered the replacement"
+    }
+    Capture "05b1-kept-proposal" | Out-Null
+    Click-Button "Show the BP4 proposal again"
+    Find-Button-Like "Replace PP3 with BP4 Moderate*" | Out-Null
     # SpliceAI is applied at Supporting only; 0.1 to 0.2 gives nothing (Walker 2023).
     # The paper's table is only for variants outside donor/acceptor +/-1,2, so the
     # helper withholds Apply until the curator confirms that, and it accepts 0 to 1.
@@ -856,6 +865,24 @@ try {
     Scroll-To-Button "Mark PVS1 as deferred"
     Find-Button-Like "Mark PVS1 as deferred" | Out-Null
     Capture "10b-guided-variant-type" | Out-Null
+    # The optional context card: answer one question, see the answer chosen, clear it.
+    Scroll-To-Button "Answer optional variant context questions"
+    Click-Button "Answer optional variant context questions"
+    $missense = "*coding consequence*: Missense"
+    Scroll-To-Button $missense
+    Click-Button-Like $missense
+    Capture "10c-guided-context" | Out-Null
+    # The hints are plain text, which automation cannot read, so the capture is for
+    # the eye. The chosen answer is checked through its pressed state.
+    function Answer-State {
+        $toggle = [System.Windows.Automation.TogglePattern]::Pattern
+        return "$((Find-Button-Like $missense).GetCurrentPattern($toggle).Current.ToggleState)"
+    }
+    if ((Answer-State) -ne "On") { throw "the chosen context answer is not marked as chosen" }
+    Click-Button-Like $missense
+    if ((Answer-State) -ne "Off") { throw "a second click did not clear the context answer" }
+    Scroll-To-Button "Hide optional variant context questions"
+    Click-Button "Hide optional variant context questions"
     Click-Button "Free review: every criterion by kind"
     Scroll-To-Button "Population criteria*"
     Click-Button-Like "Population criteria*"

@@ -565,3 +565,174 @@ kind = "ai"
 date = "2026-11-27"
 verdict = "not checked"
 note = "Review order only, from the approved guided prototype; no source sets this order."
+
+[[signoff]]
+item = "fact:consequence"
+reviewer = "Gemini (AI)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+checked_against = "Richards 2015 Tables 3–4; Abou Tayoun 2018; Walker 2023"
+note = "AI-drafted optional context question for curator review; answers add hints only and never score evidence."
+
+[[signoff]]
+item = "fact:splicing"
+reviewer = "Gemini (AI)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+checked_against = "Walker 2023 (predicted vs observed splicing)"
+note = "AI-drafted optional context question separating predicted and observed splicing; answers add hints only and never score evidence."
+
+[[signoff]]
+item = "hint:variant-type:consequence=null"
+reviewer = "Gemini (AI)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+checked_against = "Abou Tayoun 2018"
+note = "AI-drafted hint awaiting qualified human review; words only."
+
+[[signoff]]
+item = "hint:variant-type:consequence=missense"
+reviewer = "Gemini (AI)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+checked_against = "Richards 2015 Tables 3–4"
+note = "AI-drafted hint awaiting qualified human review; words only."
+
+[[signoff]]
+item = "hint:variant-type:consequence=in-frame indel"
+reviewer = "Gemini (AI)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+checked_against = "Richards 2015 Tables 3–4"
+note = "AI-drafted hint awaiting qualified human review; words only."
+
+[[signoff]]
+item = "hint:variant-type:consequence=synonymous"
+reviewer = "Gemini (AI)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+checked_against = "Walker 2023"
+note = "AI-drafted hint awaiting qualified human review; words only."
+
+[[signoff]]
+item = "hint:variant-type:consequence=intronic"
+reviewer = "Gemini (AI)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+checked_against = "Walker 2023"
+note = "AI-drafted hint awaiting qualified human review; words only."
+
+[[signoff]]
+item = "hint:variant-type:splicing=canonical splice (±1,2)"
+reviewer = "Gemini (AI)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+checked_against = "Walker 2023; Abou Tayoun 2018"
+note = "AI-drafted hint awaiting qualified human review; words only."
+
+[[signoff]]
+item = "hint:variant-type:splicing=predicted splicing impact"
+reviewer = "Gemini (AI)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+checked_against = "Walker 2023"
+note = "AI-drafted hint awaiting qualified human review; words only."
+
+[[signoff]]
+item = "hint:variant-type:splicing=no predicted splicing impact"
+reviewer = "Gemini (AI)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+checked_against = "Walker 2023"
+note = "AI-drafted hint awaiting qualified human review; words only."
+
+[[signoff]]
+item = "hint:variant-type:splicing=observed abnormal splicing (RNA)"
+reviewer = "Gemini (AI)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+checked_against = "Walker 2023"
+note = "AI-drafted hint awaiting qualified human review; words only."
+
+[[signoff]]
+item = "hint:variant-type:splicing=observed normal splicing (RNA)"
+reviewer = "Gemini (AI)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+checked_against = "Walker 2023"
+note = "AI-drafted hint awaiting qualified human review; words only."
+
+[[signoff]]
+item = "hint:predictors:consequence=missense"
+reviewer = "Gemini (AI)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+checked_against = "Pejaver 2022; Bergquist 2025"
+note = "AI-drafted hint awaiting qualified human review; words only."
+
+[[signoff]]
+item = "hint:predictors:consequence=synonymous"
+reviewer = "Gemini (AI)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+checked_against = "Walker 2023 Table 1"
+note = "AI-drafted hint awaiting qualified human review; words only."
+
+[[signoff]]
+item = "hint:predictors:consequence=intronic"
+reviewer = "Gemini (AI)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+checked_against = "Walker 2023 Table 1"
+note = "AI-drafted hint awaiting qualified human review; words only."
+
+[[signoff]]
+item = "hint:predictors:splicing=canonical splice (±1,2)"
+reviewer = "Gemini (AI)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+checked_against = "Walker 2023"
+note = "AI-drafted hint awaiting qualified human review; words only."
+
+[[signoff]]
+item = "hint:predictors:splicing=observed abnormal splicing (RNA)"
+reviewer = "Gemini (AI)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+checked_against = "Walker 2023"
+note = "AI-drafted hint awaiting qualified human review; words only."
+
+[[signoff]]
+item = "hint:functional:splicing=observed abnormal splicing (RNA)"
+reviewer = "Gemini (AI)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+checked_against = "Brnich 2019; Walker 2023"
+note = "AI-drafted hint awaiting qualified human review; words only."
+
+[[signoff]]
+item = "hint:functional:splicing=observed normal splicing (RNA)"
+reviewer = "Gemini (AI)"
+kind = "ai"
+date = "2026-11-27"
+verdict = "not checked"
+checked_against = "Walker 2023"
+note = "AI-drafted hint awaiting qualified human review; words only."
