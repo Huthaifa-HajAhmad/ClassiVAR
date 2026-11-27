@@ -126,6 +126,8 @@ impl Workbench {
             if scope == Editing::Today && !criterion.guide.is_empty() {
                 self.open_guide(&criterion.code, choice.gene_level.clone(), choice.situation.clone());
                 self.evidence_mut(scope).insert(criterion.code.clone(), choice);
+            } else if scope == Editing::Today {
+                self.clear_kept_for(&criterion.code);
             }
             return;
         }
@@ -154,6 +156,9 @@ impl Workbench {
             self.raising = None;
         }
         self.evidence_mut(self.editing).remove(code);
+        if self.editing == Editing::Today {
+            self.clear_kept_for(code);
+        }
         if self.guide_open.as_deref() == Some(code) {
             self.close_guide();
         }
@@ -188,7 +193,7 @@ impl Workbench {
     }
 
     /// The curator's answer to a strength guide, with the gene-level answer when
-    /// the criterion asks one. `None` means the criterion does not apply.
+    /// the criterion asks one. `None` records that the criterion does not apply.
     pub(super) fn answer_guide(&mut self, code: &str, strength: Option<Strength>, situation: String) {
         self.guide_open = None;
         self.guide_pick = None;
@@ -198,7 +203,7 @@ impl Workbench {
                 self.count_today(code.to_string(), Choice::guided(strength, situation, gene_level));
             }
             None => {
-                self.today.remove(code);
+                self.decide(code, Some(classivar_core::case::ReviewDecision::DoesNotApply));
             }
         };
     }
@@ -243,7 +248,12 @@ impl Workbench {
         }
         // A manual change no longer matches a guide answer or an earlier reason, so those are dropped.
         let scope = self.editing;
-        self.evidence_mut(scope).insert(criterion.code.clone(), Choice::new(next));
+        match scope {
+            Editing::Today => self.count_today(criterion.code.clone(), Choice::new(next)),
+            Editing::Record(_) => {
+                self.evidence_mut(scope).insert(criterion.code.clone(), Choice::new(next));
+            }
+        }
     }
 
     /// Save the raised strength with the reason that was typed. Does nothing

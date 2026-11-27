@@ -30,7 +30,7 @@ use crate::model::{Class, Strength};
 pub use basics::*;
 pub use criterion::{Criterion, GeneLevel, StrengthGuide};
 pub use facts::{Fact, Hint};
-pub use path::{HELPER_CRITERIA, ReviewStep};
+pub use path::{HELPER_CRITERIA, ReviewStep, helper_criteria};
 pub use population::{
     DiseaseArchitecture, PopulationFacts, PopulationFinding, PopulationRules, max_credible_frequency,
 };

@@ -1,8 +1,17 @@
 //! The evidence helpers: what each one is called, which criteria it sets, and how
-//! it opens and draws. Each helper shows as a card in the tab of the criteria it
-//! sets, and opens on its own page over the list (`helper_cards.rs`).
+//! it opens and draws. Each helper reads its criteria from the core crate's shared
+//! `HELPER_CRITERIA` table (references like BA1 exceptions name their own code),
+//! shows as a card in the tab of the criteria it sets, and opens on its own page
+//! over the list (`helper_cards.rs`).
+
+use classivar_core::rules::helper_criteria;
 
 use super::*;
+
+/// The criteria an evidence helper owns, read from the core crate's shared table.
+fn owned_codes(key: &'static str) -> &'static [&'static str] {
+    helper_criteria(key).unwrap_or_else(|| panic!("helper '{key}' is missing from HELPER_CRITERIA"))
+}
 
 /// One helper: how it is named on screen and how it opens, closes and draws.
 pub(super) struct Entry {
@@ -37,6 +46,16 @@ fn entry(
     Entry { key, label, title, what, about, codes, open, toggle, panel }
 }
 
+/// An evidence helper whose criteria come from `classivar_core::rules::HELPER_CRITERIA`.
+fn helper_entry(
+    words: Words,
+    open: bool,
+    toggle: fn(&mut Workbench),
+    panel: fn(&Workbench, &mut Context<Workbench>) -> AnyElement,
+) -> Entry {
+    entry(words, owned_codes(words.0), open, toggle, panel)
+}
+
 impl Workbench {
     pub(super) fn toggle_predictor(&mut self) {
         self.helpers.predictor.open = !self.helpers.predictor.open;
@@ -51,7 +70,7 @@ impl Workbench {
         [
             (
                 today && rules.population.is_some(),
-                entry(
+                helper_entry(
                     (
                         "population",
                         "Population frequency",
@@ -59,7 +78,6 @@ impl Workbench {
                         "population frequency helper",
                         "Compares how common the variant is in population data with the limits in the rules, and suggests BA1, BS1 or PM2.",
                     ),
-                    &["BA1", "BS1", "PM2"],
                     helpers.population.open,
                     |this| this.helpers.population.open = !this.helpers.population.open,
                     Self::population_helper,
@@ -67,7 +85,7 @@ impl Workbench {
             ),
             (
                 today && !rules.predictors.is_empty(),
-                entry(
+                helper_entry(
                     (
                         "predictor",
                         "Predictor score",
@@ -75,7 +93,6 @@ impl Workbench {
                         "predictor score helper",
                         "Reads a computational predictor's score against its calibrated limits, and suggests PP3 or BP4 at a strength.",
                     ),
-                    &["PP3", "BP4"],
                     helpers.predictor.open,
                     Self::toggle_predictor,
                     Self::predictor_helper,
@@ -83,7 +100,7 @@ impl Workbench {
             ),
             (
                 today && rules.functional.is_some(),
-                entry(
+                helper_entry(
                     (
                         "functional",
                         "Functional assay",
@@ -91,7 +108,6 @@ impl Workbench {
                         "functional evidence helper",
                         "Reads a lab assay's controls or its OddsPath value, and suggests PS3 (damaging) or BS3 (no damage) at a strength.",
                     ),
-                    &["PS3", "BS3"],
                     helpers.functional.open,
                     |this| this.helpers.functional.open = !this.helpers.functional.open,
                     Self::functional_helper,
@@ -122,7 +138,7 @@ impl Workbench {
             ),
             (
                 today && rules.locus_evidence.is_some(),
-                entry(
+                helper_entry(
                     (
                         "locus",
                         "Family and phenotype",
@@ -130,7 +146,6 @@ impl Workbench {
                         "co-segregation and phenotype helper",
                         "Adds up the points for how the variant follows the disease in families and how specific the patients' phenotype is, and lists the PP1 and PP4 strengths they allow.",
                     ),
-                    &["PP1", "PP4"],
                     helpers.locus.open,
                     |this| this.helpers.locus.open = !this.helpers.locus.open,
                     Self::locus_helper,
@@ -138,7 +153,7 @@ impl Workbench {
             ),
             (
                 today && rules.non_segregation.is_some(),
-                entry(
+                helper_entry(
                     (
                         "segregation",
                         "Non-segregation",
@@ -146,7 +161,6 @@ impl Workbench {
                         "non-segregation helper",
                         "Asks how the variant fails to follow the disease in a family, and offers BS4 only where the published rule supports it.",
                     ),
-                    &["BS4"],
                     helpers.segregation.open,
                     |this| this.helpers.segregation.open = !this.helpers.segregation.open,
                     Self::non_segregation_helper,
@@ -154,7 +168,7 @@ impl Workbench {
             ),
             (
                 today && rules.pm3.is_some(),
-                entry(
+                helper_entry(
                     (
                         "pm3",
                         "PM3 patients",
@@ -162,7 +176,6 @@ impl Workbench {
                         "PM3 patients helper",
                         "For a recessive disease: adds up the points of patients who carry this variant with a second one, and suggests a PM3 strength.",
                     ),
-                    &["PM3"],
                     helpers.pm3.open,
                     |this| this.helpers.pm3.open = !this.helpers.pm3.open,
                     Self::pm3_helper,
@@ -170,7 +183,7 @@ impl Workbench {
             ),
             (
                 today && rules.de_novo.is_some(),
-                entry(
+                helper_entry(
                     (
                         "de-novo",
                         "De novo patients",
@@ -178,7 +191,6 @@ impl Workbench {
                         "de novo helper",
                         "Gives each patient in whom the variant arose new a number of points, and suggests PS2 (parents confirmed) or PM6 (not confirmed).",
                     ),
-                    &["PS2", "PM6"],
                     helpers.de_novo.open,
                     |this| this.helpers.de_novo.open = !this.helpers.de_novo.open,
                     Self::de_novo_helper,
@@ -190,6 +202,12 @@ impl Workbench {
     /// Every helper, whether or not it applies to what is being edited.
     fn all_helper_entries(&self) -> Vec<(bool, Entry)> {
         self.measurement_entries().into_iter().chain(self.patient_entries()).collect()
+    }
+
+    /// Each helper's key and criteria list, for tests checking parity with `HELPER_CRITERIA`.
+    #[cfg(test)]
+    pub(in crate::view) fn helper_entry_codes(&self) -> Vec<(&'static str, &'static [&'static str])> {
+        self.all_helper_entries().into_iter().map(|(_, entry)| (entry.key, entry.codes)).collect()
     }
 
     /// Every helper that applies to what is being edited, population first: population evidence is read first.

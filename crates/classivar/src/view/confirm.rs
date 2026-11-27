@@ -10,7 +10,10 @@ impl Workbench {
         match confirm {
             // An index, not a name: a record may have been removed while the
             // question waited, so never index without checking.
-            Confirm::Clear(Editing::Today) => self.today.clear(),
+            Confirm::Clear(Editing::Today) => {
+                self.today.clear();
+                self.kept.clear();
+            }
             Confirm::Clear(Editing::Record(i)) => {
                 if let Some(record) = self.records.get_mut(i) {
                     record.evidence.clear();

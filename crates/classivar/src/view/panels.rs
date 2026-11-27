@@ -29,6 +29,7 @@ mod frame;
 mod gene_cards;
 mod gene_drawer;
 mod guide_page;
+mod guided_facts;
 mod guided_page;
 mod guided_row;
 mod guided_strip;

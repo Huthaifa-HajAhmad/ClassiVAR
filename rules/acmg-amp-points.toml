@@ -22,6 +22,8 @@
 #   [pm3]            recessive patient points (ClinGen 2019 Tables 1 and 2)
 #   [[ba1_exceptions]] dated reference list (ClinGen July 2018), no automatic matching
 #   [[criteria]]     the 28 ACMG/AMP criteria
+#   [[facts]]        optional context questions (consequence, splicing) that add
+#                    sourced hints to review steps without applying or scoring evidence
 #   [[path]]         the guided review order: ten questions, each criterion once.
 #                    It only orders the review; it changes no points, caps or classes.
 #
@@ -1062,6 +1064,29 @@ source = "richards2015"
 strength_source = "walker2023"
 note = "Walker 2023 extends BP7 to intronic variants at or beyond +7 and -21 that also meet BP4, and says not to apply it in the splice region or to a silent change at the first base or the last three bases of an exon. It advises against using conservation without a calibrated tool. Supporting is the level for a prediction. Strong (written BP7_Strong (RNA)) is only for an RNA splicing assay that shows no effect; say so in the reason. No source gives BP7 at Moderate, so it is not offered."
 
+# Optional context questions for the guided review. Answers add sourced hints
+# to the steps below; they never apply, exclude or score criteria, and every
+# step stays open. Each question allows "other" and "unknown". Predicted and
+# observed splicing effects are separated per Walker 2023.
+
+[[facts]]
+id = "consequence"
+question = "What is the variant's predicted coding consequence?"
+answers = ["null", "missense", "in-frame indel", "synonymous", "intronic", "other", "unknown"]
+
+[[facts]]
+id = "splicing"
+question = "Is there predicted or observed impact on splicing?"
+answers = [
+  "canonical splice (±1,2)",
+  "predicted splicing impact",
+  "no predicted splicing impact",
+  "observed abnormal splicing (RNA)",
+  "observed normal splicing (RNA)",
+  "other",
+  "unknown",
+]
+
 # The guided review order (approved 2026-11-27). A step names a helper only when
 # all of that helper's criteria are on the step, so the PP1/PP4 helper is not
 # named here (PP4 is a case-data question, PP1 a segregation question).
@@ -1077,17 +1102,119 @@ id = "variant-type"
 question = "What kind of change is it, and where?"
 criteria = ["PVS1", "PS1", "PM1", "PM4", "PM5", "PP2", "BP1", "BP3", "BP7"]
 
+[[path.hints]]
+fact = "consequence"
+answer = "null"
+source = "abou-tayoun2018"
+text = "Null variants (nonsense, frameshift, canonical ±1,2 splice, start-loss, exon deletion) are evaluated with the PVS1 guide (gene-level mechanism first, then variant situation). Do not combine PM4 with PVS1."
+
+[[path.hints]]
+fact = "consequence"
+answer = "missense"
+source = "richards2015"
+text = "Missense variants are typically considered under PS1, PM1, PM5, PP2 and BP1. PVS1, PM4, BP3 and BP7 normally do not apply to a missense change unless splicing is affected."
+
+[[path.hints]]
+fact = "consequence"
+answer = "in-frame indel"
+source = "richards2015"
+text = "In-frame deletions and insertions are typically evaluated under PM4 (non-repeat region) or BP3 (repetitive region without known function), and PM1 if in a critical domain."
+
+[[path.hints]]
+fact = "consequence"
+answer = "synonymous"
+source = "walker2023"
+text = "Synonymous (silent) variants are relevant to BP7 when no splicing impact is predicted (outside the first base and last three bases of an exon). Check splicing predictions before applying BP7."
+
+[[path.hints]]
+fact = "consequence"
+answer = "intronic"
+source = "walker2023"
+text = "Walker 2023 extends BP7 Supporting to intronic variants at or beyond +7 and −21 that also meet BP4; canonical ±1,2 splice variants go through the PVS1 guide instead."
+
+[[path.hints]]
+fact = "splicing"
+answer = "canonical splice (±1,2)"
+source = "walker2023"
+text = "Canonical ±1,2 splice variants go through the PVS1 guide (consider exon skipping and cryptic splice sites, using the lowest strength). Do not also apply PP3 for the splice prediction."
+
+[[path.hints]]
+fact = "splicing"
+answer = "predicted splicing impact"
+source = "walker2023"
+text = "A predicted splicing impact outside ±1,2 is assessed via PP3 on the predictors step (not PVS1); BP7 does not apply when a splicing impact is predicted."
+
+[[path.hints]]
+fact = "splicing"
+answer = "no predicted splicing impact"
+source = "walker2023"
+text = "With no predicted splicing impact (BP4 met), BP7 Supporting may apply to synonymous variants (outside the first base and last three bases of an exon) or intronic variants at or beyond +7 and −21."
+
+[[path.hints]]
+fact = "splicing"
+answer = "observed abnormal splicing (RNA)"
+source = "walker2023"
+text = "Observed abnormal splicing from an RNA assay can inform PVS1 (as PVS1 (RNA)) rather than adding PP3 on top; check assay quality and transcript relevance before counting."
+
+[[path.hints]]
+fact = "splicing"
+answer = "observed normal splicing (RNA)"
+source = "walker2023"
+text = "Observed normal splicing from an RNA assay can support BP7 at Strong (BP7_Strong (RNA)); record the assay details in the reason."
+
 [[path]]
 id = "predictors"
 question = "What do the predictors say?"
 criteria = ["PP3", "BP4"]
 helper = "predictor"
 
+[[path.hints]]
+fact = "consequence"
+answer = "missense"
+source = "pejaver2022"
+text = "For missense variants, pick one calibrated missense predictor (REVEL, BayesDel without AF, MutPred2, VEST4, AlphaMissense or VARITY_R) before looking at its score. PP3 is applied once."
+
+[[path.hints]]
+fact = "consequence"
+answer = "synonymous"
+source = "walker2023"
+text = "For synonymous variants outside ±1,2, use SpliceAI in the predictor helper: ≥0.2 supports PP3 Supporting and ≤0.1 supports BP4 Supporting."
+
+[[path.hints]]
+fact = "consequence"
+answer = "intronic"
+source = "walker2023"
+text = "For intronic variants outside ±1,2, SpliceAI in the predictor helper gives PP3 Supporting (≥0.2) or BP4 Supporting (≤0.1)."
+
+[[path.hints]]
+fact = "splicing"
+answer = "canonical splice (±1,2)"
+source = "walker2023"
+text = "Do not apply SpliceAI PP3/BP4 for canonical ±1,2 splice variants: those positions are evaluated through the PVS1 guide so splicing impact is not counted twice."
+
+[[path.hints]]
+fact = "splicing"
+answer = "observed abnormal splicing (RNA)"
+source = "walker2023"
+text = "When observed RNA splicing data are used under PVS1 or PS3, remove PP3/BP4 from the splicing prediction so the same splicing effect is not counted twice."
+
 [[path]]
 id = "functional"
 question = "What do functional studies show?"
 criteria = ["PS3", "BS3"]
 helper = "functional"
+
+[[path.hints]]
+fact = "splicing"
+answer = "observed abnormal splicing (RNA)"
+source = "brnich2019"
+text = "Do not double count an RNA splicing assay under both PVS1 and PS3 (Brnich 2019; Walker 2023)."
+
+[[path.hints]]
+fact = "splicing"
+answer = "observed normal splicing (RNA)"
+source = "walker2023"
+text = "RNA splicing evidence showing no splicing impact is captured under BP7_Strong (RNA) rather than BS3 for synonymous or intronic variants."
 
 [[path]]
 id = "case-data"

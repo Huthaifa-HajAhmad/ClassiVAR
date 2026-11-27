@@ -1,10 +1,11 @@
 //! Optional fact questions and the hints their answers add to a review step.
 //! A hint is only words for the curator: it never applies, excludes or scores evidence.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use serde::Deserialize;
 
+use super::check::needs_source;
 use super::{ReviewStep, RuleError, RuleSet};
 use crate::case::{MAX_REVIEW_ANSWER_CHARS, MAX_REVIEW_NAME_CHARS};
 
@@ -20,12 +21,14 @@ pub struct Fact {
 }
 
 /// Words shown on a step when the curator gave `answer` to the fact `fact`.
+/// Each hint cites a source listed under `[[sources]]`.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Hint {
     pub fact: String,
     pub answer: String,
     pub text: String,
+    pub source: String,
 }
 
 impl Fact {
@@ -41,6 +44,14 @@ impl Fact {
             && !self.question.trim().is_empty()
             && self.answers.iter().all(|a| fits(a, MAX_REVIEW_ANSWER_CHARS) && seen.insert(a))
             && OPEN_ANSWERS.iter().all(|open| self.lists(open))
+    }
+}
+
+impl ReviewStep {
+    /// The hints on this step whose fact and answer match what the curator chose.
+    /// Hints are words only: they never apply, exclude or score evidence.
+    pub fn matching_hints<'a>(&'a self, facts: &BTreeMap<String, String>) -> Vec<&'a Hint> {
+        self.hints.iter().filter(|hint| facts.get(&hint.fact).is_some_and(|chosen| chosen == &hint.answer)).collect()
     }
 }
 
@@ -60,14 +71,19 @@ impl RuleSet {
         }
     }
 
-    pub(super) fn check_hints(&self, step: &ReviewStep) -> Result<(), RuleError> {
+    pub(super) fn check_hints(&self, step: &ReviewStep, known: &HashSet<&str>) -> Result<(), RuleError> {
         let mut seen = HashSet::new();
-        let sound = |hint: &Hint| {
-            !hint.text.trim().is_empty() && self.fact(&hint.fact).is_some_and(|fact| fact.lists(&hint.answer))
-        };
-        if step.hints.iter().all(|hint| sound(hint) && seen.insert((&hint.fact, &hint.answer))) {
-            return Ok(());
+        for hint in &step.hints {
+            let sound =
+                !hint.text.trim().is_empty() && self.fact(&hint.fact).is_some_and(|fact| fact.lists(&hint.answer));
+            if !sound || !seen.insert((&hint.fact, &hint.answer)) {
+                return Err(RuleError::BadPath(format!(
+                    "{}: each hint needs text and its own listed fact and answer",
+                    step.id
+                )));
+            }
+            needs_source(known, format!("hint:{}:{}={}", step.id, hint.fact, hint.answer), &hint.source)?;
         }
-        Err(RuleError::BadPath(format!("{}: each hint needs text and its own listed fact and answer", step.id)))
+        Ok(())
     }
 }

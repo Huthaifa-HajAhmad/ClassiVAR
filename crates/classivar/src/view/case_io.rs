@@ -144,6 +144,7 @@ impl Workbench {
         let adjusted = open_notes(&changes);
         self.today = today.into_iter().collect();
         self.review = case.review.clone();
+        self.facts_open = false;
         self.records = case
             .records
             .iter()
@@ -235,6 +236,7 @@ impl Workbench {
         self.preview = false;
         self.today.clear();
         self.review = Default::default();
+        self.facts_open = false;
         self.records.clear();
         self.editing = Editing::Today;
         self.pending_gene_box = None;

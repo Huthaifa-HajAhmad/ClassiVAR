@@ -10,15 +10,16 @@ use super::guided_row::state_cell;
 use super::*;
 
 impl Workbench {
-    /// The steps and the open step, for the sheet's scrolling list.
+    /// The steps, the optional context questions, and the open step, for the sheet's scrolling list.
     pub(super) fn guided_body(&self, path: &'static [ReviewStep], index: usize, cx: &mut Context<Self>) -> Div {
         let step = &path[index.min(path.len() - 1)];
-        div().flex().flex_col().gap_4().child(self.guided_steps(path, index, cx)).child(self.guided_step(
-            step,
-            index,
-            path.len(),
-            cx,
-        ))
+        div()
+            .flex()
+            .flex_col()
+            .gap_4()
+            .child(self.guided_steps(path, index, cx))
+            .children(self.guided_facts_card(cx))
+            .child(self.guided_step(step, index, path.len(), cx))
     }
 
     /// One small button per step, in a row that wraps: its number and how far it is
@@ -84,6 +85,7 @@ impl Workbench {
             .border_color(border)
             .child(crate::look::eyebrow(format!("Step {} of {steps} · {}", index + 1, step_name(&step.id)), cx))
             .child(div().text_lg().font_weight(FontWeight::SEMIBOLD).child(step.question.clone()))
+            .children(self.step_hints(step, cx))
             .children(self.helper_cards_for(&step.criteria, cx))
             .child(rows)
             .child(self.guided_nav(index, steps, cx))

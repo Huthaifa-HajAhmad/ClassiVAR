@@ -26,8 +26,13 @@ pub const HELPER_CRITERIA: &[(&str, &[&str])] = &[
     ("pm3", &["PM3"]),
 ];
 
+/// The criteria owned by one evidence helper, from the shared table.
+pub fn helper_criteria(key: &str) -> Option<&'static [&'static str]> {
+    HELPER_CRITERIA.iter().find(|(helper, _)| *helper == key).map(|(_, codes)| *codes)
+}
+
 impl RuleSet {
-    pub(super) fn check_path(&self) -> Result<(), RuleError> {
+    pub(super) fn check_path(&self, known: &HashSet<&str>) -> Result<(), RuleError> {
         self.check_facts()?;
         let Some(path) = &self.path else { return Ok(()) };
         let mut ids = HashSet::new();
@@ -46,7 +51,7 @@ impl RuleSet {
                 }
             }
             check_helper(step)?;
-            self.check_hints(step)?;
+            self.check_hints(step, known)?;
         }
         if codes.len() != self.criteria.len() {
             return Err(RuleError::BadPath("the path must cover every criterion once".into()));
