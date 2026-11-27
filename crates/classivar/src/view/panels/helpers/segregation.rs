@@ -22,21 +22,13 @@ impl Workbench {
 
         let situation = &rules.situations[self.helpers.segregation.situation];
         let apply = self.rules.read_non_segregation(&situation.id).map(|reading| {
-            let label = format!("Apply {} {}", reading.code, reading.strength.label());
             let reason = format!(
                 "Non-segregation: {} ({}, −{} points)",
                 situation.label,
                 rules.source,
                 self.rules.magnitude(reading.strength)
             );
-            Button::new("segregation-apply")
-                .label(label.clone())
-                .accessibility_label(format!("{label} to today's evidence"))
-                .small()
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.apply_reading(&reading, reason.clone());
-                    cx.notify();
-                }))
+            self.reading_apply("segregation-apply", reading, reason, cx)
         });
         let result = match apply {
             Some(button) => div().child(button),

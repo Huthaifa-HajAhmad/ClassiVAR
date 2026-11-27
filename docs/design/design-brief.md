@@ -54,6 +54,8 @@ The rules engine is kept separate from the screen code **[My call]** so it can b
 
 **Flow A, new variant [My call].** Gene checks, then evidence in a fixed order (variant type, population, computational, functional, family and case data, benign evidence), then points and class.
 
+**Flow A, guided (added 2026-11-27) [User].** "Guided assessment" on the welcome screen opens the rule file's ten steps in the editor sheet: numbered step chips with progress cells, the step's question, its helpers and criterion rows, Does not apply / Defer / Clear, and Previous / Next. A Guided / Free switch changes only the view; both edit the same evidence. The summary shows review progress (never "settled").
+
 **Flow B, reported variant [My call].** The user enters or imports the ClinVar record (class, submitters, cited criteria). The app shows a side-by-side history of what each lab used against today's rules and evidence. Verdict: "holds", "upgrade candidate" or "downgrade candidate", each with reasons. Typical causes of drift to detect: strength of a criterion changed in later guidance (for example PM2 became *Supporting* in the ClinGen SVI recommendation of 2020), new evidence appeared, or the original lab double-counted.
 
 **Safety principles for the anti-goals [My call, from the user's anti-goals].**

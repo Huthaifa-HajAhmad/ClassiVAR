@@ -93,6 +93,7 @@ impl RuleSet {
         );
         items.extend(self.predictors.iter().map(|x| item(format!("predictor:{}", x.id), x.name.clone())));
         items.extend(self.table_items());
+        items.extend(self.guided_items());
         items
     }
 

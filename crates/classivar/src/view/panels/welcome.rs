@@ -50,6 +50,20 @@ impl Workbench {
                         cx.notify();
                     })),
             )
+            .when(self.rules.path.is_some(), |row| {
+                row.child(super::focus::tagged(
+                    "welcome-guided".into(),
+                    Button::new("welcome-guided")
+                        .outline()
+                        .icon(Icon::new(IconName::ChevronRight))
+                        .label("Guided assessment")
+                        .accessibility_label("Start a guided assessment, one question at a time")
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.start_guided();
+                            cx.notify();
+                        })),
+                ))
+            })
             .child(
                 Button::new("welcome-reported")
                     .outline()

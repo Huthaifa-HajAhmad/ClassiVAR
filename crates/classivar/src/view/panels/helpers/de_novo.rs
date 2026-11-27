@@ -201,17 +201,7 @@ impl Workbench {
         let mut buttons = div().flex().flex_wrap().gap_2();
         for (id, evidence) in &outcome.apply {
             let (evidence, reason) = (evidence.clone(), outcome.reason.clone());
-            let label = format!("Apply {} {}", evidence.code, evidence.strength.label());
-            buttons = buttons.child(
-                Button::new(*id)
-                    .label(label.clone())
-                    .accessibility_label(format!("{label} to today's evidence"))
-                    .small()
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.apply_reading(&evidence, reason.clone());
-                        cx.notify();
-                    })),
-            );
+            buttons = buttons.child(self.reading_apply(*id, evidence, reason, cx));
         }
         buttons
     }

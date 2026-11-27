@@ -157,7 +157,10 @@ impl Workbench {
         let Some(evidence) = latest else { return };
         let (today, changes) = carry_forward(self.rules, &to_applied(evidence));
         self.preview = false;
-        self.today = today.into_iter().collect();
+        self.today.clear();
+        for (code, choice) in today {
+            self.count_today(code, choice);
+        }
         if let Some(note) = copy_note(&changes) {
             self.file_status = Some(Status::attention(note));
         }

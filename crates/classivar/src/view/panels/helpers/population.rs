@@ -165,16 +165,8 @@ impl Workbench {
         self.rules.source(id).map_or(id.clone(), |s| s.citation.chars().take(60).collect())
     }
 
-    fn population_apply(&self, reading: EvidenceReading, reason: String, cx: &mut Context<Self>) -> Button {
-        let label = format!("Apply {} {}", reading.code, reading.strength.label());
-        Button::new(SharedString::from(format!("population-apply-{}", reading.code)))
-            .label(label.clone())
-            .accessibility_label(format!("{label} to today's evidence"))
-            .small()
-            .on_click(cx.listener(move |this, _, _, cx| {
-                this.apply_reading(&reading, reason.clone());
-                cx.notify();
-            }))
+    fn population_apply(&self, reading: EvidenceReading, reason: String, cx: &mut Context<Self>) -> AnyElement {
+        self.reading_apply(format!("population-apply-{}", reading.code), reading, reason, cx)
     }
 }
 

@@ -8,6 +8,7 @@
 
 use super::*;
 
+mod apply;
 mod de_novo;
 mod functional;
 mod locus;

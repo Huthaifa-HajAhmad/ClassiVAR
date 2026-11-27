@@ -17,8 +17,9 @@ pub mod variant;
 
 pub use assess::{Applied, AssessError, Assessment, Conflict, Counting, Item, MAX_REASON_CHARS, NextClass, Warning};
 pub use case::{
-    CASE_FORMAT, CaseError, CaseFile, GeneDecision, MAX_LAB_CHARS, MAX_RECORDS, MAX_SOURCE_CHARS, MAX_VARIANT_CHARS,
-    MAX_YEAR, MIN_YEAR, RecordSource, SavedRecord,
+    CASE_FORMAT, CaseError, CaseFile, GeneDecision, MAX_LAB_CHARS, MAX_RECORDS, MAX_REVIEW_ANSWER_CHARS,
+    MAX_REVIEW_ENTRIES, MAX_REVIEW_NAME_CHARS, MAX_SOURCE_CHARS, MAX_VARIANT_CHARS, MAX_YEAR, MIN_YEAR, Progress,
+    RecordSource, ReviewState, SavedRecord,
 };
 pub use combining_table::{Need, ROWS as TABLE_ROWS, TableRow};
 pub use condition::{Condition, ConditionMatch, Inheritance, MAX_CONDITION_CHARS};

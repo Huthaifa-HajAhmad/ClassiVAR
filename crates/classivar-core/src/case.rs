@@ -13,6 +13,11 @@
 
 use serde::{Deserialize, Serialize};
 
+mod progress;
+mod review;
+pub use progress::{Progress, ReviewState};
+pub use review::{CaseReview, MAX_REVIEW_ANSWER_CHARS, MAX_REVIEW_ENTRIES, MAX_REVIEW_NAME_CHARS, ReviewDecision};
+
 use crate::assess::{Applied, AssessError, Counting};
 use crate::condition::{Condition, MAX_CONDITION_CHARS};
 use crate::model::Class;
@@ -115,10 +120,15 @@ pub struct CaseFile {
     /// The condition the case classifies the variant for, if named.
     #[serde(default)]
     pub condition: Option<Condition>,
+    /// Explicit review answers; absent in cases saved before guided review.
+    #[serde(default, skip_serializing_if = "CaseReview::is_empty")]
+    pub review: CaseReview,
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum CaseError {
+    #[error("invalid review answers: {0}")]
+    BadReview(String),
     #[error("this is not a ClassiVAR case file: {0}")]
     Parse(#[from] serde_json::Error),
     #[error(
@@ -164,6 +174,7 @@ impl CaseFile {
     /// `rules`, is used once, and has a strength the rules accept. Saving asks the
     /// same question first, so the app never writes a file it would refuse to open.
     pub fn check(&self, rules: &RuleSet) -> Result<(), CaseError> {
+        self.review.check(&self.today)?;
         let capped = |place: String, value: &str, max: usize| -> Result<(), CaseError> {
             (value.chars().count() <= max).then_some(()).ok_or(CaseError::TooLong { place, max })
         };

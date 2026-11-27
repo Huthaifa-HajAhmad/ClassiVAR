@@ -45,6 +45,7 @@ impl Workbench {
             criteria: to_applied(&r.evidence),
         };
         CaseFile {
+            review: self.review.clone(),
             format: classivar_core::CASE_FORMAT,
             app_version: env!("CARGO_PKG_VERSION").to_string(),
             saved_on: classivar_sources::utc_today(),
@@ -142,6 +143,7 @@ impl Workbench {
         let (today, changes) = carry_forward(self.rules, &case.today);
         let adjusted = open_notes(&changes);
         self.today = today.into_iter().collect();
+        self.review = case.review.clone();
         self.records = case
             .records
             .iter()
@@ -232,6 +234,7 @@ impl Workbench {
         self.inspected = None;
         self.preview = false;
         self.today.clear();
+        self.review = Default::default();
         self.records.clear();
         self.editing = Editing::Today;
         self.pending_gene_box = None;
@@ -280,6 +283,7 @@ mod tests {
 
     fn case(rules: &RuleSet) -> CaseFile {
         CaseFile {
+            review: Default::default(),
             format: CASE_FORMAT,
             app_version: "0.1.0".into(),
             saved_on: "2026-11-11".into(),
