@@ -198,10 +198,11 @@ fn the_pvs1_guide_asks_the_gene_level_question_first_and_lowers_the_answer(cx: &
     });
     draw(cx);
     workbench.update_in(cx, |this, _, _| {
-        // "No LoF mechanism" removes PVS1: it does not apply at any strength.
+        // "No LoF mechanism" removes PVS1 and records that it does not apply.
         this.guide_gene_level = Some("no_lof_mechanism".into());
         this.answer_guide("PVS1", None, String::new());
         assert!(!this.today.contains_key("PVS1"));
+        assert_eq!(this.review_state("PVS1"), classivar_core::case::ReviewState::DoesNotApply);
     });
     draw(cx);
 }

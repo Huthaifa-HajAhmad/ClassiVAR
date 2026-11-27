@@ -102,6 +102,8 @@ pub struct Workbench {
     review: classivar_core::case::CaseReview,
     /// The open step of the guided review; `None` shows the free list.
     guided: Option<usize>,
+    /// Whether the optional variant-context fact questions are expanded in guided review.
+    facts_open: bool,
     /// Helper proposals the curator set aside to keep a contradicting applied criterion.
     kept: std::collections::BTreeSet<String>,
     records: Vec<Record>,
@@ -187,6 +189,7 @@ impl Workbench {
             today: Evidence::new(),
             review: Default::default(),
             guided: None,
+            facts_open: false,
             kept: Default::default(),
             records: Vec::new(),
             editing: Editing::Today,

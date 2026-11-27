@@ -7,8 +7,11 @@ use super::guided_row::state_cell;
 use super::*;
 
 impl Workbench {
-    /// The strip, when the rules have a guided path or the case holds review answers.
+    /// The strip, when editing today's evidence and the rules have a guided path or the case holds review answers.
     pub(super) fn review_strip(&self, cx: &mut Context<Self>) -> Option<Div> {
+        if self.editing != Editing::Today {
+            return None;
+        }
         let set_aside = self.review.set_aside(self.rules);
         if self.rules.path.is_none() && self.review.is_empty() {
             return None;

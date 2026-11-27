@@ -49,7 +49,7 @@ impl RuleSet {
         self.check_review()?;
         let known = self.known_sources()?;
         self.check_criteria(&known)?;
-        self.check_path()?;
+        self.check_path(&known)?;
         self.check_pairs(&known)?;
         self.check_caps(&known)?;
         self.check_predictors(&known)?;

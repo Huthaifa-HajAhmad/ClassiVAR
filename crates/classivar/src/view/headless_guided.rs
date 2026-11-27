@@ -138,7 +138,7 @@ fn a_contradicting_proposal_is_replaced_only_when_asked_and_keep_leaves_the_evid
     draw(cx);
     workbench.read_with(cx, |this, _| assert!(this.today.contains_key("PM2") && !this.today.contains_key("BS1")));
     assert_eq!(state(&workbench, cx, "BS1"), ReviewState::NotYetReviewed, "kept aside is not reviewed");
-    workbench.update_in(cx, |this, _, _| this.replace_with_reading("PM2", &bs1, "frequency".into()));
+    workbench.update_in(cx, |this, _, _| this.replace_with_reading(&["PM2"], &bs1, "frequency".into()));
     draw(cx);
     assert_eq!(state(&workbench, cx, "PM2"), ReviewState::NotYetReviewed, "the replaced criterion returns");
     assert_eq!(state(&workbench, cx, "BS1"), ReviewState::Applied);
@@ -269,4 +269,124 @@ fn the_population_helper_offers_keep_or_a_labelled_replacement_against_pm2(cx: &
     assert_eq!(state(&workbench, cx, "BS1"), ReviewState::Applied);
     assert_eq!(state(&workbench, cx, "PM2"), ReviewState::NotYetReviewed);
     assert_eq!(state(&workbench, cx, "BA1"), ReviewState::DoesNotApply, "BA1 is untouched");
+}
+
+#[gpui::test]
+fn answering_the_pvs1_guide_with_does_not_apply_records_the_review_decision(cx: &mut TestAppContext) {
+    let (workbench, cx) = guided(cx, ThemeMode::Light);
+    workbench.update_in(cx, |this, _, _| {
+        this.today
+            .insert("PVS1".into(), Choice::guided(Strength::VeryStrong, "nmd".into(), Some("established".into())));
+        this.guide_gene_level = Some("no_lof_mechanism".into());
+        this.answer_guide("PVS1", None, String::new());
+    });
+    draw(cx);
+    assert_eq!(state(&workbench, cx, "PVS1"), ReviewState::DoesNotApply);
+    workbench.read_with(cx, |this, _| {
+        assert!(!this.today.contains_key("PVS1"));
+        assert_eq!(this.review.decisions.get("PVS1"), Some(&ReviewDecision::DoesNotApply));
+        assert_eq!(this.review.total_progress(this.rules, &[]).reviewed, 1);
+        assert!(this.score_on_screen().unwrap().class().is_none());
+    });
+}
+
+#[gpui::test]
+fn replacing_both_ba1_and_bs1_with_pm2_clears_both_rivals_and_allows_reconsider(cx: &mut TestAppContext) {
+    let (workbench, cx) = guided(cx, ThemeMode::Light);
+    cx.simulate_resize(gpui::size(gpui::px(1240.), gpui::px(2400.)));
+    workbench.update_in(cx, |this, _, _| {
+        this.today.insert("BA1".into(), Choice::new(Strength::StandAlone));
+        this.today.insert("BS1".into(), Choice::new(Strength::Strong));
+        this.helpers.population.open = true;
+        this.helpers.population.absent = true;
+    });
+    click(cx, "population-apply-PM2-keep");
+    assert!(cx.debug_bounds("population-apply-PM2-replace").is_none(), "kept proposal is set aside");
+    click(cx, "population-apply-PM2-reconsider");
+    assert!(cx.debug_bounds("population-apply-PM2-replace").is_some(), "Reconsider restores the proposal");
+    click(cx, "population-apply-PM2-replace");
+    assert_eq!(state(&workbench, cx, "PM2"), ReviewState::Applied);
+    assert_eq!(state(&workbench, cx, "BA1"), ReviewState::NotYetReviewed);
+    assert_eq!(state(&workbench, cx, "BS1"), ReviewState::NotYetReviewed);
+    workbench.read_with(cx, |this, _| {
+        assert!(
+            this.score_on_screen().unwrap().class().is_some(),
+            "both rivals were removed, so class is not withheld"
+        );
+    });
+}
+
+#[gpui::test]
+fn optional_fact_questions_show_matching_hints_without_scoring_evidence(cx: &mut TestAppContext) {
+    for theme in [ThemeMode::Light, ThemeMode::Dark] {
+        let (workbench, cx) = guided(cx, theme);
+        cx.simulate_resize(gpui::size(gpui::px(1240.), gpui::px(1800.)));
+        click(cx, "guided-step-variant-type");
+        assert!(cx.debug_bounds("guided-hints-variant-type").is_none());
+        click(cx, "guided-facts-toggle");
+        click(cx, "guided-fact-consequence-1");
+        click(cx, "guided-fact-splicing-4");
+        assert!(cx.debug_bounds("guided-hints-variant-type").is_some(), "matching hints appear on the step");
+        workbench.read_with(cx, |this, _| {
+            assert_eq!(this.review.facts.get("consequence").map(String::as_str), Some("missense"));
+            assert_eq!(this.review.facts.get("splicing").map(String::as_str), Some("observed normal splicing (RNA)"));
+            assert!(this.score_on_screen().unwrap().class().is_none(), "facts and hints never score evidence");
+        });
+        // Clicking the active answer again clears it.
+        click(cx, "guided-fact-consequence-1");
+        click(cx, "guided-fact-splicing-4");
+        assert!(cx.debug_bounds("guided-hints-variant-type").is_none());
+    }
+}
+
+#[gpui::test]
+fn helper_bar_reads_its_criteria_from_the_shared_core_table(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    workbench.read_with(cx, |this, _| {
+        let entries = this.helper_entry_codes();
+        for &(key, codes) in classivar_core::rules::HELPER_CRITERIA {
+            let (_, found) = entries.iter().find(|(k, _)| *k == key).unwrap_or_else(|| panic!("missing helper {key}"));
+            assert_eq!(*found, codes, "helper {key} matches HELPER_CRITERIA");
+        }
+        for (key, codes) in &entries {
+            if *key == "ba1-reference" {
+                continue;
+            }
+            assert_eq!(
+                classivar_core::rules::helper_criteria(key),
+                Some(*codes),
+                "helper {key} comes from HELPER_CRITERIA"
+            );
+        }
+    });
+}
+
+#[gpui::test]
+fn review_strip_hides_when_editing_an_earlier_report(cx: &mut TestAppContext) {
+    let (workbench, cx) = open(cx, ThemeMode::Light);
+    workbench.update_in(cx, |this, window, cx| {
+        this.load_real_case(window, cx);
+        this.editing = super::Editing::Record(0);
+    });
+    draw(cx);
+    assert!(cx.debug_bounds("review-strip").is_none(), "today's review strip does not show under an earlier report");
+    workbench.update_in(cx, |this, _, _| this.editing = super::Editing::Today);
+    draw(cx);
+    assert!(cx.debug_bounds("review-strip").is_some());
+}
+
+#[cfg(debug_assertions)]
+#[gpui::test]
+fn reloading_rules_without_a_path_clears_guided_step_and_kept_proposals(cx: &mut TestAppContext) {
+    let (workbench, cx) = guided(cx, ThemeMode::Light);
+    let mut without_path = classivar_core::RuleSet::builtin().unwrap().clone();
+    without_path.path = None;
+    let leaked: &'static classivar_core::RuleSet = Box::leak(Box::new(without_path));
+    workbench.update_in(cx, |this, window, cx| {
+        this.keep_rival("BS1");
+        this.reload_rules(leaked, window, cx);
+        assert_eq!(this.guided, None);
+        assert!(this.kept.is_empty());
+    });
+    draw(cx);
 }

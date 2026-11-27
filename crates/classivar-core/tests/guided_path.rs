@@ -3,14 +3,10 @@ use classivar_core::{RuleError, RuleSet};
 
 const FILE: &str = include_str!("../../../rules/acmg-amp-points.toml");
 
-/// The built-in rules without their path, so a test can write its own.
+/// The built-in rules without their facts or path, so a test can write its own.
 fn base() -> &'static str {
-    FILE.split(
-        "
-[[path]]",
-    )
-    .next()
-    .unwrap()
+    let before_facts = FILE.split("\n[[facts]]").next().unwrap();
+    before_facts.split("\n[[path]]").next().unwrap()
 }
 
 /// One step per criterion, with `extra` lines added to the step for `code`.
@@ -163,7 +159,7 @@ fn a_step_needs_a_unique_id_a_question_and_criteria() {
 
 // Test wording only; these are not questions or hints of the built-in rules.
 const FACT: &str = "\n[[facts]]\nid = 'kind'\nquestion = 'Test question'\nanswers = ['first', 'other', 'unknown']\n";
-const HINT: &str = "[[path.hints]]\nfact = 'kind'\nanswer = 'first'\ntext = 'Test hint'\n";
+const HINT: &str = "[[path.hints]]\nfact = 'kind'\nanswer = 'first'\nsource = 'richards2015'\ntext = 'Test hint'\n";
 
 #[test]
 fn a_misspelled_key_is_refused_instead_of_ignored() {
@@ -179,6 +175,7 @@ fn facts_and_hints_load_and_join_the_review_packet() {
     let rules = RuleSet::parse(&format!("{}{FACT}", one_step_each("PVS1", HINT))).unwrap();
     assert_eq!(rules.facts[0].id, "kind");
     assert_eq!(rules.path.as_ref().unwrap()[0].hints[0].text, "Test hint");
+    assert_eq!(rules.path.as_ref().unwrap()[0].hints[0].source, "richards2015");
     let items = rules.review_items();
     let summary = |id: &str| items.iter().find(|i| i.id == id).map(|i| i.summary.as_str());
     assert_eq!(summary("fact:kind"), Some("Test question (first / other / unknown)"));
@@ -196,6 +193,31 @@ fn a_hint_must_point_at_a_listed_fact_and_answer_once() {
         let text = format!("{}{FACT}", one_step_each("PVS1", &hint));
         assert!(refused_path(&text).contains("hint"), "{hint}");
     }
+    let bad_source = format!("{}{FACT}", one_step_each("PVS1", &HINT.replace("richards2015", "no-such-paper")));
+    assert!(matches!(RuleSet::parse(&bad_source), Err(RuleError::UnknownSource { .. })));
+}
+
+#[test]
+fn built_in_facts_and_hints_separate_predicted_and_observed_splicing_and_match_answers() {
+    let rules = RuleSet::parse(FILE).unwrap();
+    let fact_ids: Vec<&str> = rules.facts.iter().map(|f| f.id.as_str()).collect();
+    assert_eq!(fact_ids, ["consequence", "splicing"]);
+    let splicing = rules.fact("splicing").unwrap();
+    assert!(splicing.lists("predicted splicing impact"));
+    assert!(splicing.lists("observed abnormal splicing (RNA)"));
+    assert!(splicing.lists("unknown") && splicing.lists("other"));
+    let path = rules.path.as_ref().unwrap();
+    let variant_step = path.iter().find(|s| s.id == "variant-type").unwrap();
+    let mut answers = std::collections::BTreeMap::new();
+    assert!(variant_step.matching_hints(&answers).is_empty());
+    answers.insert("consequence".into(), "missense".into());
+    answers.insert("splicing".into(), "observed normal splicing (RNA)".into());
+    let matched = variant_step.matching_hints(&answers);
+    assert_eq!(matched.len(), 2);
+    assert!(matched.iter().any(|h| h.source == "richards2015"));
+    assert!(matched.iter().any(|h| h.source == "walker2023" && h.text.contains("BP7_Strong (RNA)")));
+    assert_eq!(classivar_core::rules::helper_criteria("population"), Some(&["BA1", "BS1", "PM2"][..]));
+    assert_eq!(classivar_core::rules::helper_criteria("unknown"), None);
 }
 
 #[test]

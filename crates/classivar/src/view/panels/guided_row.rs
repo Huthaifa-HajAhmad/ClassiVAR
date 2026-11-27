@@ -18,7 +18,7 @@ impl Workbench {
     pub(super) fn guided_row(&self, c: &'static Criterion, cx: &mut Context<Self>) -> Div {
         let state = self.review_state(&c.code);
         let muted = cx.theme().muted_foreground;
-        let mut actions = div().flex().flex_wrap().items_center().gap_2().pl(px(66.));
+        let mut actions = div().flex().flex_wrap().items_center().gap_2().pl(px(74.)).pr_2();
         actions =
             actions.child(state_cell(state, c.direction, 10., cx)).child(caption(muted).child(state_words(state)));
         if state != ReviewState::ReferenceOnly {
